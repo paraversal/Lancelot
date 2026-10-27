@@ -1,5 +1,6 @@
 name: CI
 
+# Fast checks on every push and pull request. Full app builds run in build.yml.
 on:
   push:
     branches: [main]
@@ -11,7 +12,7 @@ concurrency:
 
 jobs:
   core:
-    name: Core (Linux)
+    name: Core
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,9 +24,9 @@ jobs:
       - run: cargo clippy -p lancelot-core --all-targets -- -D warnings
       - run: cargo test -p lancelot-core
 
-  app:
-    name: App (macOS)
-    runs-on: macos-latest
+  ui:
+    name: UI
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: app
@@ -40,17 +41,9 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
       - run: pnpm tokens:check
       - run: pnpm lint
       - run: pnpm check
       - run: pnpm test
-      # The Tauri crate embeds the built UI, so the UI must be built before clippy.
       - run: pnpm build
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - run: pnpm tauri build --debug --no-bundle

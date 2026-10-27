@@ -19,14 +19,12 @@ cd app && pnpm install
 cd app && pnpm tauri dev
 ```
 
-Checks, as run in CI:
+Run all checks, the same ones CI runs on every push:
 
 ```bash
-cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace
+scripts/check.sh
 ```
 
-```bash
-cd app && pnpm tokens:check && pnpm lint && pnpm check && pnpm test
-```
+Full app builds for macOS, Windows and Linux run weekly and on demand (`.github/workflows/build.yml`).
 
 `app/src/lib/styles/tokens.css` is copied from `docs/design/tokens.css` with `pnpm tokens`. Do not edit the copy.
