@@ -162,6 +162,52 @@ pub fn build_lines(
     Ok(lines)
 }
 
+/// Checks stored lines against the shape [`build_lines`] produces for their kind. Used when
+/// loading an event file and by the integrity check, so a file edited by hand cannot smuggle
+/// in a transaction the forms could never create.
+pub fn lines_follow_rules(
+    kind: TxnKind,
+    lines: &[Line],
+    accounts: &BTreeMap<AccountId, Account>,
+) -> bool {
+    use AccountKind::{Asset, Expense, Income, Opening, Person};
+
+    let kinds: Option<Vec<AccountKind>> = lines
+        .iter()
+        .map(|l| accounts.get(&l.account).map(|a| a.kind))
+        .collect();
+    let Some(kinds) = kinds else { return false };
+    let sum: i128 = lines.iter().map(|l| i128::from(l.amount.get())).sum();
+    if lines.len() < 2 || sum != 0 || lines.iter().any(|l| l.amount.is_zero()) {
+        return false;
+    }
+    if kind != TxnKind::Opening && kinds.contains(&Opening) {
+        return false;
+    }
+    let is = |i: usize, allowed: &[AccountKind], positive: bool| {
+        allowed.contains(&kinds[i]) && lines[i].amount.is_positive() == positive
+    };
+    let last = lines.len() - 1;
+    match kind {
+        TxnKind::Expense => {
+            is(0, &[Asset, Person], false) && (1..=last).all(|i| is(i, &[Expense], true))
+        }
+        TxnKind::Income => {
+            is(last, &[Asset, Person], true) && (0..last).all(|i| is(i, &[Income], false))
+        }
+        TxnKind::Transfer => {
+            lines.len() == 2
+                && is(0, &[Asset, Person], false)
+                && is(1, &[Asset], true)
+                && lines[0].account != lines[1].account
+        }
+        TxnKind::Settle => {
+            lines.len() == 2 && (kinds == [Person, Asset] || kinds == [Asset, Person])
+        }
+        TxnKind::Opening => lines.len() == 2 && is(0, &[Opening], false) && is(1, &[Asset], true),
+    }
+}
+
 fn line(account: AccountId, amount: Cents) -> Line {
     Line {
         account,

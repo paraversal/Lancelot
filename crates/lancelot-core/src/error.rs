@@ -36,6 +36,16 @@ pub enum DomainError {
     DuplicateName { field: String },
     #[error("invalid BIC")]
     InvalidBic,
+    #[error("amount must not be negative")]
+    NegativeAmount { field: String },
+    #[error("unknown attachment")]
+    UnknownAttachment,
+    #[error("an attachment can have at most 50 MB")]
+    AttachmentTooLarge,
+    #[error("transaction {txn:?} does not follow the rules for its kind")]
+    MalformedTxn { txn: crate::model::TxnId },
+    #[error("inconsistent event data: {reason}")]
+    Inconsistent { reason: String },
     #[error(transparent)]
     Money(#[from] MoneyError),
 }
@@ -58,6 +68,11 @@ impl DomainError {
             DomainError::EmptyName { .. } => "empty_name",
             DomainError::DuplicateName { .. } => "duplicate_name",
             DomainError::InvalidBic => "invalid_bic",
+            DomainError::NegativeAmount { .. } => "negative_amount",
+            DomainError::UnknownAttachment => "unknown_attachment",
+            DomainError::AttachmentTooLarge => "attachment_too_large",
+            DomainError::MalformedTxn { .. } => "malformed_txn",
+            DomainError::Inconsistent { .. } => "inconsistent",
             DomainError::Money(e) => e.code(),
         }
     }
@@ -68,6 +83,7 @@ impl DomainError {
             DomainError::UnknownAccount { field }
             | DomainError::WrongAccountKind { field }
             | DomainError::NonPositiveAmount { field }
+            | DomainError::NegativeAmount { field }
             | DomainError::EmptyName { field }
             | DomainError::DuplicateName { field } => Some(field),
             DomainError::SameAccount => Some("to"),

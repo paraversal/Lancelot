@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 364b8a4a3e4484070ed85e404834621ca1d39978eb37c6d61c38589739f76b66 # shrinks to ops = [Add(Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false })], first = Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false }, second = Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false }

@@ -1,0 +1,579 @@
+//! The event file: round trips, bad files, locking, the database's own rules, tampering,
+//! the change log and backups.
+
+mod common;
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use common::mock::{self, Target};
+use common::world::{Action, Ids, op};
+use common::*;
+use lancelot_core::*;
+use proptest::prelude::*;
+use rusqlite::Connection;
+use tempfile::TempDir;
+use time::{Duration, OffsetDateTime};
+
+fn details() -> EventDetails {
+    new_book().event().details.clone()
+}
+
+fn create(dir: &TempDir) -> (Store, PathBuf) {
+    let path = dir.path().join("sommerfest.lancelot");
+    let (store, report) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    (store, path)
+}
+
+fn open(path: &Path) -> (Store, Report) {
+    Store::open(path, StoreOptions::default()).unwrap()
+}
+
+/// Opens the file next to the store, bypassing all of Lancelot's rules.
+fn raw(path: &Path) -> Connection {
+    Connection::open(path).unwrap()
+}
+
+#[test]
+fn a_new_file_reopens_as_the_same_book() {
+    let dir = TempDir::new().unwrap();
+    let (store, path) = create(&dir);
+    let book = store.book().clone();
+    drop(store);
+    let (reopened, report) = open(&path);
+    assert!(report.is_clean());
+    assert_eq!(reopened.book(), &book);
+    assert_eq!(reopened.book().event().details.name, "Sommerfest 2026");
+}
+
+#[test]
+fn the_example_event_survives_saving_and_reopening() {
+    // The exit criterion of M1.
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let m = mock::build(&mut store);
+    let book = store.book().clone();
+    drop(store);
+
+    let (store, report) = open(&path);
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(store.book(), &book);
+    let l = store.book().ledger();
+    assert_eq!(l.result(), eur("2.027,50"));
+    assert_eq!(l.balance(role(store.book(), Role::Verein)), eur("1.757"));
+    assert_eq!(l.balance(role(store.book(), Role::CashBox)), eur("412,90"));
+    assert_eq!(l.person(m.anna).unwrap().net, eur("212,40"));
+    assert_eq!(l.person(m.malte).unwrap().net, eur("110"));
+    assert_eq!(l.person(m.bob).unwrap().net, eur("-180"));
+    assert_eq!(l.missing_receipts(), [m.cups]);
+}
+
+#[test]
+fn attachments_are_stored_inside_the_file() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    let pdf = b"%PDF-1.7\n receipt".to_vec();
+    let id = store.add_attachment(txn, " bakery.pdf ", &pdf).unwrap();
+
+    let a = store.book().attachment(id).unwrap().clone();
+    assert_eq!(
+        (a.filename.as_str(), a.mime.as_str(), a.size),
+        ("bakery.pdf", "application/pdf", pdf.len() as u64)
+    );
+    assert_eq!(a.sha256.len(), 64);
+    drop(store);
+
+    let (mut store, _) = open(&path);
+    assert_eq!(store.attachment_data(id).unwrap(), pdf);
+    store.remove_attachment(id).unwrap();
+    assert_eq!(
+        store.attachment_data(id).unwrap_err().code(),
+        "unknown_attachment"
+    );
+}
+
+#[test]
+fn deleting_a_transaction_deletes_its_attachments() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    store.attach(txn);
+    store.delete_txn(txn).unwrap();
+    drop(store);
+    let count: i64 = raw(&path)
+        .query_row("SELECT COUNT(*) FROM attachment", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn failed_commands_change_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let before = store.book().clone();
+    let food = expense(store.book(), "Food");
+    let err = store.save_txn(
+        &draft(
+            "x",
+            Entry::Expense {
+                payer: food,
+                lines: vec![split(food, "1")],
+            },
+        ),
+        None,
+    );
+    assert_eq!(err.unwrap_err().code(), "wrong_account_kind");
+    assert_eq!(store.book(), &before);
+    drop(store);
+    assert_eq!(open(&path).0.book(), &before);
+}
+
+#[test]
+fn never_overwrites_an_existing_file() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("notes.lancelot");
+    std::fs::write(&path, "important").unwrap();
+    let err = Store::create(&path, details(), StoreOptions::default())
+        .err()
+        .unwrap();
+    assert_eq!(err.code(), "already_exists");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "important");
+    // No temporary files are left behind.
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn rejects_files_that_are_not_event_files() {
+    let dir = TempDir::new().unwrap();
+    let text = dir.path().join("text.lancelot");
+    std::fs::write(&text, "just some text, long enough for a header").unwrap();
+    assert_eq!(
+        Store::open(&text, StoreOptions::default())
+            .err()
+            .unwrap()
+            .code(),
+        "not_an_event_file"
+    );
+
+    let empty = dir.path().join("empty.lancelot");
+    std::fs::write(&empty, "").unwrap();
+    assert_eq!(
+        Store::open(&empty, StoreOptions::default())
+            .err()
+            .unwrap()
+            .code(),
+        "not_an_event_file"
+    );
+
+    let foreign = dir.path().join("foreign.sqlite");
+    raw(&foreign)
+        .execute_batch("CREATE TABLE t (x INTEGER);")
+        .unwrap();
+    assert_eq!(
+        Store::open(&foreign, StoreOptions::default())
+            .err()
+            .unwrap()
+            .code(),
+        "not_an_event_file"
+    );
+}
+
+#[test]
+fn refuses_files_from_a_newer_version() {
+    let dir = TempDir::new().unwrap();
+    let (store, path) = create(&dir);
+    drop(store);
+    raw(&path).pragma_update(None, "user_version", 99).unwrap();
+    match Store::open(&path, StoreOptions::default()) {
+        Err(StoreError::NewerSchema {
+            found: 99,
+            supported,
+        }) => assert_eq!(supported, SCHEMA_VERSION),
+        other => panic!("unexpected {:?}", other.err()),
+    }
+}
+
+#[test]
+fn a_file_can_only_be_open_once() {
+    let dir = TempDir::new().unwrap();
+    let (store, path) = create(&dir);
+    assert_eq!(
+        Store::open(&path, StoreOptions::default())
+            .err()
+            .unwrap()
+            .code(),
+        "already_open"
+    );
+    drop(store);
+    assert!(Store::open(&path, StoreOptions::default()).is_ok());
+}
+
+#[test]
+fn leaves_no_journal_files_behind() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, _) = create(&dir);
+    store.add_person("Anna", Person::default()).unwrap();
+    drop(store);
+    let names: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(names, ["sommerfest.lancelot"]);
+}
+
+#[test]
+fn the_database_refuses_unbalanced_transactions() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    drop(store);
+
+    let conn = raw(&path);
+    // Lines of a sealed transaction cannot change.
+    let err = conn
+        .execute("UPDATE line SET amount = 999 WHERE txn_id = ?1", [txn.0])
+        .unwrap_err();
+    assert!(err.to_string().contains("sealed"), "{err}");
+    let err = conn
+        .execute("DELETE FROM line WHERE txn_id = ?1", [txn.0])
+        .unwrap_err();
+    assert!(err.to_string().contains("sealed"), "{err}");
+    // An unbalanced transaction cannot be sealed.
+    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
+        .unwrap();
+    conn.execute(
+        "UPDATE line SET amount = 999 WHERE txn_id = ?1 AND position = 1",
+        [txn.0],
+    )
+    .unwrap();
+    let err = conn
+        .execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [txn.0])
+        .unwrap_err();
+    assert!(err.to_string().contains("unbalanced"), "{err}");
+    // Nor can one be inserted sealed.
+    let err = conn
+        .execute(
+            "INSERT INTO txn (id, kind, date, sealed) VALUES (99, 'expense', '2026-06-13', 1)",
+            [],
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("unsealed"), "{err}");
+}
+
+#[test]
+fn a_tampered_transaction_is_reported_and_the_file_not_loaded() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    drop(store);
+
+    let conn = raw(&path);
+    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
+        .unwrap();
+    conn.execute(
+        "UPDATE line SET amount = 999 WHERE txn_id = ?1 AND position = 1",
+        [txn.0],
+    )
+    .unwrap();
+    drop(conn);
+
+    match Store::open(&path, StoreOptions::default()) {
+        Err(StoreError::Damaged(report)) => {
+            let codes = report.codes();
+            assert!(
+                codes.contains(&"unsealed") && codes.contains(&"unbalanced"),
+                "{codes:?}"
+            );
+        }
+        other => panic!("unexpected {:?}", other.err()),
+    }
+}
+
+#[test]
+fn a_transaction_with_the_wrong_shape_is_reported() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    drop(store);
+
+    // Balanced, but now it books money from Tickets into Food, which no form can create.
+    let tickets = income(&new_book(), "Tickets");
+    let conn = raw(&path);
+    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
+        .unwrap();
+    conn.execute(
+        "UPDATE line SET account_id = ?2 WHERE txn_id = ?1 AND position = 0",
+        [txn.0, tickets.0],
+    )
+    .unwrap();
+    conn.execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [txn.0])
+        .unwrap();
+    drop(conn);
+
+    match Store::open(&path, StoreOptions::default()) {
+        Err(StoreError::Damaged(report)) => {
+            assert!(report.codes().contains(&"malformed_txn"), "{report:?}")
+        }
+        other => panic!("unexpected {:?}", other.err()),
+    }
+}
+
+#[test]
+fn a_tampered_attachment_is_reported_but_the_file_opens() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    store.attach(txn);
+    assert!(store.check_integrity().unwrap().is_clean());
+    drop(store);
+
+    raw(&path)
+        .execute("UPDATE attachment SET data = x'00'", [])
+        .unwrap();
+    let (store, report) = open(&path);
+    assert_eq!(report.codes(), ["attachment_hash"]);
+    assert_eq!(
+        store.check_integrity().unwrap().codes(),
+        ["attachment_hash"]
+    );
+}
+
+#[test]
+fn overpaying_shows_as_a_warning() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let verein = role(store.book(), Role::Verein);
+    let anna = store.person("Anna");
+    store.save(
+        "Too much",
+        Entry::Settle {
+            person: anna,
+            account: verein,
+            amount: eur("10"),
+            direction: SettleDirection::Reimburse,
+        },
+    );
+    drop(store);
+    let (_, report) = open(&path);
+    assert_eq!(report.codes(), ["over_reimbursed"]);
+    assert!(!report.has_errors());
+}
+
+#[test]
+fn every_change_is_in_the_change_log() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, _) = create(&dir);
+    let (cash, food, tech) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+        expense(store.book(), "Tech"),
+    );
+    let txn = store.save(
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    store
+        .save_txn(
+            &draft(
+                "Cables",
+                Entry::Expense {
+                    payer: cash,
+                    lines: vec![split(tech, "35")],
+                },
+            ),
+            Some(txn),
+        )
+        .unwrap();
+    store.delete_txn(txn).unwrap();
+    store
+        .set_closing_count(cash, june(14), Cents::ZERO)
+        .unwrap();
+    store.set_state(EventState::Closed, vec![]).unwrap();
+    store.set_state(EventState::Settling, vec![]).unwrap();
+
+    let log = store.change_log(100).unwrap();
+    let ops: Vec<(&str, &str)> = log
+        .iter()
+        .take(6)
+        .map(|e| (e.entity.as_str(), e.op.as_str()))
+        .collect();
+    assert_eq!(
+        ops,
+        [
+            ("event", "state"), // reopened (R-EVT-2)
+            ("event", "state"), // closed
+            ("closing_count", "create"),
+            ("txn", "delete"),
+            ("txn", "update"),
+            ("txn", "create"),
+        ]
+    );
+    let update = &log[4];
+    assert_eq!(update.before.as_ref().unwrap()["description"], "Bakery");
+    assert_eq!(update.after.as_ref().unwrap()["description"], "Cables");
+    assert_eq!(log[3].after, None);
+    assert_eq!(log[0].after.as_ref().unwrap()["state"], "settling");
+    // Creating the file logged the event and its default accounts.
+    assert!(log.iter().any(|e| e.entity == "event" && e.op == "create"));
+}
+
+#[test]
+fn ids_are_not_reused_after_reopening() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, food) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Food"),
+    );
+    let entry = Entry::Expense {
+        payer: cash,
+        lines: vec![split(food, "20")],
+    };
+    let first = store.save("a", entry.clone());
+    store.delete_txn(first).unwrap();
+    drop(store);
+    let (mut store, _) = open(&path);
+    assert!(store.save("b", entry) > first);
+}
+
+/// A clock the test moves forward by hand.
+fn clock() -> (Arc<Mutex<OffsetDateTime>>, StoreOptions, TempDir) {
+    let now = Arc::new(Mutex::new(now()));
+    let shared = now.clone();
+    let backups = TempDir::new().unwrap();
+    let mut policy = BackupPolicy::new(backups.path());
+    policy.keep = 3;
+    let options = StoreOptions {
+        backups: Some(policy),
+        clock: Arc::new(move || *shared.lock().unwrap()),
+    };
+    (now, options, backups)
+}
+
+#[test]
+fn backups_on_open_after_the_interval_and_pruned() {
+    let dir = TempDir::new().unwrap();
+    let (now, options, backups) = clock();
+    let path = dir.path().join("sommerfest.lancelot");
+    let (mut store, _) = Store::create(&path, details(), options).unwrap();
+    let uuid = store.event_uuid().to_owned();
+    let count = || list_backups(backups.path(), &uuid).unwrap().len();
+    assert_eq!(count(), 1, "a backup on open");
+
+    let advance = |minutes| *now.lock().unwrap() += Duration::minutes(minutes);
+    advance(1);
+    store.add_person("Anna", Person::default()).unwrap();
+    assert_eq!(count(), 1, "within the interval");
+
+    advance(10);
+    store.add_person("Bob", Person::default()).unwrap();
+    assert_eq!(count(), 2, "after the interval");
+
+    for name in ["Clara", "Malte", "Nina"] {
+        advance(11);
+        store.add_person(name, Person::default()).unwrap();
+    }
+    assert_eq!(count(), 3, "only the newest are kept");
+    assert!(store.backup_error().is_none());
+
+    // The newest backup is a complete event file with everything up to the last backup.
+    let newest = list_backups(backups.path(), &uuid).unwrap()[0].clone();
+    drop(store);
+    let (copy, report) = Store::open(&newest, StoreOptions::default()).unwrap();
+    assert!(report.is_clean());
+    assert_eq!(copy.book().persons().count(), 5);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(24))]
+
+    /// Whatever happens, the file holds exactly the book, and reopening gives it back.
+    #[test]
+    fn the_file_always_matches_the_book(ops in prop::collection::vec(op(), 1..25)) {
+        let dir = TempDir::new().unwrap();
+        let (mut store, path) = create(&dir);
+        let mut book = store.book().clone();
+        for name in ["Anna", "Bob", "Malte"] {
+            Target::person(&mut store, name);
+            Target::person(&mut book, name);
+        }
+        let ids = Ids::of(&book);
+        for op in &ops {
+            match ids.action(&book, op) {
+                Action::Save(d, id) => prop_assert_eq!(store.save_txn(&d, id).is_ok(), book.save_txn(&d, id).is_ok()),
+                Action::Delete(id) => prop_assert_eq!(store.delete_txn(id).is_ok(), book.delete_txn(id).is_ok()),
+                Action::Nothing => {}
+            }
+            prop_assert_eq!(store.book(), &book);
+        }
+        drop(store);
+        let (reopened, report) = open(&path);
+        prop_assert!(!report.has_errors(), "{:?}", report);
+        prop_assert_eq!(reopened.book(), &book);
+    }
+}

@@ -8,21 +8,27 @@ pub mod book;
 pub mod entry;
 pub mod error;
 pub mod iban;
+pub mod integrity;
 pub mod ledger;
 pub mod model;
 pub mod money;
+pub mod store;
 
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
-pub use book::{Book, Saved, Warning};
+pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
 pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft};
 pub use error::DomainError;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
-pub use ledger::{BlockerOverride, Ledger, MoneyLocation, OpenItem, PersonStatus, PersonSummary};
+pub use integrity::{Issue, Report, Severity};
+pub use ledger::{
+    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, PersonStatus, PersonSummary,
+};
 pub use model::{
-    Account, AccountId, AccountKind, Event, EventDetails, EventState, Line, Person, Role, Txn,
-    TxnId, TxnKind,
+    Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
+    EventState, Line, Person, Role, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
+pub use store::{BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, list_backups};
 
 /// Schema version written to `PRAGMA user_version` of every event file.
 pub const SCHEMA_VERSION: u32 = 1;

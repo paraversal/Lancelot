@@ -107,102 +107,21 @@ Check against Bob from requirements §4.1:
 
 ### 3.2 Schema (MVP, schema version 1)
 
-```sql
-PRAGMA application_id = 0x4C4E434C;   -- 'LNCL'
-PRAGMA user_version   = 1;            -- schema version
-PRAGMA foreign_keys   = ON;
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
-CREATE TABLE meta (                    -- key/value: event_uuid, created_at, created_by_app
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-) STRICT;
+| Table | Holds |
+|---|---|
+| `meta` | Key/value pairs: `event_uuid`, `created_at`, `created_by`, and `next_account_id`, `next_txn_id`, `next_attachment_id`. Ids are never reused, so the change log stays unambiguous. |
+| `event` | Exactly one row: details, state, default reimbursement account, and the closing overrides as JSON. |
+| `account` | `id`, `kind`, `name`, and an optional unique `role` (`verein`, `cash_box`, `opening`). |
+| `person` | Bank and contact details, 1:1 with an account of kind `person`. |
+| `txn` | Kind, date, description, counterparty, notes, `origin` (`manual`; later `ticket_import`) and the `sealed` flag. |
+| `line` | `txn_id`, `position`, `account_id`, a signed `amount` that is never 0, and a memo. |
+| `closing_count` | One per asset account at most: date and counted amount (R-ISO-3). Opening counts are `opening` transactions. |
+| `attachment` | File name, type, size, SHA-256, `added_at`, and the bytes as a BLOB. |
+| `change_log` | `at`, `entity`, `entity_id`, `op` (`create`, `update`, `delete`, `state`) and the before and after values as JSON (R-TX-6). |
 
-CREATE TABLE event (                   -- exactly one row
-  id          INTEGER PRIMARY KEY CHECK (id = 1),
-  name        TEXT NOT NULL,
-  starts_on   TEXT,                    -- ISO date
-  ends_on     TEXT,
-  location    TEXT,
-  notes       TEXT,
-  state       TEXT NOT NULL DEFAULT 'planning'
-              CHECK (state IN ('planning','running','settling','closed')),
-  default_reimbursement_account_id INTEGER REFERENCES account(id)
-) STRICT;
-
-CREATE TABLE account (
-  id        INTEGER PRIMARY KEY,
-  kind      TEXT NOT NULL CHECK (kind IN ('asset','person','income','expense','opening')),
-  name      TEXT NOT NULL,
-  role      TEXT UNIQUE,               -- system role: 'verein','cash_box','opening','ticket_fees',… or NULL
-  position  INTEGER NOT NULL DEFAULT 0,
-  archived  INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0,1)),
-  UNIQUE (kind, name)
-) STRICT;
-
-CREATE TABLE person (                  -- 1:1 extension of an account of kind 'person'
-  account_id INTEGER PRIMARY KEY REFERENCES account(id) ON DELETE CASCADE,
-  holder     TEXT,
-  iban       TEXT,                     -- normalised: no spaces, upper case
-  bic        TEXT,
-  contact    TEXT,
-  notes      TEXT
-) STRICT;
-
-CREATE TABLE txn (
-  id           INTEGER PRIMARY KEY,
-  kind         TEXT NOT NULL CHECK (kind IN ('expense','income','transfer','settle','opening')),
-  date         TEXT NOT NULL,          -- ISO date
-  description  TEXT NOT NULL DEFAULT '',
-  counterparty TEXT,
-  notes        TEXT,
-  origin       TEXT NOT NULL DEFAULT 'manual',   -- 'manual' | later 'ticket_import'
-  sealed       INTEGER NOT NULL DEFAULT 0 CHECK (sealed IN (0,1)),
-  created_at   TEXT NOT NULL,          -- RFC 3339 UTC
-  updated_at   TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE line (
-  id           INTEGER PRIMARY KEY,
-  txn_id       INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
-  position     INTEGER NOT NULL,
-  account_id   INTEGER NOT NULL REFERENCES account(id),
-  amount       INTEGER NOT NULL CHECK (amount <> 0),
-  memo         TEXT,
-  UNIQUE (txn_id, position)
-) STRICT;
-CREATE INDEX line_account ON line(account_id);
-
-CREATE TABLE cash_count (              -- R-ISO-3; the opening count also creates an 'opening' txn
-  id         INTEGER PRIMARY KEY,
-  account_id INTEGER NOT NULL REFERENCES account(id),
-  kind       TEXT NOT NULL CHECK (kind IN ('opening','closing')),
-  date       TEXT NOT NULL,
-  amount     INTEGER NOT NULL CHECK (amount >= 0),
-  txn_id     INTEGER REFERENCES txn(id),
-  UNIQUE (account_id, kind)
-) STRICT;
-
-CREATE TABLE attachment (
-  id         INTEGER PRIMARY KEY,
-  txn_id     INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
-  filename   TEXT NOT NULL,
-  mime       TEXT NOT NULL,
-  size       INTEGER NOT NULL,
-  sha256     TEXT NOT NULL,            -- hex
-  added_at   TEXT NOT NULL,
-  data       BLOB NOT NULL
-) STRICT;
-
-CREATE TABLE change_log (              -- R-TX-6
-  id         INTEGER PRIMARY KEY,
-  at         TEXT NOT NULL,
-  entity     TEXT NOT NULL,            -- 'txn','account','person','event','attachment','cash_count'
-  entity_id  INTEGER NOT NULL,
-  op         TEXT NOT NULL CHECK (op IN ('create','update','delete','state')),
-  before     TEXT,                     -- JSON
-  after      TEXT                      -- JSON
-) STRICT;
-```
+Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents.
 
 **Why the person data is separate:** a person is an account of kind `person`, because that is how their net balance falls out of the ledger. The bank details live in `person`, so the `account` table stays uniform.
 
@@ -232,18 +151,20 @@ WHEN NEW.sealed = 1 BEGIN
 END;
 
 -- lines of a sealed transaction cannot change
-CREATE TRIGGER line_ins_sealed BEFORE INSERT ON line
+CREATE TRIGGER line_insert_sealed BEFORE INSERT ON line
 WHEN (SELECT sealed FROM txn WHERE id = NEW.txn_id) = 1
 BEGIN SELECT RAISE(ABORT, 'transaction is sealed'); END;
--- … the same for UPDATE and DELETE (OLD.txn_id)
+-- … the same for UPDATE and DELETE, and transactions must be inserted unsealed
 ```
 
-Every write of a transaction is one SQL transaction with these steps:
-1. Unseal the transaction.
+Every write of a transaction is part of one SQL transaction with these steps:
+1. Unseal the transaction (or insert it unsealed).
 2. Replace its lines.
 3. Seal it.
 4. Write the change log entry.
-5. Commit.
+5. Run the quick integrity check, and commit only if it passes.
+
+Deleting a transaction also unseals it first, so the cascade can remove its lines.
 
 The domain layer has already checked the balance before this. The trigger is the second line of defence. The integrity check also reports any transaction with `sealed = 0`, because that could only exist after a crash outside a transaction, which should be impossible.
 
@@ -279,15 +200,28 @@ crates/lancelot-core/src/
   entry.rs       TxnDraft / Entry → balanced lines (expense, income, transfer, settle, opening)
   book.rs        Book: the event in memory; every change is checked on a copy, then kept
   ledger.rs      Ledger: balances, person summaries, totals, where the money is, open items
-  store/         Store (rusqlite): create/open, migrations, repositories, backups
-  integrity.rs   check(&Store) -> Report
-  export/        csv (payout list, transactions); pdf follows in M4
-  error.rs       DomainError, StoreError
+  store/         Store: the event file (rusqlite)
+    mod.rs         create/open, locking, migrations, commands, attachments
+    read.rs        file → BookParts
+    write.rs       difference between two books → rows and change log entries
+    backup.rs      VACUUM INTO backups, pruning, listing
+    codec.rs       dates, timestamps, enums as text
+  integrity.rs   check(&Connection, Depth) -> Report
+  error.rs       DomainError
+  export/        csv (payout list, transactions) and pdf, from M4
 ```
 
 ### 4.1 Commands and queries
 
-`Book` (M1b) holds the whole event in memory and enforces every domain rule. Each change is applied to a copy, the `Ledger` is recomputed, and the copy replaces the original only if both succeed. A closed event rejects every change except reopening. `Store` (M1c) loads a `Book` from the file and, for each command, applies it to the `Book` first and then writes the accepted result in one SQL transaction.
+`Book` holds the whole event in memory and enforces every domain rule. Each change is applied to a copy, the `Ledger` is recomputed, and the copy replaces the original only if both succeed. A closed event rejects every change except reopening.
+
+`Store` holds the open file and a `Book`. For each command it:
+1. applies the command to a copy of the `Book`;
+2. writes the difference between the two books in one SQL transaction, with one change log entry per changed row;
+3. runs the quick integrity check inside that transaction;
+4. commits, and only then keeps the copy.
+
+Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
 
 ```rust
 impl Book {
@@ -307,35 +241,26 @@ impl Book {
 
 ```rust
 impl Store {
-    pub fn create(path: &Path, init: EventInit) -> Result<Store>;
-    pub fn open(path: &Path) -> Result<(Store, integrity::Report)>;
+    pub fn create(path: &Path, details: EventDetails, options: StoreOptions) -> Result<(Store, Report)>;
+    pub fn open(path: &Path, options: StoreOptions) -> Result<(Store, Report)>;
 
-    // commands: each is one SQL transaction and writes the change log
-    pub fn save_txn(&mut self, draft: TxnDraft, id: Option<TxnId>) -> Result<TxnId>;
+    // commands: the Book's, plus attachments and closing counts; each one SQL transaction
+    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved>;
     pub fn delete_txn(&mut self, id: TxnId) -> Result<()>;
-    pub fn save_account(&mut self, a: AccountDraft, id: Option<AccountId>) -> Result<AccountId>;
-    pub fn save_person(&mut self, p: PersonDraft, id: Option<AccountId>) -> Result<AccountId>;
-    pub fn add_attachment(&mut self, txn: TxnId, file: AttachmentInput) -> Result<AttachmentId>;
+    pub fn add_attachment(&mut self, txn: TxnId, filename: &str, data: &[u8]) -> Result<AttachmentId>;
     pub fn remove_attachment(&mut self, id: AttachmentId) -> Result<()>;
-    pub fn set_cash_count(&mut self, c: CashCountDraft) -> Result<()>;
-    pub fn update_event(&mut self, e: EventPatch) -> Result<()>;
-    pub fn set_state(&mut self, to: EventState, overrides: Vec<BlockerOverride>) -> Result<()>;
+    pub fn set_closing_count(&mut self, account: AccountId, date: Date, amount: Cents) -> Result<()>;
+    pub fn clear_closing_count(&mut self, account: AccountId) -> Result<()>;
+    // … add_account, rename_account, add_person, update_person, update_event,
+    //   set_default_reimbursement_account, set_state
 
     // queries
-    pub fn ledger(&self) -> Result<Ledger>;          // loads everything; ~100 txns, fine
-    pub fn attachment_data(&self, id: AttachmentId) -> Result<(String, Vec<u8>)>;
+    pub fn book(&self) -> &Book;                      // with its always-current Ledger
+    pub fn attachment_data(&self, id: AttachmentId) -> Result<Vec<u8>>;
+    pub fn change_log(&self, limit: usize) -> Result<Vec<ChangeLogEntry>>;
+    pub fn check_integrity(&self) -> Result<Report>;  // full check, on demand
+    pub fn backup_now(&mut self) -> Result<PathBuf>;
 }
-
-pub struct TxnDraft { date, description, counterparty, notes, entry: Entry }
-
-pub enum Entry {
-    Expense  { payer: AccountId, lines: Vec<SplitLine> },        // payer: asset or person
-    Income   { destination: AccountId, lines: Vec<SplitLine> },  // destination: asset or person
-    Transfer { from: AccountId, to: AccountId, amount: Cents },  // to: asset only
-    Settle   { person: AccountId, account: AccountId, amount: Cents, direction: SettleDirection },
-    Opening  { account: AccountId, amount: Cents },
-}
-pub enum SettleDirection { Reimburse /* asset → person */, Repay /* person → asset */ }
 ```
 
 The settle direction is explicit, and the UI pre-fills it from the person's balance. Deriving it from the balance would let an edit to an older transaction silently turn a reimbursement into a repayment.
@@ -371,8 +296,9 @@ Settling more than the open balance is not an error, because partial and late co
   - `allocate` parts sum to the total and differ by at most one cent;
   - `parse_amount(format_amount(x)) == x` in both formats;
   - `where_the_money_is()` sums to `result()`;
-  - save → reopen gives an identical `Ledger`.
-- **Fixture test:** a builder in `tests/fixtures.rs` recreates the event from `UI.fig`. It asserts a result of **+2.027,50 €**, Verein account 1.757,00 €, cash box 412,90 €, Anna owed 212,40 €, Malte owed 110,00 € and Bob owes 180,00 €.
+  - after any sequence of changes the file holds exactly the book, and reopening gives it back.
+- **Fixture test:** `tests/common/mock.rs` builds the event from `UI.fig`, in a `Book` or a `Store`. It asserts a result of **+2.027,50 €**, Verein account 1.757,00 €, cash box 412,90 € (counted 410,00 €), Anna owed 212,40 €, Malte owed 110,00 € and Bob owes 180,00 €, also after saving and reopening.
+- **File tests:** bad files, newer schema, locking, the triggers, tampered lines and attachments, the change log and backups.
 - **Snapshot tests** (`insta`) for CSV exports.
 
 ## 5. IPC contract
@@ -391,7 +317,7 @@ txnSave(draft, id?): Promise<EventSnapshot>
 txnDelete(id): Promise<EventSnapshot>
 accountSave(draft, id?) / personSave(draft, id?): Promise<EventSnapshot>
 attachmentAdd(txnId, filePath) / attachmentRemove(id): Promise<EventSnapshot>
-cashCountSet(draft): Promise<EventSnapshot>
+closingCountSet(account, date, amount) / closingCountClear(account): Promise<EventSnapshot>
 amountParse(input, allowNegative): Promise<ParseResult>        // uses the app's number format
 ibanCheck(input): Promise<IbanResult>
 integrityCheck(): Promise<IntegrityReport>
@@ -407,7 +333,7 @@ recentEvents(): Promise<RecentEvent[]>
 - `persons`, each with its summary
 - `txns`, with lines and attachment metadata (no bytes)
 - `totals`, `result`, `whereTheMoneyIs` and `openItems`
-- `cash` (counts and discrepancy)
+- `cash` (closing counts against computed balances)
 
 **Attachments** are served through a custom URI scheme, `lancelot://attachment/<id>`, which is registered in Tauri. `<img>` and `<iframe>` load them directly, without base64 over IPC.
 
@@ -417,26 +343,29 @@ recentEvents(): Promise<RecentEvent[]>
 
 - **Journal mode** is `DELETE`, not WAL. WAL leaves `-wal` and `-shm` files next to the user's file, which confuses users and cloud sync. The rollback journal exists only while a write is in progress.
 - **Durability:** `synchronous = FULL` and `foreign_keys = ON`.
-- **Single writer:** `locking_mode = EXCLUSIVE`, taken on open with `BEGIN IMMEDIATE; COMMIT`. A second instance, or a second window on the same file, gets `SQLITE_BUSY` and shows "already open". The lock is released when the window closes.
+- **Single writer:** `locking_mode = EXCLUSIVE`, taken with `BEGIN IMMEDIATE; COMMIT` before anything else touches the file. A second instance, or a second window on the same file, gets `SQLITE_BUSY`, which becomes "already open". The lock is released when the store is dropped.
+- **Creating:** the new file is written next to its target under a temporary name and hard-linked into place, which fails if the target exists. Where hard links are not supported, it is renamed after checking again. A crash never leaves a half-written event file, and an existing file is never overwritten.
 - **Autosave:** every command commits immediately. There is no Save button and no unsaved state, and every committed command is durable.
 - **Checking the file on open:**
   - `application_id` must be `LNCL`, or the file is rejected as not an event file.
   - A `user_version` higher than the app supports means the file is refused, with a message that a newer Lancelot is needed.
-  - Next, the integrity check runs (R-COR-5).
+  - Next, the file is backed up and migrated if needed, and the full integrity check runs (R-COR-5).
+  - A file that does not load into a `Book` is reported as damaged, with the integrity report. A file that loads but has issues opens, and the report is shown.
 
 ### 6.2 Backups (R-NF-5)
 
-- **Where:** `<app data>/backups/<event_uuid>/<UTC timestamp>.lancelot`, written with `VACUUM INTO`, which gives a consistent copy even while the file is open.
+- **Where:** `<backup dir>/<event_uuid>/<UTC timestamp>.lancelot`, written with `VACUUM INTO`, which gives a consistent copy even while the file is open. The core takes the backup folder as an option; the app passes `<app data>/backups`. The UUID is validated when it is read, so a damaged file cannot point backups elsewhere.
 - **When:**
   - on open, before the first write;
   - before every migration;
   - after a write, if the last backup is older than 10 minutes.
 - **How many:** the last **N = 20** are kept. N is an app setting.
+- **Failures:** a failed backup after a change never fails the change, which is already saved. The store keeps the error so the app can show it.
 - **Where else:** backups can be listed and restored from Settings. A restore opens the backup as a copy saved under a new name, and it never overwrites silently.
 
 ### 6.3 Migrations
 
-Migrations are forward-only, numbered SQL files in `crates/lancelot-core/migrations/NNNN_name.sql`, embedded at compile time. On open, the app takes a backup, runs the pending migrations in one transaction and sets `user_version`.
+Migrations are forward-only, numbered SQL files in `crates/lancelot-core/migrations/NNNN_name.sql`, embedded at compile time. On open, the store takes a backup and then runs each pending migration in its own transaction, which also sets `user_version`.
 
 ### 6.4 App settings
 
