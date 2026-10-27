@@ -249,10 +249,10 @@ The domain layer has already checked the balance before this. The trigger is the
 
 **Further rules, checked in the domain layer and again by the integrity check:**
 - An `opening` account appears only in `opening` transactions.
-- A `settle` transaction has exactly one person line and one asset line.
+- A `settle` transaction has exactly one person line and one asset line. Its direction (reimburse or repay) is chosen explicitly and stored as the sign of the lines.
 - An `expense` transaction has one source (asset or person) and one or more expense lines.
 - An `income` transaction has one or more income lines and one destination (asset or person).
-- A `transfer` transaction has exactly two lines, both on asset or person accounts.
+- A `transfer` transaction has exactly two lines: from an asset or person account, to an asset account. Money going to a person is always a `settle`.
 - No new transactions are allowed when the event state is `closed`.
 
 ### 3.4 Phase 2 tables (outline only)
@@ -276,8 +276,9 @@ crates/lancelot-core/src/
   amount.rs      parse_amount, format_amount, NumberFormat
   iban.rs        normalise, validate (mod 97), format in groups of four
   model.rs       AccountKind, Account, Person, Txn, Line, TxnKind, EventState, ids
-  entry.rs       typed drafts → validated Txn (expense, income, transfer, settle, opening)
-  ledger.rs      in-memory Ledger: balances, person summaries, category totals, open items
+  entry.rs       TxnDraft / Entry → balanced lines (expense, income, transfer, settle, opening)
+  book.rs        Book: the event in memory; every change is checked on a copy, then kept
+  ledger.rs      Ledger: balances, person summaries, totals, where the money is, open items
   store/         Store (rusqlite): create/open, migrations, repositories, backups
   integrity.rs   check(&Store) -> Report
   export/        csv (payout list, transactions); pdf follows in M4
@@ -285,6 +286,24 @@ crates/lancelot-core/src/
 ```
 
 ### 4.1 Commands and queries
+
+`Book` (M1b) holds the whole event in memory and enforces every domain rule. Each change is applied to a copy, the `Ledger` is recomputed, and the copy replaces the original only if both succeed. A closed event rejects every change except reopening. `Store` (M1c) loads a `Book` from the file and, for each command, applies it to the `Book` first and then writes the accepted result in one SQL transaction.
+
+```rust
+impl Book {
+    pub fn new(details: EventDetails) -> Result<Book>;      // default accounts and categories
+    pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<AccountId>;
+    pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<()>;
+    pub fn add_person(&mut self, name: &str, person: Person) -> Result<AccountId>;
+    pub fn update_person(&mut self, id: AccountId, name: &str, person: Person) -> Result<()>;
+    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved>;  // Saved { id, warnings }
+    pub fn delete_txn(&mut self, id: TxnId) -> Result<Txn>;
+    pub fn update_event(&mut self, details: EventDetails) -> Result<()>;
+    pub fn set_default_reimbursement_account(&mut self, id: AccountId) -> Result<()>;
+    pub fn set_state(&mut self, to: EventState, overrides: Vec<BlockerOverride>) -> Result<()>;
+    pub fn ledger(&self) -> &Ledger;                         // always up to date
+}
+```
 
 ```rust
 impl Store {
@@ -307,24 +326,28 @@ impl Store {
     pub fn attachment_data(&self, id: AttachmentId) -> Result<(String, Vec<u8>)>;
 }
 
-pub enum TxnDraft {
-    Expense  { date, payer: AccountId, lines: Vec<SplitLine>, counterparty, description, notes },
-    Income   { date, destination: AccountId, lines: Vec<SplitLine>, counterparty, description, notes },
-    Transfer { date, from: AccountId, to: AccountId, amount: Cents, description, notes },
-    Settle   { date, person: AccountId, account: AccountId, amount: Cents, notes },
-        // the direction follows the sign of the person's balance:
-        // reimbursement (asset → person) or repayment (person → asset)
+pub struct TxnDraft { date, description, counterparty, notes, entry: Entry }
+
+pub enum Entry {
+    Expense  { payer: AccountId, lines: Vec<SplitLine> },        // payer: asset or person
+    Income   { destination: AccountId, lines: Vec<SplitLine> },  // destination: asset or person
+    Transfer { from: AccountId, to: AccountId, amount: Cents },  // to: asset only
+    Settle   { person: AccountId, account: AccountId, amount: Cents, direction: SettleDirection },
+    Opening  { account: AccountId, amount: Cents },
 }
+pub enum SettleDirection { Reimburse /* asset → person */, Repay /* person → asset */ }
 ```
 
-`Ledger` is a pure value built from the rows. It computes:
-- `balance(account)` and `displayed(account)`.
-- `person_summary(p)` with these figures:
+The settle direction is explicit, and the UI pre-fills it from the person's balance. Deriving it from the balance would let an edit to an older transaction silently turn a reimbursement into a repayment.
+
+`Ledger` is a pure value computed from the accounts and transactions. It holds:
+- `raw_balance(account)` and the displayed `balance(account)`.
+- `person(p)` with these figures:
   - `advanced`: money that left the person in non-settle transactions.
   - `held`: money that reached the person in non-settle transactions.
-  - `settled`: the net of the person's settle transactions.
-  - `net = advanced − held − settled`. A positive value means the event owes the person.
-- `totals_by_category()` and `result()` (income − expense).
+  - `reimbursed` and `repaid`: the person's settle transactions in each direction.
+  - `net = advanced − held − reimbursed + repaid`. A positive value means the event owes the person.
+- `income_total()`, `expense_total()` and `result()` (income − expense). Category totals are the displayed balances of the income and expense accounts.
 - `where_the_money_is()`, which splits the result into:
   - asset accounts,
   - money held by people (negative person balances),
@@ -332,13 +355,13 @@ pub enum TxnDraft {
   - minus the opening balance.
 
   These always sum to `result()`. This is a property test.
-- `open_items()`: non-zero person balances, expense transactions without an attachment, and the cash box closing count (missing, or with a discrepancy). Phase 2 adds reconciliation mismatches and ticket conflicts.
+- `open_items()`: non-zero person balances. M1c adds expense transactions without an attachment and the cash box closing count (missing, or with a discrepancy). Phase 2 adds reconciliation mismatches and ticket conflicts.
 
 ### 4.2 Errors
 
-`DomainError` is an enum with `thiserror`. Each variant has a stable `code` (for example `unbalanced`, `zero_line`, `wrong_account_kind`, `event_closed`, `settle_exceeds_balance`, `invalid_iban`) and an optional `field` path (for example `lines[2].amount`), so the UI can mark the right input.
+`DomainError` is an enum with `thiserror`. Each variant has a stable `code` (for example `unknown_account`, `wrong_account_kind`, `non_positive_amount`, `same_account`, `event_closed`, `closing_blocked`, `duplicate_name`) and an optional `field` path (for example `lines[2].amount`), so the UI can mark the right input.
 
-Settling more than the open balance is not an error, because partial and late corrections happen. It does produce a warning in the result and an integrity finding "overpaid".
+Settling more than the open balance is not an error, because partial and late corrections happen. It does produce a `SettleExceedsBalance` warning in the result of `save_txn`.
 
 ### 4.3 Tests (R-COR-6)
 

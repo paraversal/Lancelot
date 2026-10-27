@@ -59,11 +59,13 @@ This is the heart of the app. It gets the most tests. It is built in three steps
 - [x] IBAN validation (SEPA lengths, mod 97) and BIC format. Covers R-PER-2.
 
 **M1b · Ledger model**
-- [ ] Accounts by kind: asset, person, income, expense, opening balance. Default accounts and categories. Covers R-ACC-1 and R-ACC-2.
-- [ ] Transactions with split lines, balanced by construction. Covers R-TX-1 and R-TX-2.
-- [ ] Typed builders: expense, income, transfer, reimbursement/repayment. They map the form inputs to lines, following the flow table in §4.1. Covers R-TX-3.
-- [ ] Derived balances: per account, per person net balance and status, and totals per category. Covers R-ACC-3, R-TX-4, R-TX-5 and R-COR-4.
-- [ ] Event lifecycle Planning → Running → Settling → Closed. Closed is read-only, and reopening is logged. Covers R-EVT-1, R-EVT-2 and R-EVT-4.
+- [x] Accounts by kind: asset, person, income, expense, opening balance. Default accounts and categories. Covers R-ACC-1 and R-ACC-2.
+- [x] Transactions with split lines, balanced by construction. Covers R-TX-1 and R-TX-2.
+- [x] Typed builders: expense, income, transfer, reimbursement/repayment. They map the form inputs to lines, following the flow table in §4.1. Covers R-TX-3.
+- [x] Derived balances: per account, per person net balance and status, and totals per category. Covers R-ACC-3, R-TX-4, R-TX-5 and R-COR-4.
+- [x] The example event from `UI.fig`, built in memory: result **+2.027,50 €**, with matching category totals, account balances and person balances (`tests/mock_event.rs`).
+- [x] Property tests: balances sum to 0, net balance equals the person's account balance, where the money is equals the result, editing equals deleting and adding.
+- [x] Event lifecycle Planning → Running → Settling → Closed. Closed is read-only, and closing needs open items resolved or overridden with a note. Covers R-EVT-1, R-EVT-2, R-EVT-4 and R-SET-7. Logging the reopening follows with the change log in M1c.
 
 **M1c · Storage and integrity**
 - [ ] Change log with before and after values for every create, edit and delete. Covers R-TX-6.
@@ -73,11 +75,12 @@ This is the heart of the app. It gets the most tests. It is built in three steps
   - [ ] Attachments as BLOBs with SHA-256 (R-ATT-1, R-ATT-2).
   - [ ] Schema version and migrations.
   - [ ] Backups of the last N versions (R-NF-5).
+- [ ] Cash box opening and closing counts with the discrepancy (R-ISO-3). Missing receipts and the closing count become open items (R-SET-5).
 - [ ] Integrity check on open, on save and on demand. Covers R-COR-5.
 - [ ] Tests:
   - [ ] Unit tests for each requirement.
   - [ ] Property tests with `proptest`, for example: all balances sum to 0, splits sum to the total, parse(format(x)) = x, and the integrity check holds after any valid sequence of operations.
-  - [ ] A fixture event that rebuilds the mock data in `UI.fig` and reaches **+2.027,50 €**.
+  - [ ] The example event from M1b is saved, reopened and still reaches **+2.027,50 €**.
 
 **Exit:** a CLI or test can create the mock event, save it, reopen it and print correct balances. The core has no TODOs in the money path.
 
@@ -203,4 +206,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M1b: accounts, transactions, the typed entry builders and the derived balances, in memory.
+M1c: SQLite storage, the change log, attachments, cash counts, the integrity check and backups.
