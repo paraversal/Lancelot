@@ -1,0 +1,15 @@
+[package]
+name = "lancelot-core"
+description = "Domain core of Lancelot: money, ledger, storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: draft v0.1. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.2. M0 is done. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -32,21 +32,22 @@ fixtures/                  sample .lancelot events, ticket sheets (.ods), Strich
 
 Decide everything that is expensive to change later, then set up an empty project that builds.
 
-- [ ] `docs/technical-design.md`:
-  - [ ] SQLite schema: event, accounts, transactions, lines, attachments, persons, change log and meta/schema version, plus the balance CHECK or trigger (R-COR-2).
-  - [ ] Core API: commands, queries, invariants, and the error types.
-  - [ ] IPC contract: coarse-grained commands that return snapshots or view models.
-  - [ ] File handling: opening, the single-writer lock, atomic save, backups (R-NF-5) and schema migrations.
-  - [ ] The rounding and splitting rules written out with examples (R-COR-3).
-- [ ] Decisions, recorded in the technical design:
-  - **PDF export:** Typst as a library, or the webview's print-to-PDF.
-  - **Charts:** LayerChart or uPlot. Hand-written SVG is enough for the bars in the design.
-  - **Where the amount parser runs:** Rust behind IPC (proposed), with a shared test-vector file.
-- [ ] Scaffold the workspace, Tauri 2 and SvelteKit. Bundle Familjen Grotesk locally (it must work offline, R-NF-3).
-- [ ] CI with GitHub Actions: fmt, clippy, tests, `svelte-check`, and a macOS build.
-- [ ] Load `tokens.css` into the app and render an empty window with the sidebar.
+- [x] `docs/technical-design.md`:
+  - [x] SQLite schema: event, accounts, transactions, lines, attachments, persons, change log and meta/schema version, plus the balance CHECK or trigger (R-COR-2).
+  - [x] Core API: commands, queries, invariants, and the error types.
+  - [x] IPC contract: coarse-grained commands that return snapshots or view models.
+  - [x] File handling: opening, the single-writer lock, atomic save, backups (R-NF-5) and schema migrations.
+  - [x] The rounding and splitting rules written out with examples (R-COR-3).
+- [x] Decisions, recorded in the technical design:
+  - **PDF export:** Typst as a library.
+  - **Charts:** hand-written SVG, to be revisited in M8.
+  - **HEIC and PDF preview:** native WebKit.
+  - **Where the amount parser runs:** Rust behind IPC, with a shared test-vector file.
+- [x] Scaffold the workspace, Tauri 2 and SvelteKit. Bundle Familjen Grotesk locally (it must work offline, R-NF-3).
+- [x] CI with GitHub Actions: fmt, clippy, tests, `svelte-check`, and a macOS build. Written, but it has not run on GitHub yet.
+- [x] Load `tokens.css` into the app and render an empty window with the sidebar.
 
-**Exit:** `cargo tauri dev` opens a window that shows the empty sidebar in the right font and colours, and CI passes.
+**Exit:** `npm run tauri dev` opens a window that shows the empty sidebar in the right font and colours, and CI passes.
 
 ### M1 · Ledger core (Rust only, no UI)
 
@@ -189,9 +190,6 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 | What | Needed by | Owner |
 |---|---|---|
-| PDF approach (Typst vs print-to-PDF) | M0 | us |
-| Chart library | M0 (used in M8) | us |
-| HEIC preview strategy | M0 (used in M3) | us |
 | Date of the next event: sets the MVP deadline | M0 | you |
 | Apple Developer account for signing | M5 | you |
 | Sale date column in the ticket sheet | M8 | Verein |
@@ -199,4 +197,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M0: write `docs/technical-design.md` (schema, core API, IPC, file handling), then scaffold the workspace.
+M1: the ledger core in `crates/lancelot-core`, starting with `money` and `amount`.

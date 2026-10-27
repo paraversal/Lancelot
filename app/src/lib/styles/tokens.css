@@ -1,0 +1,37 @@
+/* Generated from UI.fig (OpenPencil variables). Do not edit by hand. */
+:root {
+  --color-paper: #F6F1E7;
+  --color-paper-sunk: #ECE5D6;
+  --color-ink: #1E1B16;
+  --color-ink-muted: #5E574C;
+  --color-rule: #DCD3C2;
+  --color-marker: #F5D547;
+  --color-plus: #2E7A4B;
+  --color-minus: #B23A2B;
+  --color-tier-1: #5C7A3E;
+  --color-tier-2: #3B6EA5;
+  --color-tier-3: #C9772B;
+  --color-tier-4: #8A6BB0;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --type-xs: 12px;
+  --type-sm: 14px;
+  --type-md: 16px;
+  --type-lg: 22px;
+  --type-xl: 40px;
+  --font-ui: "Familjen Grotesk", system-ui, sans-serif;
+  --color-tier-5: #A8475F;
+  --color-attention: #8C480C;
+  --color-field: #FFFFFF;
+  --color-on-ink-muted: #A79F90;
+  --spacing-10: 40px;
+  --radius-field: 6px;
+  --radius-pill: 999px;
+}

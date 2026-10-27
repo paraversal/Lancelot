@@ -3,3 +3,6 @@ UI.fig
 
 # OS / editor
 .DS_Store
+
+# Rust
+/target
