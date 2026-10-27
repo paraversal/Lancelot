@@ -4,11 +4,24 @@
 //! used from tests, a CLI and the desktop shell alike. See `docs/technical-design.md`.
 
 pub mod amount;
+pub mod book;
+pub mod entry;
+pub mod error;
 pub mod iban;
+pub mod ledger;
+pub mod model;
 pub mod money;
 
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
+pub use book::{Book, Saved, Warning};
+pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft};
+pub use error::DomainError;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
+pub use ledger::{BlockerOverride, Ledger, MoneyLocation, OpenItem, PersonStatus, PersonSummary};
+pub use model::{
+    Account, AccountId, AccountKind, Event, EventDetails, EventState, Line, Person, Role, Txn,
+    TxnId, TxnKind,
+};
 pub use money::{Cents, MoneyError};
 
 /// Schema version written to `PRAGMA user_version` of every event file.
