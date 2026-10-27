@@ -51,15 +51,21 @@ Decide everything that is expensive to change later, then set up an empty projec
 
 ### M1 · Ledger core (Rust only, no UI)
 
-This is the heart of the app. It gets the most tests.
+This is the heart of the app. It gets the most tests. It is built in three steps, each in its own pull request.
 
-- [ ] `Cents(i64)` with checked arithmetic, `allocate(total, n | weights)` with remainder cents going to the first lines, and `percent_bp_half_up`. Covers R-COR-1 and R-COR-3.
-- [ ] Amount parser and formatter. Both formats, rejecting invalid grouping, flagging the ambiguous three-digit case, and handling the sign rules. Covers R-NF-8 and R-NF-6.
+**M1a · Money building blocks**
+- [x] `Cents(i64)` with checked arithmetic, `allocate(total, n)` with remainder cents going to the first parts, and `percent_bp` rounding half away from zero. Covers R-COR-1 and R-COR-3.
+- [x] Amount parser and formatter. Both formats, rejecting invalid grouping, the ambiguous three-digit case read by the setting, and the sign rules. 64 cases in `fixtures/amount-input.json`. Covers R-NF-8 and R-NF-6 (numbers; dates follow in M2).
+- [x] IBAN validation (SEPA lengths, mod 97) and BIC format. Covers R-PER-2.
+
+**M1b · Ledger model**
 - [ ] Accounts by kind: asset, person, income, expense, opening balance. Default accounts and categories. Covers R-ACC-1 and R-ACC-2.
 - [ ] Transactions with split lines, balanced by construction. Covers R-TX-1 and R-TX-2.
 - [ ] Typed builders: expense, income, transfer, reimbursement/repayment. They map the form inputs to lines, following the flow table in §4.1. Covers R-TX-3.
 - [ ] Derived balances: per account, per person net balance and status, and totals per category. Covers R-ACC-3, R-TX-4, R-TX-5 and R-COR-4.
 - [ ] Event lifecycle Planning → Running → Settling → Closed. Closed is read-only, and reopening is logged. Covers R-EVT-1, R-EVT-2 and R-EVT-4.
+
+**M1c · Storage and integrity**
 - [ ] Change log with before and after values for every create, edit and delete. Covers R-TX-6.
 - [ ] SQLite storage:
   - [ ] Create and open a `.lancelot` file.
@@ -197,4 +203,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M1: the ledger core in `crates/lancelot-core`, starting with `money` and `amount`.
+M1b: accounts, transactions, the typed entry builders and the derived balances, in memory.

@@ -1,0 +1,334 @@
+[
+ {
+  "input": "12",
+  "format": "de",
+  "cents": 1200
+ },
+ {
+  "input": "12,5",
+  "format": "de",
+  "cents": 1250
+ },
+ {
+  "input": "12.5",
+  "format": "de",
+  "cents": 1250
+ },
+ {
+  "input": "12,50",
+  "format": "de",
+  "cents": 1250
+ },
+ {
+  "input": "12",
+  "format": "en",
+  "cents": 1200
+ },
+ {
+  "input": "12,5",
+  "format": "en",
+  "cents": 1250
+ },
+ {
+  "input": "12.5",
+  "format": "en",
+  "cents": 1250
+ },
+ {
+  "input": "12,50",
+  "format": "en",
+  "cents": 1250
+ },
+ {
+  "input": "0",
+  "format": "de",
+  "cents": 0
+ },
+ {
+  "input": "007",
+  "format": "de",
+  "cents": 700
+ },
+ {
+  "input": "0,01",
+  "format": "de",
+  "cents": 1
+ },
+ {
+  "input": ",5",
+  "format": "de",
+  "cents": 50,
+  "note": "empty integer part"
+ },
+ {
+  "input": ".05",
+  "format": "en",
+  "cents": 5
+ },
+ {
+  "input": "1.234,56",
+  "format": "en",
+  "cents": 123456
+ },
+ {
+  "input": "1,234.56",
+  "format": "de",
+  "cents": 123456
+ },
+ {
+  "input": "1.234.567,89",
+  "format": "de",
+  "cents": 123456789
+ },
+ {
+  "input": "1,234,567.89",
+  "format": "en",
+  "cents": 123456789
+ },
+ {
+  "input": "1.234.567",
+  "format": "de",
+  "cents": 123456700,
+  "note": "several separators: no ambiguity"
+ },
+ {
+  "input": "1,234,567",
+  "format": "de",
+  "cents": 123456700
+ },
+ {
+  "input": "1.234",
+  "format": "de",
+  "cents": 123400,
+  "ambiguous": true
+ },
+ {
+  "input": "1,234",
+  "format": "en",
+  "cents": 123400,
+  "ambiguous": true
+ },
+ {
+  "input": "12.345",
+  "format": "de",
+  "cents": 1234500,
+  "ambiguous": true
+ },
+ {
+  "input": "123,456",
+  "format": "en",
+  "cents": 12345600,
+  "ambiguous": true
+ },
+ {
+  "input": "1,234",
+  "format": "de",
+  "error": "too_many_decimals",
+  "note": "decimal separator in De: three decimals"
+ },
+ {
+  "input": "1.234",
+  "format": "en",
+  "error": "too_many_decimals",
+  "note": "decimal separator in En: three decimals"
+ },
+ {
+  "input": "12,555",
+  "format": "de",
+  "error": "too_many_decimals"
+ },
+ {
+  "input": "1.23.4",
+  "format": "de",
+  "error": "bad_grouping"
+ },
+ {
+  "input": "1,234,56",
+  "format": "de",
+  "error": "bad_grouping"
+ },
+ {
+  "input": "12,34.5",
+  "format": "en",
+  "error": "bad_grouping"
+ },
+ {
+  "input": "1234.567,8",
+  "format": "de",
+  "error": "bad_grouping"
+ },
+ {
+  "input": ".234",
+  "format": "de",
+  "error": "bad_grouping"
+ },
+ {
+  "input": "12,",
+  "format": "de",
+  "error": "bad_grouping"
+ },
+ {
+  "input": ",",
+  "format": "de",
+  "error": "bad_grouping"
+ },
+ {
+  "input": "1,2345",
+  "format": "de",
+  "error": "too_many_decimals"
+ },
+ {
+  "input": "1.2345",
+  "format": "en",
+  "error": "too_many_decimals"
+ },
+ {
+  "input": "1.234,567",
+  "format": "de",
+  "error": "too_many_decimals"
+ },
+ {
+  "input": "€ 1 234,56",
+  "format": "de",
+  "cents": 123456
+ },
+ {
+  "input": "1.234,56 €",
+  "format": "de",
+  "cents": 123456
+ },
+ {
+  "input": "€1,234.56",
+  "format": "en",
+  "cents": 123456
+ },
+ {
+  "input": "12,50 €",
+  "format": "de",
+  "cents": 1250
+ },
+ {
+  "input": "  7  ",
+  "format": "en",
+  "cents": 700
+ },
+ {
+  "input": "",
+  "format": "de",
+  "error": "empty"
+ },
+ {
+  "input": "   ",
+  "format": "de",
+  "error": "empty"
+ },
+ {
+  "input": "€",
+  "format": "de",
+  "error": "empty"
+ },
+ {
+  "input": "-",
+  "format": "de",
+  "error": "empty"
+ },
+ {
+  "input": "-5",
+  "format": "de",
+  "cents": -500
+ },
+ {
+  "input": "−5",
+  "format": "de",
+  "cents": -500
+ },
+ {
+  "input": "+5",
+  "format": "de",
+  "cents": 500
+ },
+ {
+  "input": "-€5",
+  "format": "de",
+  "cents": -500
+ },
+ {
+  "input": "€-5",
+  "format": "en",
+  "cents": -500
+ },
+ {
+  "input": "-12,5",
+  "format": "de",
+  "cents": -1250
+ },
+ {
+  "input": "-5",
+  "format": "de",
+  "error": "negative_not_allowed",
+  "allowNegative": false
+ },
+ {
+  "input": "-0",
+  "format": "de",
+  "cents": 0,
+  "allowNegative": false,
+  "note": "minus zero is zero"
+ },
+ {
+  "input": "5-",
+  "format": "de",
+  "error": "misplaced_sign"
+ },
+ {
+  "input": "--5",
+  "format": "de",
+  "error": "misplaced_sign"
+ },
+ {
+  "input": "1-2",
+  "format": "de",
+  "error": "misplaced_sign"
+ },
+ {
+  "input": "1e3",
+  "format": "de",
+  "error": "invalid_character"
+ },
+ {
+  "input": "12a",
+  "format": "de",
+  "error": "invalid_character"
+ },
+ {
+  "input": "1'234",
+  "format": "de",
+  "error": "invalid_character"
+ },
+ {
+  "input": "abc",
+  "format": "en",
+  "error": "invalid_character"
+ },
+ {
+  "input": "10.000.000.000",
+  "format": "de",
+  "cents": 1000000000000,
+  "note": "MAX_AMOUNT"
+ },
+ {
+  "input": "-10,000,000,000.00",
+  "format": "en",
+  "cents": -1000000000000
+ },
+ {
+  "input": "10.000.000.000,01",
+  "format": "de",
+  "error": "too_large"
+ },
+ {
+  "input": "99999999999999999999",
+  "format": "de",
+  "error": "too_large"
+ }
+]

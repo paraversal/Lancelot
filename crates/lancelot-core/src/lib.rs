@@ -3,6 +3,14 @@
 //! All money logic lives here (R-COR-6). The crate has no Tauri dependency, so it can be
 //! used from tests, a CLI and the desktop shell alike. See `docs/technical-design.md`.
 
+pub mod amount;
+pub mod iban;
+pub mod money;
+
+pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
+pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
+pub use money::{Cents, MoneyError};
+
 /// Schema version written to `PRAGMA user_version` of every event file.
 pub const SCHEMA_VERSION: u32 = 1;
 

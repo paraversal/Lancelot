@@ -63,16 +63,21 @@ pub enum NumberFormat { De /* 1.234,56 € · 31.12.2026 */, En /* €1,234.56 �
 pub fn parse_amount(input: &str, fmt: NumberFormat, allow_negative: bool)
     -> Result<Parsed, AmountError>;
 pub struct Parsed { pub cents: Cents, pub ambiguous: bool }
-pub enum AmountError { Empty, InvalidCharacter, BadGrouping, TooManyDecimals, NegativeNotAllowed, TooLarge }
+pub enum AmountError { Empty, InvalidCharacter, BadGrouping, TooManyDecimals,
+                       MisplacedSign, NegativeNotAllowed, TooLarge }
+pub enum SignStyle { Plain /* −12,50 € */, Always /* +12,50 € */, Magnitude /* 12,50 € */ }
 
 pub fn format_amount(c: Cents, fmt: NumberFormat, sign: SignStyle) -> String;
 ```
 
 The parser works in these steps:
-1. Strip spaces and `€`. Accept one leading `-` or `−`.
+1. Strip spaces and `€`. Accept one leading `-`, `−` or `+`. A sign anywhere else is `MisplacedSign`.
 2. Find the decimal separator: the last `.` or `,` that is followed by 1–2 digits and nothing else.
-3. Treat every other separator as a thousands separator. The groups must be 3 digits, and the first group 1–3 digits.
-4. A single separator followed by exactly 3 digits is *ambiguous*. Resolve it with `fmt` and set `ambiguous = true`.
+3. Treat every other separator as a thousands separator. It must be the other character, the groups must be 3 digits, and the first group 1–3 digits.
+4. Four or more digits after the last separator, or three digits after a last separator that differs from the others (`1.234,567`), are `TooManyDecimals`.
+5. A single separator followed by exactly 3 digits is *ambiguous* and read according to `fmt`:
+   - If it is the thousands separator of `fmt` (`1.234` in De, `1,234` in En), the amount is accepted and `ambiguous = true`, so the preview is shown in `attention`.
+   - If it is the decimal separator of `fmt` (`1,234` in De, `1.234` in En), it means three decimals and is rejected as `TooManyDecimals`. A German user who types `1,234` almost certainly meant `1,23` or `12,34`, and reading it as a thousand euros would be a 1000× error.
 
 **Where the parser runs:** in Rust, behind the synchronous command `amount_parse`. A round trip takes well under a millisecond, so the live preview needs no second implementation in TypeScript. The test cases live in `fixtures/amount-input.json`, which holds input, format, the expected result and the ambiguity flag. They are read by the Rust tests, and later also by UI tests if a TypeScript fallback ever becomes necessary.
 
