@@ -319,6 +319,11 @@ impl Store {
         self.backup_error.as_deref()
     }
 
+    /// Changes where and how backups are written, e.g. after the backup count setting changed.
+    pub fn set_backup_policy(&mut self, policy: Option<BackupPolicy>) {
+        self.options.backups = policy;
+    }
+
     /// Writes a backup now, regardless of the interval.
     pub fn backup_now(&mut self) -> Result<PathBuf, StoreError> {
         let policy = self

@@ -23,6 +23,11 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy -p lancelot-core --all-targets -- -D warnings
       - run: cargo test -p lancelot-core
+      # cargo test regenerates the TypeScript types; the committed ones must match.
+      - name: TypeScript types are up to date
+        run: |
+          git diff --exit-code -- app/src/lib/api/generated
+          test -z "$(git status --porcelain -- app/src/lib/api/generated)"
 
   ui:
     name: UI

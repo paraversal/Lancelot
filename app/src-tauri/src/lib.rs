@@ -1,28 +1,45 @@
 //! Tauri shell: command handlers, dialogs and the window ↔ open-event mapping.
 //! No money logic lives here; everything goes through `lancelot_core`.
 
-use serde::Serialize;
+mod api;
+mod commands;
+mod service;
+mod settings;
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AppInfo {
-    version: &'static str,
-    schema_version: u32,
-}
+use std::sync::Mutex;
 
-#[tauri::command]
-fn app_info() -> AppInfo {
-    AppInfo {
-        version: lancelot_core::VERSION,
-        schema_version: lancelot_core::SCHEMA_VERSION,
-    }
-}
+use tauri::Manager;
+
+use commands::AppState;
+use service::Service;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![app_info])
+        .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            app.manage(AppState(Mutex::new(Service::new(data_dir))));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::app_info,
+            commands::settings_get,
+            commands::settings_set,
+            commands::recent_events,
+            commands::recent_forget,
+            commands::event_create,
+            commands::event_open,
+            commands::event_close,
+            commands::event_current,
+            commands::event_update,
+            commands::event_set_default_reimbursement_account,
+            commands::integrity_check,
+            commands::backups_list,
+            commands::backup_restore,
+            commands::amount_parse,
+            commands::date_parse,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Lancelot");
 }
