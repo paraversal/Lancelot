@@ -4,12 +4,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::model::{Account, AccountId, AccountKind, ClosingCount, Role, Txn, TxnId, TxnKind};
 use crate::money::{Cents, MoneyError};
 
 /// Per-person figures for the People view (R-PER-3, R-TX-5).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct PersonSummary {
     /// Paid out of the person's own pocket for the event (expenses, money put into the cash box).
@@ -25,7 +27,8 @@ pub struct PersonSummary {
     pub status: PersonStatus,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum PersonStatus {
     /// The event owes the person.
@@ -36,7 +39,8 @@ pub enum PersonStatus {
     Settled,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 pub struct AccountBalance {
     pub account: AccountId,
     pub balance: Cents,
@@ -44,7 +48,8 @@ pub struct AccountBalance {
 
 /// The result, broken down by where the money sits. `total` always equals the result:
 /// `assets + held_by_people − owed_to_people − opening`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct MoneyLocation {
     pub assets: Vec<AccountBalance>,
@@ -56,7 +61,8 @@ pub struct MoneyLocation {
 }
 
 /// The closing count of an asset account against its computed balance (R-ISO-3).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct CashStatus {
     pub account: AccountId,
@@ -68,7 +74,8 @@ pub struct CashStatus {
 
 /// Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches and
 /// ticket conflicts join in phase 2.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OpenItem {
     /// A person the event owes money to, or who owes the event.
@@ -94,7 +101,8 @@ pub struct LedgerInput<'a> {
 }
 
 /// An open item explicitly accepted when closing the event (R-SET-7).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 pub struct BlockerOverride {
     pub item: OpenItem,
     pub note: String,

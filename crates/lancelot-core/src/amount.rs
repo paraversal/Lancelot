@@ -18,11 +18,13 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use ts_rs::TS;
 
 use crate::money::{Cents, MAX_AMOUNT};
 
 /// The app-wide number and date format (R-NF-6). Dates are formatted elsewhere.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum NumberFormat {
     /// `1.234,56 €` · `31.12.2026`
@@ -48,7 +50,8 @@ impl NumberFormat {
 }
 
 /// How the sign of an amount is shown.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum SignStyle {
     /// `−12,50 €` for negative amounts, nothing for positive ones.
@@ -60,7 +63,8 @@ pub enum SignStyle {
 }
 
 /// A successfully parsed amount.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 pub struct Parsed {
     pub cents: Cents,
     /// The input was read according to the number format setting (rule 5), so the UI should
@@ -414,6 +418,31 @@ mod tests {
                 }
                 _ => panic!("{label}: a case needs exactly one of `cents` and `error`"),
             }
+        }
+    }
+
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct FormatCase {
+        cents: i64,
+        format: NumberFormat,
+        sign: SignStyle,
+        text: String,
+    }
+
+    /// The same cases are checked by the UI's `formatAmount` (app/src/lib/format.test.ts).
+    #[test]
+    fn format_fixture_cases() {
+        let cases: Vec<FormatCase> =
+            serde_json::from_str(include_str!("../../../fixtures/amount-format.json")).unwrap();
+        assert!(cases.len() >= 100);
+        for case in cases {
+            assert_eq!(
+                format_amount(cents(case.cents), case.format, case.sign),
+                case.text,
+                "{}",
+                case.cents
+            );
         }
     }
 

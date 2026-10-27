@@ -20,8 +20,9 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use time::{Date, OffsetDateTime};
+use ts_rs::TS;
 
-pub use backup::{BackupPolicy, list as list_backups};
+pub use backup::{BackupPolicy, list as list_backups, taken_at as backup_time};
 
 use crate::book::{Book, Saved};
 use crate::entry::TxnDraft;
@@ -105,12 +106,15 @@ impl Default for StoreOptions {
 }
 
 /// One entry of the change log (R-TX-6).
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct ChangeLogEntry {
+    #[ts(type = "number")]
     pub id: i64,
     pub at: String,
     pub entity: String,
+    #[ts(type = "number")]
     pub entity_id: i64,
     pub op: String,
     pub before: Option<serde_json::Value>,
