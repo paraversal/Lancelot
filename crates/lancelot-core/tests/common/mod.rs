@@ -1,8 +1,11 @@
 //! Helpers shared by the integration tests.
 #![allow(dead_code)]
 
+pub mod mock;
+pub mod world;
+
 use lancelot_core::*;
-use time::{Date, Month};
+use time::{Date, Month, OffsetDateTime};
 
 /// An amount written as the treasurer would type it, e.g. `eur("312,40")`.
 pub fn eur(text: &str) -> Cents {
@@ -73,4 +76,15 @@ pub fn raw_sum(book: &Book) -> i64 {
     book.accounts()
         .map(|a| book.ledger().raw_balance(a.id).get())
         .sum()
+}
+
+/// A fixed point in time during the example event.
+pub fn now() -> OffsetDateTime {
+    june(14).with_hms(18, 0, 0).unwrap().assume_utc()
+}
+
+/// Records a made-up receipt on a transaction.
+pub fn attach(book: &mut Book, txn: TxnId) -> AttachmentId {
+    book.add_attachment(txn, "receipt.jpg", "image/jpeg", 1024, "00", now())
+        .unwrap()
 }

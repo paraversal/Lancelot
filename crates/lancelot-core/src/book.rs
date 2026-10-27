@@ -1,19 +1,25 @@
 //! The event in memory: its details, accounts, persons and transactions, plus the derived
 //! [`Ledger`]. Every change is applied to a copy, checked, and only then kept, so a `Book`
-//! is always consistent. Storage (M1c) loads a `Book` and writes each accepted change.
+//! is always consistent. [`crate::store::Store`] loads a `Book` and writes each accepted change.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
+use time::{Date, OffsetDateTime};
 
-use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines};
+use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, lines_follow_rules};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
-use crate::ledger::{BlockerOverride, Ledger};
+use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
 use crate::model::{
-    Account, AccountId, AccountKind, Event, EventDetails, EventState, Person, Role, Txn, TxnId,
+    Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
+    EventState, Person, Role, Txn, TxnId,
 };
 use crate::money::Cents;
+
+/// The largest attachment Lancelot accepts. Phone photos and PDFs are far smaller; the limit
+/// only catches accidents.
+pub const MAX_ATTACHMENT_SIZE: u64 = 50 * 1024 * 1024;
 
 /// Default categories of a new event (R-ACC-2).
 const DEFAULT_INCOME: &[&str] = &["Tickets", "Drink donations", "Other"];
@@ -25,9 +31,31 @@ pub struct Book {
     accounts: BTreeMap<AccountId, Account>,
     persons: BTreeMap<AccountId, Person>,
     txns: BTreeMap<TxnId, Txn>,
-    next_account: i64,
-    next_txn: i64,
+    attachments: BTreeMap<AttachmentId, Attachment>,
+    closing_counts: BTreeMap<AccountId, ClosingCount>,
+    next: NextIds,
     ledger: Ledger,
+}
+
+/// The ids the next new account, transaction and attachment get. Ids are never reused, so
+/// the change log stays unambiguous after deletions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NextIds {
+    pub account: i64,
+    pub txn: i64,
+    pub attachment: i64,
+}
+
+/// A book taken apart into its stored pieces. [`Book::from_parts`] checks them all.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BookParts {
+    pub event: Event,
+    pub accounts: Vec<Account>,
+    pub persons: Vec<(AccountId, Person)>,
+    pub txns: Vec<Txn>,
+    pub attachments: Vec<Attachment>,
+    pub closing_counts: Vec<ClosingCount>,
+    pub next: NextIds,
 }
 
 /// The outcome of saving a transaction.
@@ -59,8 +87,13 @@ impl Book {
             accounts: BTreeMap::new(),
             persons: BTreeMap::new(),
             txns: BTreeMap::new(),
-            next_account: 1,
-            next_txn: 1,
+            attachments: BTreeMap::new(),
+            closing_counts: BTreeMap::new(),
+            next: NextIds {
+                account: 1,
+                txn: 1,
+                attachment: 1,
+            },
             ledger: Ledger::default(),
         };
         let verein = book.insert_account(AccountKind::Asset, "Verein account", Some(Role::Verein));
@@ -73,7 +106,102 @@ impl Book {
             book.insert_account(AccountKind::Expense, name, None);
         }
         book.event.default_reimbursement_account = verein;
-        book.ledger = Ledger::compute(&book.accounts, book.txns.values())?;
+        book.ledger = book.compute_ledger()?;
+        Ok(book)
+    }
+
+    /// Rebuilds a book from stored pieces, checking everything a hand-edited or damaged
+    /// file could get wrong: roles, kinds, names, transaction shapes, references and ids.
+    pub fn from_parts(parts: BookParts) -> Result<Book, DomainError> {
+        let bad = |reason: &str| DomainError::Inconsistent {
+            reason: reason.to_owned(),
+        };
+
+        let mut accounts = BTreeMap::new();
+        for a in parts.accounts {
+            if a.name.trim().is_empty() || a.id.0 >= parts.next.account {
+                return Err(bad(
+                    "account with an empty name or an id beyond the next id",
+                ));
+            }
+            accounts.insert(a.id, a);
+        }
+        for role in [Role::Verein, Role::CashBox, Role::Opening] {
+            if accounts.values().filter(|a| a.role == Some(role)).count() != 1 {
+                return Err(bad("each system account must exist exactly once"));
+            }
+        }
+        let opening_ok = accounts
+            .values()
+            .all(|a| (a.kind == AccountKind::Opening) == (a.role == Some(Role::Opening)));
+        let roles_ok = accounts.values().all(|a| match a.role {
+            Some(Role::Verein | Role::CashBox) => a.kind == AccountKind::Asset,
+            _ => true,
+        });
+        let names: BTreeSet<(AccountKind, String)> = accounts
+            .values()
+            .map(|a| (a.kind, a.name.to_ascii_lowercase()))
+            .collect();
+        if !opening_ok || !roles_ok || names.len() != accounts.len() {
+            return Err(bad("account kinds, roles or names are inconsistent"));
+        }
+
+        let mut persons = BTreeMap::new();
+        for (id, p) in parts.persons {
+            if accounts.get(&id).map(|a| a.kind) != Some(AccountKind::Person) {
+                return Err(bad("person details for an account that is not a person"));
+            }
+            persons.insert(id, p);
+        }
+        if accounts
+            .values()
+            .any(|a| a.kind == AccountKind::Person && !persons.contains_key(&a.id))
+        {
+            return Err(bad("person account without person details"));
+        }
+
+        let mut txns = BTreeMap::new();
+        for t in parts.txns {
+            if t.id.0 >= parts.next.txn || !lines_follow_rules(t.kind, &t.lines, &accounts) {
+                return Err(DomainError::MalformedTxn { txn: t.id });
+            }
+            txns.insert(t.id, t);
+        }
+
+        let mut attachments = BTreeMap::new();
+        for a in parts.attachments {
+            if !txns.contains_key(&a.txn) || a.id.0 >= parts.next.attachment {
+                return Err(bad("attachment of an unknown transaction"));
+            }
+            attachments.insert(a.id, a);
+        }
+
+        let mut closing_counts = BTreeMap::new();
+        for c in parts.closing_counts {
+            if accounts.get(&c.account).map(|a| a.kind) != Some(AccountKind::Asset)
+                || c.amount.is_negative()
+            {
+                return Err(bad("closing count on an account that is not an asset"));
+            }
+            closing_counts.insert(c.account, c);
+        }
+
+        let default = parts.event.default_reimbursement_account;
+        if accounts.get(&default).map(|a| a.kind) != Some(AccountKind::Asset) {
+            return Err(bad("default reimbursement account is not an asset"));
+        }
+
+        let mut book = Book {
+            event: parts.event,
+            accounts,
+            persons,
+            txns,
+            attachments,
+            closing_counts,
+            next: parts.next,
+            ledger: Ledger::default(),
+        };
+        book.ledger = book.compute_ledger()?;
         Ok(book)
     }
 
@@ -118,6 +246,30 @@ impl Book {
 
     pub fn txn(&self, id: TxnId) -> Option<&Txn> {
         self.txns.get(&id)
+    }
+
+    pub fn attachments(&self) -> impl Iterator<Item = &Attachment> {
+        self.attachments.values()
+    }
+
+    pub fn attachment(&self, id: AttachmentId) -> Option<&Attachment> {
+        self.attachments.get(&id)
+    }
+
+    pub fn attachments_of(&self, txn: TxnId) -> impl Iterator<Item = &Attachment> {
+        self.attachments.values().filter(move |a| a.txn == txn)
+    }
+
+    pub fn closing_counts(&self) -> impl Iterator<Item = &ClosingCount> {
+        self.closing_counts.values()
+    }
+
+    pub fn closing_count(&self, account: AccountId) -> Option<&ClosingCount> {
+        self.closing_counts.get(&account)
+    }
+
+    pub fn next_ids(&self) -> NextIds {
+        self.next
     }
 
     /// All derived figures, always up to date.
@@ -198,8 +350,8 @@ impl Book {
                 Some(id) if book.txns.contains_key(&id) => id,
                 Some(_) => return Err(DomainError::UnknownTxn),
                 None => {
-                    let id = TxnId(book.next_txn);
-                    book.next_txn += 1;
+                    let id = TxnId(book.next.txn);
+                    book.next.txn += 1;
                     id
                 }
             };
@@ -245,8 +397,109 @@ impl Book {
         })
     }
 
+    /// Deletes a transaction together with its attachments.
     pub fn delete_txn(&mut self, id: TxnId) -> Result<Txn, DomainError> {
-        self.change(|book| book.txns.remove(&id).ok_or(DomainError::UnknownTxn))
+        self.change(|book| {
+            let txn = book.txns.remove(&id).ok_or(DomainError::UnknownTxn)?;
+            book.attachments.retain(|_, a| a.txn != id);
+            Ok(txn)
+        })
+    }
+
+    // --- attachments and counts ----------------------------------------------------------
+
+    /// Records an attachment's details. The bytes themselves are written by the store.
+    pub fn add_attachment(
+        &mut self,
+        txn: TxnId,
+        filename: &str,
+        mime: &str,
+        size: u64,
+        sha256: &str,
+        added_at: OffsetDateTime,
+    ) -> Result<AttachmentId, DomainError> {
+        self.change(|book| {
+            if !book.txns.contains_key(&txn) {
+                return Err(DomainError::UnknownTxn);
+            }
+            if size > MAX_ATTACHMENT_SIZE {
+                return Err(DomainError::AttachmentTooLarge);
+            }
+            let filename = filename.trim();
+            if filename.is_empty() {
+                return Err(DomainError::EmptyName {
+                    field: "filename".into(),
+                });
+            }
+            let id = AttachmentId(book.next.attachment);
+            book.next.attachment += 1;
+            book.attachments.insert(
+                id,
+                Attachment {
+                    id,
+                    txn,
+                    filename: filename.to_owned(),
+                    mime: mime.to_owned(),
+                    size,
+                    sha256: sha256.to_owned(),
+                    added_at,
+                },
+            );
+            Ok(id)
+        })
+    }
+
+    pub fn remove_attachment(&mut self, id: AttachmentId) -> Result<Attachment, DomainError> {
+        self.change(|book| {
+            book.attachments
+                .remove(&id)
+                .ok_or(DomainError::UnknownAttachment)
+        })
+    }
+
+    /// Records the amount counted in an asset account at the end (R-ISO-3).
+    pub fn set_closing_count(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            match book.accounts.get(&account) {
+                None => {
+                    return Err(DomainError::UnknownAccount {
+                        field: "account".into(),
+                    });
+                }
+                Some(a) if a.kind != AccountKind::Asset => {
+                    return Err(DomainError::WrongAccountKind {
+                        field: "account".into(),
+                    });
+                }
+                Some(_) => {}
+            }
+            if amount.is_negative() {
+                return Err(DomainError::NegativeAmount {
+                    field: "amount".into(),
+                });
+            }
+            book.closing_counts.insert(
+                account,
+                ClosingCount {
+                    account,
+                    date,
+                    amount,
+                },
+            );
+            Ok(())
+        })
+    }
+
+    pub fn clear_closing_count(&mut self, account: AccountId) -> Result<(), DomainError> {
+        self.change(|book| {
+            book.closing_counts.remove(&account);
+            Ok(())
+        })
     }
 
     // --- event ---------------------------------------------------------------------------
@@ -332,14 +585,24 @@ impl Book {
         }
         let mut candidate = self.clone();
         let value = f(&mut candidate)?;
-        candidate.ledger = Ledger::compute(&candidate.accounts, candidate.txns.values())?;
+        candidate.ledger = candidate.compute_ledger()?;
         *self = candidate;
         Ok(value)
     }
 
+    fn compute_ledger(&self) -> Result<Ledger, DomainError> {
+        let with_attachments: BTreeSet<TxnId> = self.attachments.values().map(|a| a.txn).collect();
+        Ok(Ledger::compute(LedgerInput {
+            accounts: &self.accounts,
+            txns: &self.txns,
+            closing_counts: &self.closing_counts,
+            with_attachments: &with_attachments,
+        })?)
+    }
+
     fn insert_account(&mut self, kind: AccountKind, name: &str, role: Option<Role>) -> AccountId {
-        let id = AccountId(self.next_account);
-        self.next_account += 1;
+        let id = AccountId(self.next.account);
+        self.next.account += 1;
         self.accounts.insert(
             id,
             Account {

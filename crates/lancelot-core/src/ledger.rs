@@ -1,11 +1,11 @@
 //! Everything derived from the transactions (R-COR-4): balances, person summaries, totals,
 //! the result and where the money is. Nothing here is stored; it is recomputed on every change.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Account, AccountId, AccountKind, Txn, TxnKind};
+use crate::model::{Account, AccountId, AccountKind, ClosingCount, Role, Txn, TxnId, TxnKind};
 use crate::money::{Cents, MoneyError};
 
 /// Per-person figures for the People view (R-PER-3, R-TX-5).
@@ -55,12 +55,42 @@ pub struct MoneyLocation {
     pub total: Cents,
 }
 
-/// Something that keeps the event from being closed (R-SET-5). Missing receipts and the cash
-/// box closing count join in M1c, reconciliation and ticket conflicts in phase 2.
+/// The closing count of an asset account against its computed balance (R-ISO-3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CashStatus {
+    pub account: AccountId,
+    pub computed: Cents,
+    pub counted: Option<Cents>,
+    /// `counted − computed`: positive when there is more money than the books say.
+    pub difference: Option<Cents>,
+}
+
+/// Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches and
+/// ticket conflicts join in phase 2.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum OpenItem {
+    /// A person the event owes money to, or who owes the event.
     PersonBalance { person: AccountId, net: Cents },
+    /// An expense without an attachment (R-ATT-4).
+    MissingReceipt { txn: TxnId },
+    /// The cash box has no closing count yet.
+    ClosingCountMissing { account: AccountId },
+    /// The closing count differs from the computed balance.
+    CashDifference {
+        account: AccountId,
+        difference: Cents,
+    },
+}
+
+/// What [`Ledger::compute`] needs from the book.
+pub struct LedgerInput<'a> {
+    pub accounts: &'a BTreeMap<AccountId, Account>,
+    pub txns: &'a BTreeMap<TxnId, Txn>,
+    pub closing_counts: &'a BTreeMap<AccountId, ClosingCount>,
+    /// Transactions that have at least one attachment.
+    pub with_attachments: &'a BTreeSet<TxnId>,
 }
 
 /// An open item explicitly accepted when closing the event (R-SET-7).
@@ -81,14 +111,19 @@ pub struct Ledger {
     expense_total: Cents,
     result: Cents,
     money: MoneyLocation,
+    cash: Vec<CashStatus>,
+    missing_receipts: Vec<TxnId>,
 }
 
 impl Ledger {
     /// Computes every figure. Fails only if a sum leaves the valid amount range.
-    pub fn compute<'a>(
-        accounts: &BTreeMap<AccountId, Account>,
-        txns: impl IntoIterator<Item = &'a Txn>,
-    ) -> Result<Ledger, MoneyError> {
+    pub fn compute(input: LedgerInput<'_>) -> Result<Ledger, MoneyError> {
+        let LedgerInput {
+            accounts,
+            txns,
+            closing_counts,
+            with_attachments,
+        } = input;
         let mut raw: BTreeMap<AccountId, Cents> =
             accounts.keys().map(|id| (*id, Cents::ZERO)).collect();
         let mut persons: BTreeMap<AccountId, PersonSummary> = accounts
@@ -97,7 +132,7 @@ impl Ledger {
             .map(|a| (a.id, PersonSummary::default()))
             .collect();
 
-        for txn in txns {
+        for txn in txns.values() {
             for line in &txn.lines {
                 let balance = raw.entry(line.account).or_default();
                 *balance = balance.checked_add(line.amount)?;
@@ -170,6 +205,28 @@ impl Ledger {
             .checked_sub(owed_to_people)?
             .checked_sub(opening)?;
 
+        let mut cash = Vec::new();
+        for a in accounts.values().filter(|a| a.kind == AccountKind::Asset) {
+            let counted = closing_counts.get(&a.id).map(|c| c.amount);
+            if counted.is_none() && a.role != Some(Role::CashBox) {
+                continue;
+            }
+            let computed = displayed.get(&a.id).copied().unwrap_or_default();
+            let difference = counted.map(|c| c.checked_sub(computed)).transpose()?;
+            cash.push(CashStatus {
+                account: a.id,
+                computed,
+                counted,
+                difference,
+            });
+        }
+
+        let missing_receipts = txns
+            .values()
+            .filter(|t| t.kind == TxnKind::Expense && !with_attachments.contains(&t.id))
+            .map(|t| t.id)
+            .collect();
+
         Ok(Ledger {
             raw,
             displayed,
@@ -184,6 +241,8 @@ impl Ledger {
                 opening,
                 total,
             },
+            cash,
+            missing_receipts,
         })
     }
 
@@ -222,14 +281,39 @@ impl Ledger {
         &self.money
     }
 
+    /// Closing counts against computed balances: the cash box, plus every asset account
+    /// that has a closing count.
+    pub fn cash(&self) -> &[CashStatus] {
+        &self.cash
+    }
+
+    /// Expense transactions without an attachment (R-ATT-4).
+    pub fn missing_receipts(&self) -> &[TxnId] {
+        &self.missing_receipts
+    }
+
+    /// People first, then receipts, then cash.
     pub fn open_items(&self) -> Vec<OpenItem> {
-        self.persons
+        let people = self
+            .persons
             .iter()
             .filter(|(_, p)| !p.net.is_zero())
             .map(|(id, p)| OpenItem::PersonBalance {
                 person: *id,
                 net: p.net,
-            })
-            .collect()
+            });
+        let receipts = self
+            .missing_receipts
+            .iter()
+            .map(|txn| OpenItem::MissingReceipt { txn: *txn });
+        let cash = self.cash.iter().filter_map(|c| match c.difference {
+            None => Some(OpenItem::ClosingCountMissing { account: c.account }),
+            Some(d) if !d.is_zero() => Some(OpenItem::CashDifference {
+                account: c.account,
+                difference: d,
+            }),
+            Some(_) => None,
+        });
+        people.chain(receipts).chain(cash).collect()
     }
 }

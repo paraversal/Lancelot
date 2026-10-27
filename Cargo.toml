@@ -14,7 +14,11 @@ lancelot-core = { path = "crates/lancelot-core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-time = { version = "0.3.47", features = ["serde-human-readable", "macros"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+sha2 = "0.11"
+uuid = { version = "1", features = ["v4"] }
+tempfile = "3"
+time = { version = "0.3.47", features = ["serde-human-readable", "macros", "formatting", "parsing"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

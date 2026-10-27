@@ -4,7 +4,7 @@
 //! [`crate::book`]; everything derived from them lives in [`crate::ledger`].
 
 use serde::{Deserialize, Serialize};
-use time::Date;
+use time::{Date, OffsetDateTime};
 
 use crate::iban::Iban;
 use crate::money::Cents;
@@ -18,6 +18,11 @@ pub struct AccountId(pub i64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct TxnId(pub i64);
+
+/// Identifies an attachment within one event.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AttachmentId(pub i64);
 
 /// See requirements §4.1 and the sign convention in `docs/technical-design.md` §3.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -133,4 +138,28 @@ pub struct Event {
     pub default_reimbursement_account: AccountId,
     /// Open items that were explicitly accepted when the event was closed (R-SET-7).
     pub closing_overrides: Vec<crate::ledger::BlockerOverride>,
+}
+
+/// A file attached to a transaction, e.g. a receipt (R-ATT-1). The bytes live only in the
+/// event file; the book keeps the details.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub id: AttachmentId,
+    pub txn: TxnId,
+    pub filename: String,
+    pub mime: String,
+    pub size: u64,
+    /// SHA-256 of the bytes, lower-case hex.
+    pub sha256: String,
+    #[serde(with = "time::serde::rfc3339")]
+    pub added_at: OffsetDateTime,
+}
+
+/// The amount counted in an asset account at the end, e.g. the cash box (R-ISO-3).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClosingCount {
+    pub account: AccountId,
+    pub date: Date,
+    pub amount: Cents,
 }

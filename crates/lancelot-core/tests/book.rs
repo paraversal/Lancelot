@@ -240,7 +240,8 @@ fn closing_needs_open_items_resolved_or_overridden() {
     let mut book = new_book();
     let food = expense(&book, "Food");
     let anna = person(&mut book, "Anna");
-    save(
+    let cash = role(&book, Role::CashBox);
+    let groceries = save(
         &mut book,
         "Groceries",
         Entry::Expense {
@@ -254,6 +255,18 @@ fn closing_needs_open_items_resolved_or_overridden() {
         person: anna,
         net: eur("12"),
     };
+    assert_eq!(
+        book.set_state(EventState::Closed, vec![]).unwrap_err(),
+        DomainError::ClosingBlocked {
+            blockers: vec![
+                item.clone(),
+                OpenItem::MissingReceipt { txn: groceries },
+                OpenItem::ClosingCountMissing { account: cash },
+            ]
+        }
+    );
+    attach(&mut book, groceries);
+    book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
     assert_eq!(
         book.set_state(EventState::Closed, vec![]).unwrap_err(),
         DomainError::ClosingBlocked {
@@ -283,8 +296,9 @@ fn closing_needs_open_items_resolved_or_overridden() {
 #[test]
 fn a_closed_event_is_read_only_until_reopened() {
     let mut book = new_book();
-    book.set_state(EventState::Closed, vec![]).unwrap();
     let cash = role(&book, Role::CashBox);
+    book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
+    book.set_state(EventState::Closed, vec![]).unwrap();
     assert_eq!(
         book.save_txn(
             &draft(
@@ -323,4 +337,115 @@ fn a_closed_event_is_read_only_until_reopened() {
         )
         .is_ok()
     );
+}
+
+#[test]
+fn closing_counts_show_the_difference() {
+    let mut book = new_book();
+    let (cash, verein, donations) = (
+        role(&book, Role::CashBox),
+        role(&book, Role::Verein),
+        income(&book, "Drink donations"),
+    );
+    save(
+        &mut book,
+        "Donations",
+        Entry::Income {
+            destination: cash,
+            lines: vec![split(donations, "412,90")],
+        },
+    );
+
+    let status = book.ledger().cash()[0];
+    assert_eq!(
+        (status.account, status.computed, status.counted),
+        (cash, eur("412,90"), None)
+    );
+    assert_eq!(
+        book.ledger().open_items(),
+        vec![OpenItem::ClosingCountMissing { account: cash }]
+    );
+
+    book.set_closing_count(cash, june(14), eur("410")).unwrap();
+    let status = book.ledger().cash()[0];
+    assert_eq!(status.difference, Some(eur("-2,90")));
+    assert_eq!(
+        book.ledger().open_items(),
+        vec![OpenItem::CashDifference {
+            account: cash,
+            difference: eur("-2,90")
+        }]
+    );
+
+    book.set_closing_count(cash, june(14), eur("412,90"))
+        .unwrap();
+    assert!(book.ledger().open_items().is_empty());
+
+    // Other asset accounts appear once they have a count; they never need one.
+    assert_eq!(book.ledger().cash().len(), 1);
+    book.set_closing_count(verein, june(14), Cents::ZERO)
+        .unwrap();
+    assert_eq!(book.ledger().cash().len(), 2);
+    book.clear_closing_count(verein).unwrap();
+    assert_eq!(book.ledger().cash().len(), 1);
+
+    assert_eq!(
+        book.set_closing_count(cash, june(14), eur("-1"))
+            .unwrap_err()
+            .code(),
+        "negative_amount"
+    );
+    let food = expense(&book, "Food");
+    assert_eq!(
+        book.set_closing_count(food, june(14), eur("1"))
+            .unwrap_err()
+            .code(),
+        "wrong_account_kind"
+    );
+}
+
+#[test]
+fn attachments_belong_to_transactions() {
+    let mut book = new_book();
+    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Food"));
+    let id = save(
+        &mut book,
+        "Bakery",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(food, "20")],
+        },
+    );
+    assert_eq!(book.ledger().missing_receipts(), [id]);
+
+    let a = attach(&mut book, id);
+    assert!(book.ledger().missing_receipts().is_empty());
+    assert_eq!(book.attachments_of(id).count(), 1);
+
+    let too_big = book.add_attachment(
+        id,
+        "huge.pdf",
+        "application/pdf",
+        MAX_ATTACHMENT_SIZE + 1,
+        "00",
+        now(),
+    );
+    assert_eq!(too_big.unwrap_err(), DomainError::AttachmentTooLarge);
+    assert_eq!(
+        book.add_attachment(TxnId(99), "x.png", "image/png", 1, "00", now())
+            .unwrap_err(),
+        DomainError::UnknownTxn
+    );
+
+    book.remove_attachment(a).unwrap();
+    assert_eq!(book.ledger().missing_receipts(), [id]);
+    assert_eq!(
+        book.remove_attachment(a).unwrap_err(),
+        DomainError::UnknownAttachment
+    );
+
+    // Deleting a transaction takes its attachments with it.
+    attach(&mut book, id);
+    book.delete_txn(id).unwrap();
+    assert_eq!(book.attachments().count(), 0);
 }

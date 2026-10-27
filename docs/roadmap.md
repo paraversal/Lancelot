@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.2. M0 is done. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.3. M0 and M1 are done. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -68,21 +68,21 @@ This is the heart of the app. It gets the most tests. It is built in three steps
 - [x] Event lifecycle Planning → Running → Settling → Closed. Closed is read-only, and closing needs open items resolved or overridden with a note. Covers R-EVT-1, R-EVT-2, R-EVT-4 and R-SET-7. Logging the reopening follows with the change log in M1c.
 
 **M1c · Storage and integrity**
-- [ ] Change log with before and after values for every create, edit and delete. Covers R-TX-6.
-- [ ] SQLite storage:
-  - [ ] Create and open a `.lancelot` file.
-  - [ ] Atomic writes.
-  - [ ] Attachments as BLOBs with SHA-256 (R-ATT-1, R-ATT-2).
-  - [ ] Schema version and migrations.
-  - [ ] Backups of the last N versions (R-NF-5).
-- [ ] Cash box opening and closing counts with the discrepancy (R-ISO-3). Missing receipts and the closing count become open items (R-SET-5).
-- [ ] Integrity check on open, on save and on demand. Covers R-COR-5.
-- [ ] Tests:
-  - [ ] Unit tests for each requirement.
-  - [ ] Property tests with `proptest`, for example: all balances sum to 0, splits sum to the total, parse(format(x)) = x, and the integrity check holds after any valid sequence of operations.
-  - [ ] The example event from M1b is saved, reopened and still reaches **+2.027,50 €**.
+- [x] Change log with before and after values for every create, edit and delete. Covers R-TX-6.
+- [x] SQLite storage:
+  - [x] Create and open a `.lancelot` file.
+  - [x] Atomic writes: one SQL transaction per command, and creation through a temporary file.
+  - [x] Attachments as BLOBs with SHA-256 (R-ATT-1, R-ATT-2).
+  - [x] Schema version and migrations.
+  - [x] Backups of the last N versions (R-NF-5).
+- [x] Cash box opening and closing counts with the discrepancy (R-ISO-3). Missing receipts and the closing count become open items (R-SET-5).
+- [x] Integrity check on open, on save and on demand. Covers R-COR-5.
+- [x] Tests:
+  - [x] Unit tests for each requirement.
+  - [x] Property tests with `proptest`, for example: all balances sum to 0, splits sum to the total, parse(format(x)) = x, and the integrity check holds after any valid sequence of operations.
+  - [x] The example event from M1b is saved, reopened and still reaches **+2.027,50 €**.
 
-**Exit:** a CLI or test can create the mock event, save it, reopen it and print correct balances. The core has no TODOs in the money path.
+**Exit:** a CLI or test can create the mock event, save it, reopen it and print correct balances. The core has no TODOs in the money path. ✓ `tests/store.rs` (`the_example_event_survives_saving_and_reopening`).
 
 ### M2 · App shell and design system in code
 
@@ -206,4 +206,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M1c: SQLite storage, the change log, attachments, cash counts, the integrity check and backups.
+M2: the app shell, the design system in Svelte, Settings, and connecting the app to the store.
