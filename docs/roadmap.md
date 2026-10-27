@@ -47,7 +47,7 @@ Decide everything that is expensive to change later, then set up an empty projec
 - [x] CI with GitHub Actions: fmt, clippy, tests, `svelte-check`, and a macOS build. Written, but it has not run on GitHub yet.
 - [x] Load `tokens.css` into the app and render an empty window with the sidebar.
 
-**Exit:** `npm run tauri dev` opens a window that shows the empty sidebar in the right font and colours, and CI passes.
+**Exit:** `pnpm tauri dev` opens a window that shows the empty sidebar in the right font and colours, and CI passes.
 
 ### M1 · Ledger core (Rust only, no UI)
 

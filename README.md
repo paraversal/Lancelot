@@ -9,14 +9,14 @@ A local desktop app for settling volunteer-run events: receipts, advances, reimb
 
 ## Development
 
-Requirements: Rust (stable, ≥ 1.90), Node 24 with npm ≥ 11.4, and Xcode command line tools on macOS. npm 11.3 fails to install the dependencies, so update it or run npm through `npx npm@11`.
+Requirements: Rust (stable, ≥ 1.90), Node 24, pnpm 12 (the exact version is pinned in `app/package.json`), and Xcode command line tools on macOS. Without a global pnpm, prefix the commands with `npx pnpm@12.15.0` instead of `pnpm`.
 
 ```bash
-cd app && npm install
+cd app && pnpm install
 ```
 
 ```bash
-cd app && npm run tauri dev
+cd app && pnpm tauri dev
 ```
 
 Checks, as run in CI:
@@ -26,7 +26,7 @@ cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 ```bash
-cd app && npm run tokens:check && npm run lint && npm run check && npm test
+cd app && pnpm tokens:check && pnpm lint && pnpm check && pnpm test
 ```
 
-`app/src/lib/styles/tokens.css` is copied from `docs/design/tokens.css` with `npm run tokens`. Do not edit the copy.
+`app/src/lib/styles/tokens.css` is copied from `docs/design/tokens.css` with `pnpm tokens`. Do not edit the copy.

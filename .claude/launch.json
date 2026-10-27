@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "ui",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "app", "run", "dev"],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "app", "dev"],
       "port": 5173
     }
   ]

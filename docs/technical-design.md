@@ -424,10 +424,10 @@ Event settings (name, dates, default reimbursement account) live inside the even
 
 ## 7. UI
 
-- **Stack:** Svelte 5 (runes), SvelteKit 3 with `adapter-static` in SPA mode (`ssr = false`, fallback `index.html`), TypeScript and Vite. The package manager is **npm**, the Tauri CLI comes from `@tauri-apps/cli` as a dev dependency, and there is no global install.
+- **Stack:** Svelte 5 (runes), SvelteKit 3 with `adapter-static` in SPA mode (`ssr = false`, fallback `index.html`), TypeScript and Vite. The package manager is **pnpm**, pinned through `packageManager` in `app/package.json`. The Tauri CLI comes from `@tauri-apps/cli` as a dev dependency, so nothing else needs a global install.
 - **State:** one `snapshot` `$state` per window, replaced wholesale after every command. Each screen derives its view from it, for example sorting and filtering, but never sums of money. UI-only state, such as the open panel, filters and the draft form, stays local to each screen.
 - **Styling:**
-  - `docs/design/tokens.css` is copied to `app/src/lib/styles/tokens.css` by `npm run tokens`, so the design file stays the source. CI fails if the copy is out of date (`npm run tokens:check`).
+  - `docs/design/tokens.css` is copied to `app/src/lib/styles/tokens.css` by `pnpm tokens`, so the design file stays the source. CI fails if the copy is out of date (`pnpm tokens:check`).
   - Component styles live in the components, as plain CSS using the tokens.
   - There is no CSS framework.
 - **Font:** Familjen Grotesk (OFL), in weights 400 and 600, from `@fontsource/familjen-grotesk` (latin and latin-ext). Vite bundles the `woff2` files into the build, so the app works fully offline.
@@ -455,7 +455,7 @@ Event settings (name, dates, default reimbursement account) live inside the even
 | TS types | **`ts-rs`**, with the generated file checked in | Stable and simple. Commands stay hand-written wrappers. |
 | Dates | **`time` crate**. ISO dates as TEXT, timestamps as RFC 3339 UTC | Readable without Lancelot (R-NF-4). |
 | SQLite | **`rusqlite`** with the `bundled` feature | No system SQLite dependency, and it is synchronous, which suits the small data size. |
-| Package manager | **npm** | Already installed, and nothing extra to set up. |
+| Package manager | **pnpm** | Strict dependency resolution and a fast install. pnpm 12 also skips packages released in the last week, which guards against compromised releases. |
 
 ## 9. Open for later milestones
 

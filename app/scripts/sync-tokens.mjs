@@ -7,7 +7,7 @@ const tokens = readFileSync(source, 'utf8');
 
 if (process.argv.includes('--check')) {
 	if (readFileSync(target, 'utf8') !== tokens) {
-		console.error('src/lib/styles/tokens.css is out of date. Run `npm run tokens`.');
+		console.error('src/lib/styles/tokens.css is out of date. Run `pnpm tokens`.');
 		process.exit(1);
 	}
 } else {
