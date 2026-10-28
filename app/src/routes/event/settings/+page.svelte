@@ -8,6 +8,7 @@
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
 	import type { BackupInfo } from '#lib/api/generated/BackupInfo.ts';
 	import type { EventDetails } from '#lib/api/generated/EventDetails.ts';
+	import type { Motion } from '#lib/api/generated/Motion.ts';
 	import type { NumberFormat } from '#lib/api/generated/NumberFormat.ts';
 	import Button from '#lib/components/Button.svelte';
 	import DateField from '#lib/components/DateField.svelte';
@@ -55,6 +56,12 @@
 
 	const update = (patch: Partial<EventDetails>) =>
 		run(() => session.change(() => api.updateEvent(details(patch))));
+
+	const setMotion = (motion: Motion) =>
+		run(async () => {
+			if (!session.settings) return;
+			session.settings = await api.setSettings({ ...session.settings, motion });
+		});
 
 	const setFormat = (numberFormat: NumberFormat) =>
 		run(async () => {
@@ -253,6 +260,19 @@
 						options={[
 							{ value: 'de', label: '1.234,56 €  ·  31.12.2026' },
 							{ value: 'en', label: '€1,234.56  ·  2026-12-31' }
+						]}
+					/>
+				</div>
+				<div class="labelled">
+					<span class="label">Motion</span>
+					<Segmented
+						label="Motion"
+						value={session.settings?.motion ?? 'full'}
+						onchange={setMotion}
+						options={[
+							{ value: 'full', label: 'Full' },
+							{ value: 'calm', label: 'Calm' },
+							{ value: 'off', label: 'Off' }
 						]}
 					/>
 				</div>

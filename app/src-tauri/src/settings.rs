@@ -18,6 +18,21 @@ pub struct AppSettings {
     pub number_format: NumberFormat,
     /// Backups kept per event (R-NF-5).
     pub backup_count: u32,
+    /// How much the app moves (`docs/design/motion.md`).
+    #[serde(default)]
+    pub motion: Motion,
+}
+
+/// Full: every chosen animation. Calm: short fades only, nothing big. Off: nothing moves.
+/// macOS's "reduce motion" makes Full behave like Calm.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "lowercase")]
+pub enum Motion {
+    #[default]
+    Full,
+    Calm,
+    Off,
 }
 
 impl AppSettings {
@@ -29,6 +44,7 @@ impl Default for AppSettings {
         AppSettings {
             number_format: format_for_locale(sys_locale::get_locale().as_deref()),
             backup_count: 20,
+            motion: Motion::Full,
         }
     }
 }
@@ -141,6 +157,20 @@ mod tests {
         file.save(&path).unwrap();
         assert_eq!(SettingsFile::load(&path), file);
         assert!(!path.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn an_older_file_without_motion_moves_fully() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(
+            &path,
+            r#"{"numberFormat":"de","backupCount":7,"recent":[]}"#,
+        )
+        .unwrap();
+        let file = SettingsFile::load(&path);
+        assert_eq!(file.settings.backup_count, 7);
+        assert_eq!(file.settings.motion, Motion::Full);
     }
 
     #[test]

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { Strength } from '../motion/choices';
+	import { press } from '../motion/effects';
+	import { level } from '../motion/mode.svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 
 	let {
@@ -10,6 +13,7 @@
 		type = 'button',
 		disabled = false,
 		onclick,
+		strength,
 		children
 	}: {
 		kind?: 'primary' | 'ghost' | 'marker';
@@ -20,11 +24,20 @@
 		type?: 'button' | 'submit';
 		disabled?: boolean;
 		onclick?: (e: MouseEvent) => void;
+		/** Overrides how the press moves (A3), for the trial page. */
+		strength?: Strength;
 		children: Snippet;
 	} = $props();
 </script>
 
-<button {type} {disabled} {onclick} class="{kind} {size}">
+<button
+	{type}
+	{disabled}
+	{onclick}
+	class="{kind} {size}"
+	data-press={level('A3', strength)}
+	use:press={() => level('A3', strength)}
+>
 	{#if icon}<Icon name={icon} size={size === 'sm' ? 14 : 16} />{/if}
 	<span class="label">{@render children()}</span>
 	{#if shortcut}<kbd>{shortcut}</kbd>{/if}
@@ -68,6 +81,15 @@
 
 	.marker {
 		background: var(--color-marker);
+	}
+
+	/* A3 regular: a press sinks a little. Playful squashes in script (motion/effects.ts). */
+	button {
+		transition: transform var(--motion-instant) var(--ease-out);
+	}
+
+	button[data-press='regular']:active:not(:disabled) {
+		transform: scale(0.97);
 	}
 
 	button:disabled {

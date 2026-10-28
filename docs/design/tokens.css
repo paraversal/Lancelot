@@ -34,4 +34,13 @@
   --spacing-10: 40px;
   --radius-field: 6px;
   --radius-pill: 999px;
+  /* Motion (docs/design/motion.md). Springs are linear() curves that overshoot and settle. */
+  --motion-instant: 90ms;
+  --motion-quick: 160ms;
+  --motion-normal: 240ms;
+  --motion-slow: 480ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.5, 0, 0.8, 0.3);
+  --spring-soft: linear(0, 0.22 6%, 0.64 14%, 0.93 22%, 1.04 32%, 1.05 40%, 1.01 55%, 1 70%, 1);
+  --spring-bouncy: linear(0, 0.26 5%, 0.82 12%, 1.14 20%, 1.18 26%, 0.96 38%, 1.04 50%, 0.99 62%, 1.01 75%, 1);
 }
