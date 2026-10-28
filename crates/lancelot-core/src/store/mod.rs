@@ -35,10 +35,7 @@ use crate::money::Cents;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
 /// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`.
-const MIGRATIONS: &[&str] = &[
-    include_str!("../../migrations/0001_initial.sql"),
-    include_str!("../../migrations/0002_asset_type.sql"),
-];
+const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_initial.sql")];
 
 #[derive(Debug, Error)]
 pub enum StoreError {

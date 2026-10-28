@@ -347,7 +347,7 @@ function recount(
 type Args = Record<string, unknown>;
 
 const commands: Record<string, (a: Args) => unknown> = {
-	app_info: () => ({ version: 'dev', schemaVersion: 2 }),
+	app_info: () => ({ version: 'dev', schemaVersion: 1 }),
 	settings_get: () => settings,
 	settings_set: (a) => (settings = a.settings as AppSettings),
 	recent_events: () => recent,

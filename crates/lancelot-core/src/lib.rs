@@ -41,7 +41,7 @@ pub use store::{
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 1;
 
 /// SQLite `application_id` of an event file: `LNCL`.
 pub const APPLICATION_ID: u32 = u32::from_be_bytes(*b"LNCL");

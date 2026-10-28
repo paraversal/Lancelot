@@ -153,7 +153,7 @@ Built in two steps.
 
 ### M5 · Settlement and closing (MVP release)
 
-- [x] Asset accounts are bank or cash, managed in Settings (R-ACC-1). Schema version 2.
+- [x] Asset accounts are bank or cash, managed in Settings (R-ACC-1).
 - [x] Opening and closing count with the difference for every cash account (R-ISO-3), from its row on the Overview.
 - [x] Overview screen, MVP version: result, in/out by category, "where the money is" and open items, each leading to its fix. The forecast and ticket blocks wait for Phase 2.
 - [ ] Settlement report: income and expenses by category, result, final balance per asset account, and open items. Covers R-SET-1, R-SET-4 and R-SET-5.

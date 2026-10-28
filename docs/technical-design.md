@@ -105,9 +105,9 @@ Check against Bob from requirements §4.1:
 - He advanced 120 € for food: line `−120`.
 - Raw balance `+180`, displayed `−180,00 €`, which means "Bob owes 180,00 €". ✓
 
-### 3.2 Schema (MVP, schema version 2)
+### 3.2 Schema (MVP, schema version 1)
 
-The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql) plus [`0002_asset_type.sql`](../crates/lancelot-core/migrations/0002_asset_type.sql). Files of an older version are backed up and migrated on open. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). Until v0.1.0 ships it is edited in place: files from earlier development builds stop opening. From v0.1.0 on, every change is a new migration. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
 | Table | Holds |
 |---|---|
