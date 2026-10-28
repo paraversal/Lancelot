@@ -77,9 +77,10 @@
 
 	async function commit() {
 		await parse();
-		if (error || (required && !parsed)) {
+		// Invalid input stays, with its message, until it is fixed; nothing is committed.
+		if (error) return;
+		if (required && !parsed) {
 			text = value ? formatDate(value, format) : '';
-			error = null;
 			return;
 		}
 		text = shown ?? '';
@@ -87,7 +88,7 @@
 	}
 </script>
 
-<Field {label} {id} invalid={!!error}>
+<Field {label} {id} {error}>
 	<input
 		{id}
 		type="text"
@@ -98,8 +99,8 @@
 		onblur={() => ((focused = false), commit())}
 		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
 		class:error
-		title={error ?? undefined}
 		aria-invalid={!!error}
+		aria-describedby={error ? `${id}-error` : undefined}
 	/>
 	{#if error}<span class="warn"><Icon name="warn" size={14} /></span>{/if}
 	{#snippet hint()}

@@ -16,7 +16,12 @@ vi.mock('../api', async () => {
 		'1,20': { cents: 120, ambiguous: false }
 	};
 	const dates: Record<string, string> = { '6.12.26': '2026-12-06', '06.12.2026': '2026-12-06' };
-	const error = (code: string) => new ApiError({ code, message: code, field: null, report: null });
+	const messages: Record<string, string> = {
+		bad_grouping: 'thousands separators must form groups of three',
+		format: 'enter a date as 31.12.2026 or 2026-12-31'
+	};
+	const error = (code: string) =>
+		new ApiError({ code, message: messages[code], field: null, report: null });
 	return {
 		ApiError,
 		api: {
@@ -159,5 +164,36 @@ describe('DateField', () => {
 		expect(input.value).toBe('6.12.26');
 		await rerender({ value: '2026-06-15' });
 		expect(input.value).toBe('15.06.2026');
+	});
+});
+
+describe('error messages', () => {
+	it('explain an invalid amount in a tooltip while typing and under the field after', async () => {
+		render(AmountField, { label: 'Amount', value: null, format: 'de' });
+		const input = screen.getByLabelText('Amount');
+		await fireEvent.focus(input);
+		await type(input, '1.23.4');
+		const tip = screen.getByRole('tooltip');
+		expect(tip.textContent).toBe('Thousands separators must form groups of three');
+		expect(input.getAttribute('aria-describedby')).toBe(tip.id);
+		await fireEvent.blur(input);
+		await settle();
+		expect(document.querySelector('.hint.error')?.textContent).toBe(
+			'Thousands separators must form groups of three'
+		);
+	});
+
+	it('keep an invalid date with its message instead of throwing it away', async () => {
+		const oncommit = vi.fn();
+		render(DateField, { label: 'Date', value: '2026-06-13', format: 'de', oncommit });
+		const input = screen.getByLabelText('Date') as HTMLInputElement;
+		await type(input, '13/06');
+		await fireEvent.blur(input);
+		await settle();
+		expect(input.value).toBe('13/06');
+		expect(oncommit).not.toHaveBeenCalled();
+		expect(screen.getByRole('tooltip').textContent).toBe(
+			'Enter a date as 31.12.2026 or 2026-12-31'
+		);
 	});
 });

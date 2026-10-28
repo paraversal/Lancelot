@@ -100,7 +100,7 @@
 	}
 </script>
 
-<Field {label} {id} invalid={!!error}>
+<Field {label} {id} {error}>
 	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		{id}
@@ -115,8 +115,8 @@
 		class:large
 		{autofocus}
 		class:error
-		title={error ?? undefined}
 		aria-invalid={!!error}
+		aria-describedby={error ? `${id}-error` : undefined}
 	/>
 	{#if error}
 		<span class="warn"><Icon name="warn" size={14} /></span>

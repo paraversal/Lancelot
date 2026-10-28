@@ -1,12 +1,16 @@
 <script lang="ts">
 	// The frame every input sits in: a label, a white box with a rule border (ink while focused,
 	// minus when invalid), and an optional hint line that carries data, never prose.
+	//
+	// An `error` says why the input was not accepted: in a tooltip under the box while the field
+	// has focus (so typing does not shift the layout), and in the hint line once it is left.
 	import type { Snippet } from 'svelte';
 
 	let {
 		label,
 		id,
 		invalid = false,
+		error = null,
 		tall = false,
 		hint,
 		children
@@ -14,18 +18,28 @@
 		label?: string;
 		id?: string;
 		invalid?: boolean;
+		error?: string | null;
 		tall?: boolean;
 		hint?: Snippet;
 		children: Snippet;
 	} = $props();
+
+	const message = $derived(error ? error.charAt(0).toUpperCase() + error.slice(1) : null);
 </script>
 
 <div class="field">
 	{#if label}<label for={id}>{label}</label>{/if}
-	<div class="box" class:invalid class:tall>
+	<div class="box" class:invalid={invalid || !!error} class:tall>
 		{@render children()}
+		{#if message}<span class="tip" role="tooltip" id={id ? `${id}-error` : undefined}
+				>{message}</span
+			>{/if}
 	</div>
-	{#if hint}<div class="hint">{@render hint()}</div>{/if}
+	{#if message}
+		<div class="hint error">{message}</div>
+	{:else if hint}
+		<div class="hint">{@render hint()}</div>
+	{/if}
 </div>
 
 <style>
@@ -42,6 +56,7 @@
 	}
 
 	.box {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
@@ -87,5 +102,34 @@
 	.hint {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.hint.error {
+		color: var(--color-minus);
+	}
+
+	.tip {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
+		z-index: 10;
+		max-width: 280px;
+		padding: 4px 8px;
+		border-radius: var(--radius-sm);
+		background: var(--color-ink);
+		color: var(--color-paper);
+		font-size: var(--type-xs);
+		line-height: 1.4;
+		pointer-events: none;
+		display: none;
+	}
+
+	/* While typing: the tooltip. After leaving the field: the hint line. */
+	.field:focus-within .tip {
+		display: block;
+	}
+
+	.field:focus-within .hint.error {
+		visibility: hidden;
 	}
 </style>

@@ -292,7 +292,7 @@
 				value={party}
 				options={personOptions}
 				addLabel="New person…"
-				invalid={!!fieldError('party')}
+				error={fieldError('party')}
 				onchange={pickPerson}
 				onadd={addPerson}
 			>
@@ -335,7 +335,7 @@
 				value={party}
 				options={sources}
 				addLabel="New person…"
-				invalid={!!fieldError('party')}
+				error={fieldError('party')}
 				onchange={(v) => (party = v)}
 				onadd={addPerson}
 			>
@@ -349,7 +349,7 @@
 				value={other}
 				options={assetOptions}
 				addLabel="New account…"
-				invalid={!!fieldError('other')}
+				error={fieldError('other')}
 				onchange={(v) => (other = v)}
 				onadd={async (name) => {
 					try {
