@@ -23,16 +23,30 @@
 	const group = (iban: string) => iban.replace(/(.{4})/g, '$1 ').trim();
 	const accountName = (id: number) => snapshot.accounts.find((a) => a.id === id)?.name ?? '';
 	const today = new Date().toISOString().slice(0, 10);
+	const dates = $derived(formatDateRange(snapshot.event.startsOn, snapshot.event.endsOn, format));
 
-	/** A person's advances for the itemised appendix: what raised their balance. */
+	/**
+	 * Everything behind a person's balance for the itemised appendix: advances, money they
+	 * held and settles so far, so the lines add up to the open balance.
+	 */
 	function advances(person: number) {
 		const p = snapshot.persons.find((x) => x.account === person);
-		return (p?.entries ?? [])
-			.filter((e) => e.effect > 0)
-			.map((e) => {
-				const txn = snapshot.txns.find((t) => t.id === e.txn);
-				return { ...e, date: txn?.date ?? '', title: txn?.description || txn?.counterparty || '' };
-			});
+		return (p?.entries ?? []).map((e) => {
+			const txn = snapshot.txns.find((t) => t.id === e.txn);
+			const categories = (txn?.lines ?? [])
+				.map((l) => snapshot.accounts.find((a) => a.id === l.account))
+				.filter((a) => a?.kind === 'expense' || a?.kind === 'income')
+				.map((a) => a!.name)
+				.join(', ');
+			const asset = (txn?.lines ?? [])
+				.map((l) => snapshot.accounts.find((a) => a.id === l.account))
+				.find((a) => a?.kind === 'asset')?.name;
+			const title =
+				txn?.kind === 'settle'
+					? `${e.effect < 0 ? 'Reimbursed' : 'Paid back'} · ${asset ?? ''}`
+					: txn?.description || txn?.counterparty || categories || (asset ? `Into ${asset}` : '');
+			return { ...e, date: txn?.date ?? '', title };
+		});
 	}
 
 	async function exportCsv() {
@@ -115,7 +129,7 @@
 		{#if list.payouts.length}
 			<label class="toggle">
 				<input type="checkbox" bind:checked={itemised} />
-				With itemised advances
+				With advances and payments
 			</label>
 		{/if}
 		{#if error}<p class="error">{error}</p>{/if}
@@ -139,61 +153,88 @@
 	{/if}
 
 	<!-- What PDF prints: the payout list for the treasurer, with the advances behind it. -->
-	<article class="print-only">
-		<h1>{snapshot.event.name} · Payout list</h1>
-		<p class="muted">
-			{formatDateRange(snapshot.event.startsOn, snapshot.event.endsOn, format)} · as of {formatDate(
-				today,
-				format
-			)}
-		</p>
-		<table>
+	<article class="print-only sheet">
+		<header class="doc-head">
+			<div class="doc-title">
+				<span class="kicker">Payout list</span>
+				<h1>{snapshot.event.name}</h1>
+				{#if dates || snapshot.event.location}
+					<span class="meta">{[dates, snapshot.event.location].filter(Boolean).join(' · ')}</span>
+				{/if}
+			</div>
+			<dl class="facts">
+				<div>
+					<dt>To pay</dt>
+					<dd class="big">{formatAmount(list.payoutTotal, format)}</dd>
+				</div>
+				<div>
+					<dt>People</dt>
+					<dd>{list.payouts.length}</dd>
+				</div>
+				<div>
+					<dt>As of</dt>
+					<dd>{formatDate(today, format)}</dd>
+				</div>
+			</dl>
+		</header>
+
+		<table class="list">
 			<thead>
-				<tr
-					><th>Person</th><th>Account holder</th><th>IBAN</th><th>Reference</th><th class="num"
-						>Amount</th
-					></tr
-				>
+				<tr><th>Person</th><th>Bank</th><th>Reference</th><th class="num">Amount</th></tr>
 			</thead>
 			<tbody>
 				{#each list.payouts as p (p.person)}
 					<tr>
-						<td>{p.name}</td>
-						<td>{p.holder}</td>
-						<td>{p.iban ? group(p.iban) : '—'}{p.bic ? ` · ${p.bic}` : ''}</td>
-						<td>{p.reference}</td>
-						<td class="num">{formatAmount(p.amount, format)}</td>
+						<td>
+							<strong>{p.name}</strong>
+							{#if p.holder !== p.name}<small>{p.holder}</small>{/if}
+						</td>
+						<td>
+							{#if p.iban}
+								<span class="iban">{group(p.iban)}</span>
+								{#if p.bic}<small>{p.bic}</small>{/if}
+							{:else}
+								<span class="attention">No IBAN</span>
+							{/if}
+						</td>
+						<td class="reference">{p.reference}</td>
+						<td class="num"><strong>{formatAmount(p.amount, format)}</strong></td>
 					</tr>
 				{/each}
 			</tbody>
 			<tfoot>
 				<tr
-					><td colspan="4">{people(list.payouts.length)}</td><td class="num"
-						>{formatAmount(list.payoutTotal, format)}</td
+					><td colspan="3">Total</td><td class="num">{formatAmount(list.payoutTotal, format)}</td
 					></tr
 				>
 			</tfoot>
 		</table>
-		{#if itemised}
+
+		{#if itemised && list.payouts.length}
+			<h2 class="section">Advances and payments</h2>
 			{#each list.payouts as p (p.person)}
-				<h2>{p.name}</h2>
-				<table>
-					<tbody>
-						{#each advances(p.person) as e (e.txn)}
-							<tr
-								><td class="date">{formatDate(e.date, format)}</td><td>{e.title}</td><td class="num"
-									>{formatAmount(e.effect, format)}</td
-								></tr
-							>
-						{/each}
-						<tr class="sum"
-							><td colspan="2">Open balance</td><td class="num">{formatAmount(p.amount, format)}</td
-							></tr
-						>
-					</tbody>
-				</table>
+				<section class="advances">
+					<div class="advances-head">
+						<strong>{p.name}</strong>
+						<span class="muted">open balance</span>
+						<strong class="num">{formatAmount(p.amount, format)}</strong>
+					</div>
+					<table class="items">
+						<tbody>
+							{#each advances(p.person) as e (e.txn)}
+								<tr>
+									<td class="date">{formatDate(e.date, format)}</td>
+									<td>{e.title}</td>
+									<td class="num">{formatAmount(e.effect, format)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</section>
 			{/each}
 		{/if}
+
+		<footer class="doc-foot">{session.event!.fileName} · Lancelot</footer>
 	</article>
 </div>
 
@@ -339,59 +380,181 @@
 		color: var(--color-minus);
 	}
 
-	/* The printed page: plain ink on white, in the app's type. */
-	.print-only {
+	/* The printed page: ink on white in the app's type, rules instead of boxes. The page
+	   margins are set with @page in base.css. */
+	.sheet {
 		color: var(--color-ink);
+		font-size: 10pt;
+		line-height: 1.4;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.doc-head {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 24pt;
+		padding-bottom: 14pt;
+		border-bottom: 1.5pt solid var(--color-ink);
+	}
+
+	.doc-title {
+		display: flex;
+		flex-direction: column;
+		gap: 3pt;
+	}
+
+	.kicker {
+		font-size: 9pt;
+		font-weight: 600;
+		color: var(--color-ink-muted);
+	}
+
+	.sheet h1 {
+		margin: 0;
+		font-size: 20pt;
+		font-weight: 600;
+		line-height: 1.15;
+	}
+
+	.meta {
+		font-size: 10pt;
+		color: var(--color-ink-muted);
+	}
+
+	.facts {
+		display: flex;
+		gap: 22pt;
+		margin: 0;
+	}
+
+	.facts div {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 2pt;
+	}
+
+	.facts dt {
+		font-size: 8.5pt;
+		color: var(--color-ink-muted);
+	}
+
+	.facts dd {
+		margin: 0;
 		font-size: 11pt;
+		font-weight: 600;
 	}
 
-	.print-only h1 {
-		font-size: 18pt;
+	.facts dd.big {
+		font-size: 16pt;
 	}
 
-	.print-only h2 {
-		margin-top: 18pt;
-		font-size: 12pt;
-	}
-
-	.print-only p {
-		margin: 4pt 0 14pt;
-	}
-
-	table {
+	.sheet table {
 		width: 100%;
 		border-collapse: collapse;
 	}
 
-	th {
-		padding: 4pt 6pt;
-		border-bottom: 1px solid var(--color-ink);
-		font-size: 9pt;
+	.list {
+		margin-top: 14pt;
+	}
+
+	.list th {
+		padding: 0 8pt 5pt 0;
+		border-bottom: 0.75pt solid var(--color-rule);
+		font-size: 8.5pt;
 		font-weight: 400;
 		color: var(--color-ink-muted);
 		text-align: left;
 	}
 
-	td {
-		padding: 5pt 6pt;
-		border-bottom: 1px solid var(--color-rule);
+	.list td {
+		padding: 7pt 8pt 7pt 0;
+		border-bottom: 0.75pt solid var(--color-rule);
 		vertical-align: top;
 	}
 
-	tfoot td,
-	tr.sum td {
-		border-bottom: none;
-		font-weight: 600;
+	.list tr {
+		break-inside: avoid;
 	}
 
-	.num {
+	.list small,
+	.sheet small {
+		display: block;
+		margin-top: 1pt;
+		font-size: 8.5pt;
+		color: var(--color-ink-muted);
+	}
+
+	.iban {
+		white-space: nowrap;
+		letter-spacing: 0.02em;
+	}
+
+	.reference {
+		color: var(--color-ink-muted);
+	}
+
+	.sheet .num {
+		padding-right: 0;
 		text-align: right;
 		white-space: nowrap;
 	}
 
-	.date {
-		width: 70pt;
+	.list tfoot td {
+		padding-top: 8pt;
+		border-bottom: none;
+		border-top: 1.5pt solid var(--color-ink);
+		font-weight: 600;
+	}
+
+	.sheet .attention {
+		color: var(--color-attention);
+		font-weight: 600;
+	}
+
+	.section {
+		margin: 26pt 0 4pt;
+		font-size: 12pt;
+		font-weight: 600;
+	}
+
+	.advances {
+		margin-top: 12pt;
+		break-inside: avoid;
+	}
+
+	.advances-head {
+		display: flex;
+		align-items: baseline;
+		gap: 8pt;
+		padding-bottom: 4pt;
+		border-bottom: 0.75pt solid var(--color-ink);
+	}
+
+	.advances-head .muted {
+		flex: 1;
+		font-size: 8.5pt;
+		text-align: right;
+	}
+
+	.items td {
+		padding: 4pt 8pt 4pt 0;
+		border-bottom: 0.75pt solid var(--color-rule);
+	}
+
+	.items .date {
+		width: 62pt;
+		color: var(--color-ink-muted);
 		white-space: nowrap;
+	}
+
+	.doc-foot {
+		margin-top: 28pt;
+		padding-top: 6pt;
+		border-top: 0.75pt solid var(--color-rule);
+		font-size: 8pt;
+		color: var(--color-ink-muted);
 	}
 
 	@media print {

@@ -351,6 +351,7 @@ const commands: Record<string, (a: Args) => unknown> = {
 				row.name = name;
 				row.iban = person.iban;
 				row.holder = person.holder ?? name;
+				row.bic = person.bic;
 				s.payouts.payableTotal = s.payouts.payouts
 					.filter((r) => r.iban)
 					.reduce((t, r) => t + r.amount, 0);

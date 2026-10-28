@@ -59,15 +59,13 @@
 			<h1>People</h1>
 			<div class="actions">
 				{#if snapshot.payouts.payouts.length || snapshot.payouts.repayments.length}
-					<button type="button" class="payout-link" onclick={() => goto('/event/people/payouts')}>
-						<strong>Payout list</strong>
-						<span>
-							{snapshot.payouts.payouts.length === 1
-								? '1 person'
-								: `${snapshot.payouts.payouts.length} people`}
-							· {formatAmount(snapshot.payouts.payoutTotal, format)}
-						</span>
-					</button>
+					<Button
+						icon="file"
+						shortcut={formatAmount(snapshot.payouts.payoutTotal, format)}
+						onclick={() => goto('/event/people/payouts')}
+					>
+						Payouts
+					</Button>
 				{/if}
 				<Button kind="primary" icon="plus" onclick={add}>Person</Button>
 			</div>
@@ -166,27 +164,7 @@
 	.actions {
 		display: flex;
 		align-items: center;
-		gap: 20px;
-	}
-
-	.payout-link {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		padding: 0;
-		border: none;
-		background: none;
-		cursor: pointer;
-	}
-
-	.payout-link strong {
-		font-weight: 600;
-	}
-
-	.payout-link span {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
+		gap: var(--spacing-2);
 	}
 
 	h1 {
