@@ -455,14 +455,15 @@
 
 	.name {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: baseline;
-		gap: var(--spacing-2);
+		gap: 2px var(--spacing-2);
 		flex: 1;
 		min-width: 0;
+		padding: 6px 0;
 	}
 
 	.note {
-		white-space: nowrap;
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
 	}
