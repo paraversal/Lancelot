@@ -1,6 +1,6 @@
 # Lancelot — Design
 
-Source of truth: `UI.fig` (OpenPencil, local only and gitignored). Tokens: [`tokens.css`](tokens.css), generated from the file's variables.
+Source of truth: `UI.fig` (OpenPencil, local only and gitignored). Tokens: [`tokens.css`](tokens.css), generated from the file's variables. In the app, the components are on the `/design` page of a development build (`pnpm dev`, then open `/design`).
 
 ## Character
 

@@ -4,4 +4,4 @@ export type BackupInfo = { path: string,
 /**
  * RFC 3339 UTC, from the file name.
  */
-takenAt: string | null, };
+takenAt: string | null, size: number, };

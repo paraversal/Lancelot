@@ -38,6 +38,11 @@ impl Default for AppSettings {
 pub struct RecentEntry {
     pub path: PathBuf,
     pub name: String,
+    /// ISO dates, shown next to the name on the start screen.
+    #[serde(default)]
+    pub starts_on: Option<String>,
+    #[serde(default)]
+    pub ends_on: Option<String>,
     /// RFC 3339 UTC.
     pub last_opened: String,
 }
@@ -72,16 +77,9 @@ impl SettingsFile {
     }
 
     /// Moves an event to the top of the recent list.
-    pub fn remember(&mut self, path: &Path, name: &str, now: &str) {
-        self.recent.retain(|r| r.path != path);
-        self.recent.insert(
-            0,
-            RecentEntry {
-                path: path.to_owned(),
-                name: name.to_owned(),
-                last_opened: now.to_owned(),
-            },
-        );
+    pub fn remember(&mut self, entry: RecentEntry) {
+        self.recent.retain(|r| r.path != entry.path);
+        self.recent.insert(0, entry);
         self.recent.truncate(RECENT_LIMIT);
     }
 
@@ -113,6 +111,16 @@ pub fn format_for_locale(locale: Option<&str>) -> NumberFormat {
 mod tests {
     use super::*;
 
+    fn entry(path: &str, name: &str) -> RecentEntry {
+        RecentEntry {
+            path: PathBuf::from(path),
+            name: name.into(),
+            starts_on: Some("2026-06-12".into()),
+            ends_on: None,
+            last_opened: "2026-06-14T18:00:00Z".into(),
+        }
+    }
+
     #[test]
     fn locale_decides_the_default_format() {
         assert_eq!(format_for_locale(Some("de-DE")), NumberFormat::De);
@@ -129,7 +137,7 @@ mod tests {
         let mut file = SettingsFile::default();
         file.settings.number_format = NumberFormat::De;
         file.settings.backup_count = 7;
-        file.remember(Path::new("/a.lancelot"), "A", "2026-06-14T18:00:00Z");
+        file.remember(entry("/a.lancelot", "A"));
         file.save(&path).unwrap();
         assert_eq!(SettingsFile::load(&path), file);
         assert!(!path.with_extension("json.tmp").exists());
@@ -151,9 +159,9 @@ mod tests {
     fn recent_list_is_ordered_unique_and_short() {
         let mut file = SettingsFile::default();
         for i in 0..12 {
-            file.remember(Path::new(&format!("/{i}.lancelot")), &format!("E{i}"), "t");
+            file.remember(entry(&format!("/{i}.lancelot"), &format!("E{i}")));
         }
-        file.remember(Path::new("/5.lancelot"), "Renamed", "t");
+        file.remember(entry("/5.lancelot", "Renamed"));
         assert_eq!(file.recent.len(), RECENT_LIMIT);
         assert_eq!(file.recent[0].name, "Renamed");
         assert_eq!(
