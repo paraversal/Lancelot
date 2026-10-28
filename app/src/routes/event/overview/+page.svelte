@@ -10,7 +10,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import { categoryColor } from '#lib/colors.ts';
-	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { differenceText, formatAmount, formatDate } from '#lib/format.ts';
 	import { describe } from '#lib/openItems.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import ClosePanel from './ClosePanel.svelte';
@@ -29,7 +29,10 @@
 		snapshot.event.closedAt ? formatDate(snapshot.event.closedAt.slice(0, 10), format) : null
 	);
 	const accepted = $derived(
-		snapshot.event.closingOverrides.map((o) => ({ ...describe(o.item, snapshot), note: o.note }))
+		snapshot.event.closingOverrides.map((o) => ({
+			...describe(o.item, snapshot, format),
+			note: o.note
+		}))
 	);
 
 	async function exportCsv() {
@@ -68,7 +71,7 @@
 				: i.type === 'missingReceipt'
 					? () => goto(`/event/ledger?txn=${i.txn}`)
 					: () => (counting = i.account);
-		return { ...describe(i, snapshot), go };
+		return { ...describe(i, snapshot, format), go };
 	}
 	const open = $derived(snapshot.openItems.map(item));
 </script>
@@ -158,11 +161,7 @@
 								{#if cash?.counted != null}
 									<span class:minus={!!cash.difference} class="note">
 										counted {formatAmount(cash.counted, format)}
-										{#if cash.difference}&nbsp;{formatAmount(
-												cash.difference,
-												format,
-												'always'
-											)}{/if}
+										{#if cash.difference}· {differenceText(cash.difference, format)}{/if}
 									</span>
 								{:else if account.assetType === 'cash'}
 									<span class="note attention">not counted</span>

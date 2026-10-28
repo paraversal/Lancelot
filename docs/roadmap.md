@@ -216,6 +216,7 @@ Built in two steps.
 - **M12 · SEPA.** Export the payout list as pain.001 XML (R-PER-6).
 - **M13 · Polished reports.** A typeset settlement PDF that follows the design system.
 - **M14 · Receipt OCR** (optional): pre-fill amount, date and counterparty from an attached receipt. It must run locally.
+- **User manual.** How the event's money is modelled (accounts, people, counts) and how to run an event from opening count to closing, for treasurers who did not build it.
 
 ---
 

@@ -50,7 +50,7 @@
 
 <Panel title="Close event" {onclose}>
 	{#each items as item, n (key(item))}
-		{@const d = describe(item, snapshot)}
+		{@const d = describe(item, snapshot, format)}
 		<div class="item">
 			<label class="line" for="{id}-{n}">
 				<span>{d.text}</span>

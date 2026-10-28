@@ -47,7 +47,7 @@ describe('Overview', () => {
 		expect(text(screen.getByTestId('result'))).toBe('+2.027,50 €');
 		const cash = screen.getByText('Cash box').closest('li')!;
 		expect(text(cash)).toContain('counted 410,00 €');
-		expect(text(cash)).toContain('−2,90 €');
+		expect(text(cash)).toContain('2,90 € less than recorded');
 		expect(text(cash)).toContain('412,90 €');
 		expect(screen.getByText('Anna is owed')).toBeTruthy();
 		expect(screen.getByText('Bob holds')).toBeTruthy();
@@ -68,7 +68,7 @@ describe('Overview', () => {
 		await fireEvent.click(within(cash).getByText('Count'));
 		const panel = document.querySelector('aside')!;
 		expect(text(panel)).toContain('In the books412,90 €');
-		expect(text(panel)).toContain('Difference −2,90 €');
+		expect(text(panel)).toContain('Less than recorded 2,90 €');
 
 		await fireEvent.click(within(panel).getByText('Save'));
 		const id = snapshot.accounts.find((a) => a.name === 'Cash box')!.id;

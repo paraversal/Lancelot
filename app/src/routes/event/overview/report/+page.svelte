@@ -8,7 +8,7 @@
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { formatAmount, formatDate, formatDateRange } from '#lib/format.ts';
+	import { differenceText, formatAmount, formatDate, formatDateRange } from '#lib/format.ts';
 	import { rows, type Row } from '#lib/ledger.ts';
 	import { describe } from '#lib/openItems.ts';
 	import { renderPdf } from '#lib/report/pdf.ts';
@@ -28,9 +28,9 @@
 		snapshot.accounts.filter((a) => a.kind === kind && a.balance !== 0);
 	const assets = $derived(snapshot.accounts.filter((a) => a.kind === 'asset'));
 	const entries = $derived(rows(snapshot));
-	const open = $derived(snapshot.openItems.map((i) => describe(i, snapshot)));
+	const open = $derived(snapshot.openItems.map((i) => describe(i, snapshot, format)));
 	const accepted = $derived(
-		event.closingOverrides.map((o) => ({ ...describe(o.item, snapshot), note: o.note }))
+		event.closingOverrides.map((o) => ({ ...describe(o.item, snapshot, format), note: o.note }))
 	);
 
 	function countNote(account: number) {
@@ -40,7 +40,7 @@
 		if (c.opening) parts.push(`opened ${formatAmount(c.opening.amount, format)}`);
 		if (c.counted !== null) parts.push(`counted ${formatAmount(c.counted, format)}`);
 		else if (c.assetType === 'cash') parts.push('not counted');
-		if (c.difference) parts.push(formatAmount(c.difference, format, 'always'));
+		if (c.difference) parts.push(differenceText(c.difference, format));
 		return parts.join(' · ');
 	}
 
