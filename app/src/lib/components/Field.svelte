@@ -4,7 +4,8 @@
 	//
 	// An `error` says why the input was not accepted. While the field has focus, a warning icon
 	// shows the message on hover, so typing is not interrupted; once the field is left, the
-	// message stands in the hint line.
+	// message stands in the hint line. Only then does it take room, so typing never moves the
+	// rest of the form.
 	import type { Snippet } from 'svelte';
 	import Icon from './Icon.svelte';
 
@@ -144,6 +145,6 @@
 	}
 
 	.field:focus-within .hint.error {
-		visibility: hidden;
+		display: none;
 	}
 </style>
