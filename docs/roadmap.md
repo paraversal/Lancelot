@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.4. M0, M1 and M2 are done. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.5. M0 to M3 are done (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -125,8 +125,9 @@ The first slice the treasurer can use: entering the stack of receipts. Built in 
 - [x] The core checks a split against the receipt total (`TxnDraft.total`).
 
 **M3b · Attachments**
-- [ ] Attachments: add, preview (image, PDF, HEIC via WebKit), open the original, and export. Saved together with the transaction. Covers R-ATT-3.
-- [ ] Drag a file onto the window to start a new transaction with the file attached (R-ATT-5).
+- [x] Designs: the receipt preview and the drop overlay.
+- [x] Attachments: add (pick or drop), preview (image, PDF and HEIC through WebKit, via `lancelot://`), open the original in its app, and export. Saved in one SQL transaction with the transaction. Covers R-ATT-1 to R-ATT-3.
+- [x] Drag files onto the window to start a new expense with them attached, or onto an open entry to attach them (R-ATT-5).
 
 The cash box counts (R-ISO-3) moved to M5, next to the Overview's cash box row.
 
@@ -221,4 +222,4 @@ The cash box counts (R-ISO-3) moved to M5, next to the Overview's cash box row.
 
 ## Next step
 
-M3b: attachments — preview, open and export, drag and drop.
+M4: people and payouts — person details with IBAN, the People screen, payout and repayment lists.

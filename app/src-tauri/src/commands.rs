@@ -3,8 +3,9 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use lancelot_core::{AccountId, AccountKind, EventDetails, Parsed, TxnDraft, TxnId};
-use tauri::State;
+use lancelot_core::{AccountId, AccountKind, AttachmentId, EventDetails, Parsed, TxnDraft, TxnId};
+use tauri::{AppHandle, State};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::api::{
     Added, ApiError, AppInfo, BackupInfo, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
@@ -134,8 +135,39 @@ pub async fn txn_save(
     state: State<'_, AppState>,
     draft: TxnDraft,
     id: Option<TxnId>,
+    files: Option<Vec<PathBuf>>,
+    remove: Option<Vec<AttachmentId>>,
 ) -> Result<SavedTxn> {
-    with(&state, |s| s.save_txn(&draft, id))
+    with(&state, |s| {
+        s.save_txn(
+            &draft,
+            id,
+            &files.unwrap_or_default(),
+            &remove.unwrap_or_default(),
+        )
+    })
+}
+
+/// Opens an attachment in its default app (R-ATT-3).
+#[tauri::command]
+pub async fn attachment_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: AttachmentId,
+) -> Result<()> {
+    let path = with(&state, |s| s.attachment_temp(id))?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| ApiError::new("open_failed", e.to_string()))
+}
+
+#[tauri::command]
+pub async fn attachment_export(
+    state: State<'_, AppState>,
+    id: AttachmentId,
+    target: PathBuf,
+) -> Result<()> {
+    with(&state, |s| s.export_attachment(id, &target))
 }
 
 #[tauri::command]

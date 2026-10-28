@@ -14,6 +14,38 @@ use tauri::{App, Emitter, Manager};
 use commands::AppState;
 use service::Service;
 
+fn attachment_response(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Vec<u8>> {
+    use tauri::http::{Response, StatusCode, header};
+    let not_found = || {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Vec::new())
+            .unwrap_or_default()
+    };
+    // `convertFileSrc` encodes the slash, so accept both `/attachment/12` and `/attachment%2F12`.
+    let decoded = path.trim_start_matches('/').replace("%2F", "/");
+    let Some(id) = decoded
+        .strip_prefix("attachment/")
+        .and_then(|n| n.parse::<i64>().ok())
+    else {
+        return not_found();
+    };
+    let state = app.state::<AppState>();
+    let found = state
+        .0
+        .lock()
+        .ok()
+        .and_then(|s| s.attachment(lancelot_core::AttachmentId(id)).ok());
+    match found {
+        Some((mime, bytes)) => Response::builder()
+            .header(header::CONTENT_TYPE, mime)
+            .header(header::CACHE_CONTROL, "no-store")
+            .body(bytes)
+            .unwrap_or_else(|_| not_found()),
+        None => not_found(),
+    }
+}
+
 /// The native menu. Its own items send a `menu` event with their id to the UI; the standard
 /// items (copy, paste, quit, …) work as everywhere else.
 fn menu(app: &App) -> tauri::Result<Menu<tauri::Wry>> {
@@ -72,6 +104,10 @@ pub fn run() {
             });
             Ok(())
         })
+        // Attachments for previews: lancelot://localhost/attachment/<id> (R-ATT-3).
+        .register_uri_scheme_protocol("lancelot", |ctx, request| {
+            attachment_response(ctx.app_handle(), request.uri().path())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::settings_get,
@@ -94,6 +130,8 @@ pub fn run() {
             commands::account_add,
             commands::account_rename,
             commands::person_add,
+            commands::attachment_open,
+            commands::attachment_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lancelot");

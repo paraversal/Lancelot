@@ -33,3 +33,25 @@ export async function revealFile(path: string): Promise<void> {
 	const { revealItemInDir } = await import('@tauri-apps/plugin-opener');
 	await revealItemInDir(path);
 }
+
+/** Asks for receipt files to attach. Empty when cancelled. */
+export async function chooseReceipts(): Promise<string[]> {
+	if (!isTauri()) return (await import('./mock')).dialogs.receipts();
+	const { open } = await import('@tauri-apps/plugin-dialog');
+	const picked = await open({
+		multiple: true,
+		directory: false,
+		filters: [
+			{ name: 'Receipts', extensions: ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'heif'] },
+			{ name: 'All files', extensions: ['*'] }
+		]
+	});
+	return Array.isArray(picked) ? picked : picked ? [picked] : [];
+}
+
+/** Asks where to export an attachment. `null` when cancelled. */
+export async function chooseExportPath(filename: string): Promise<string | null> {
+	if (!isTauri()) return (await import('./mock')).dialogs.save(filename);
+	const { save } = await import('@tauri-apps/plugin-dialog');
+	return (await save({ defaultPath: filename })) ?? null;
+}

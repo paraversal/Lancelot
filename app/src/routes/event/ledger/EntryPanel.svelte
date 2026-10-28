@@ -24,6 +24,8 @@
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
 	import TextField from '#lib/components/TextField.svelte';
+	import type { Attachment } from '#lib/api/generated/Attachment.ts';
+	import Receipts from './Receipts.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -32,14 +34,27 @@
 
 	let {
 		txn,
+		pending = $bindable([]),
+		previewing,
+		onpreview,
 		onclose,
+		onescape,
 		onsaved
 	}: {
 		/** The transaction being edited, or null for a new one. */
 		txn: TxnView | null;
+		/** Files to attach on save (paths), e.g. dropped onto the window. */
+		pending?: string[];
+		previewing: number | null;
+		onpreview: (a: Attachment) => void;
 		onclose: () => void;
+		/** Esc: the ledger closes an open preview first. */
+		onescape?: () => void;
 		onsaved: (id: number | null) => void;
 	} = $props();
+
+	let removed = $state<number[]>([]);
+	const attachments = $derived((txn?.attachments ?? []).filter((a) => !removed.includes(a.id)));
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
@@ -194,6 +209,7 @@
 		}
 		const total = kind === 'expense' || kind === 'income' ? amount : null;
 		try {
+			const files = [...pending];
 			const saved = await session.run(() =>
 				api.saveTxn(
 					{
@@ -204,9 +220,13 @@
 						entry,
 						total
 					},
-					txn?.id ?? null
+					txn?.id ?? null,
+					files,
+					removed
 				)
 			);
+			pending = [];
+			removed = [];
 			lastDate = date;
 			if (kind === 'expense') lastPayer = party;
 			if (next) {
@@ -250,7 +270,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel {onclose}>
+<Panel {onclose} {onescape}>
 	{#snippet header()}
 		<Segmented
 			label="Kind"
@@ -425,6 +445,15 @@
 			value={description}
 			oninput={(t) => (description = t.trim() || null)}
 			oncommit={(v) => (description = v)}
+		/>
+		<Receipts
+			{attachments}
+			{pending}
+			{previewing}
+			{onpreview}
+			onremove={(a) => (removed = [...removed, a.id])}
+			onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
+			onadd={(paths) => (pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
 		/>
 		{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
 			<p class="error">{error.message}</p>

@@ -10,6 +10,7 @@ mod codec;
 pub(crate) mod read;
 mod write;
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -166,7 +167,7 @@ impl Store {
                     params![key, value],
                 )?;
             }
-            write::persist(&tx, None, &book, None, now)?;
+            write::persist(&tx, None, &book, &BTreeMap::new(), now)?;
             tx.commit()?;
             conn.close().map_err(|(_, e)| e)?;
             Ok(())
@@ -350,23 +351,23 @@ impl Store {
     // --- commands ------------------------------------------------------------------------
 
     pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved, StoreError> {
-        self.apply(None, |b| b.save_txn(draft, id))
+        self.apply(&BTreeMap::new(), |b| b.save_txn(draft, id))
     }
 
     pub fn delete_txn(&mut self, id: TxnId) -> Result<(), StoreError> {
-        self.apply(None, |b| b.delete_txn(id).map(|_| ()))
+        self.apply(&BTreeMap::new(), |b| b.delete_txn(id).map(|_| ()))
     }
 
     pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<AccountId, StoreError> {
-        self.apply(None, |b| b.add_account(kind, name))
+        self.apply(&BTreeMap::new(), |b| b.add_account(kind, name))
     }
 
     pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<(), StoreError> {
-        self.apply(None, |b| b.rename_account(id, name))
+        self.apply(&BTreeMap::new(), |b| b.rename_account(id, name))
     }
 
     pub fn add_person(&mut self, name: &str, person: Person) -> Result<AccountId, StoreError> {
-        self.apply(None, |b| b.add_person(name, person))
+        self.apply(&BTreeMap::new(), |b| b.add_person(name, person))
     }
 
     pub fn update_person(
@@ -375,25 +376,27 @@ impl Store {
         name: &str,
         person: Person,
     ) -> Result<(), StoreError> {
-        self.apply(None, |b| b.update_person(id, name, person))
+        self.apply(&BTreeMap::new(), |b| b.update_person(id, name, person))
     }
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), StoreError> {
-        self.apply(None, |b| b.update_event(details))
+        self.apply(&BTreeMap::new(), |b| b.update_event(details))
     }
 
     pub fn set_default_reimbursement_account(&mut self, id: AccountId) -> Result<(), StoreError> {
-        self.apply(None, |b| b.set_default_reimbursement_account(id))
+        self.apply(&BTreeMap::new(), |b| {
+            b.set_default_reimbursement_account(id)
+        })
     }
 
     /// Closes the event (R-SET-7). Closing and reopening are in the change log.
     pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), StoreError> {
-        self.apply(None, |b| b.close(overrides))
+        self.apply(&BTreeMap::new(), |b| b.close(overrides))
     }
 
     /// Reopens a closed event (R-EVT-2).
     pub fn reopen(&mut self) -> Result<(), StoreError> {
-        self.apply(None, |b| {
+        self.apply(&BTreeMap::new(), |b| {
             b.reopen();
             Ok(())
         })
@@ -406,17 +409,54 @@ impl Store {
         filename: &str,
         data: &[u8],
     ) -> Result<AttachmentId, StoreError> {
-        let sha256 = hex(&Sha256::digest(data));
-        let mime = sniff_mime(data);
-        let size = data.len() as u64;
         let now = (self.options.clock)();
-        self.apply(Some(data), |b| {
-            b.add_attachment(txn, filename, mime, size, &sha256, now)
+        let file = NewFile::new(filename, data, now);
+        let blobs = BTreeMap::from([(AttachmentId(self.book.next_ids().attachment), data)]);
+        self.apply(&blobs, |b| file.add_to(b, txn))
+    }
+
+    /// Saves a transaction together with its new files and the attachments to remove, in one
+    /// SQL transaction: a failed save never leaves a receipt without its transaction or the
+    /// other way round.
+    pub fn save_txn_with_files(
+        &mut self,
+        draft: &TxnDraft,
+        id: Option<TxnId>,
+        files: &[(String, Vec<u8>)],
+        remove: &[AttachmentId],
+    ) -> Result<Saved, StoreError> {
+        let now = (self.options.clock)();
+        let first = self.book.next_ids().attachment;
+        let blobs: BTreeMap<AttachmentId, &[u8]> = files
+            .iter()
+            .enumerate()
+            .map(|(i, (_, data))| (AttachmentId(first + i as i64), data.as_slice()))
+            .collect();
+        let new: Vec<NewFile> = files
+            .iter()
+            .map(|(name, data)| NewFile::new(name, data, now))
+            .collect();
+        self.apply(&blobs, |b| {
+            if let Some(txn) = id {
+                for a in remove {
+                    if b.attachment(*a).map(|x| x.txn) != Some(txn) {
+                        return Err(DomainError::UnknownAttachment);
+                    }
+                }
+            }
+            let saved = b.save_txn(draft, id)?;
+            for a in remove {
+                b.remove_attachment(*a)?;
+            }
+            for file in &new {
+                file.add_to(b, saved.id)?;
+            }
+            Ok(saved)
         })
     }
 
     pub fn remove_attachment(&mut self, id: AttachmentId) -> Result<(), StoreError> {
-        self.apply(None, |b| b.remove_attachment(id).map(|_| ()))
+        self.apply(&BTreeMap::new(), |b| b.remove_attachment(id).map(|_| ()))
     }
 
     pub fn set_closing_count(
@@ -425,18 +465,20 @@ impl Store {
         date: Date,
         amount: Cents,
     ) -> Result<(), StoreError> {
-        self.apply(None, |b| b.set_closing_count(account, date, amount))
+        self.apply(&BTreeMap::new(), |b| {
+            b.set_closing_count(account, date, amount)
+        })
     }
 
     pub fn clear_closing_count(&mut self, account: AccountId) -> Result<(), StoreError> {
-        self.apply(None, |b| b.clear_closing_count(account))
+        self.apply(&BTreeMap::new(), |b| b.clear_closing_count(account))
     }
 
     /// Applies a command to a copy of the book, writes the difference and checks it in one SQL
     /// transaction, and keeps the copy only after the commit.
     fn apply<T>(
         &mut self,
-        blob: Option<&[u8]>,
+        blobs: &BTreeMap<AttachmentId, &[u8]>,
         command: impl FnOnce(&mut Book) -> Result<T, DomainError>,
     ) -> Result<T, StoreError> {
         let mut next = self.book.clone();
@@ -446,7 +488,7 @@ impl Store {
         }
         let now = (self.options.clock)();
         let tx = self.conn.transaction()?;
-        write::persist(&tx, Some(&self.book), &next, blob, now)?;
+        write::persist(&tx, Some(&self.book), &next, blobs, now)?;
         let report = integrity::check(&tx, Depth::Quick)?;
         if report.has_errors() {
             return Err(StoreError::IntegrityFailed(report));
@@ -529,6 +571,38 @@ fn check_header(path: &Path) -> Result<(), StoreError> {
         return Err(StoreError::NotAnEventFile);
     }
     Ok(())
+}
+
+/// A file about to be attached: its details, computed before the book changes.
+struct NewFile {
+    filename: String,
+    mime: &'static str,
+    size: u64,
+    sha256: String,
+    added_at: OffsetDateTime,
+}
+
+impl NewFile {
+    fn new(filename: &str, data: &[u8], added_at: OffsetDateTime) -> NewFile {
+        NewFile {
+            filename: filename.to_owned(),
+            mime: sniff_mime(data),
+            size: data.len() as u64,
+            sha256: hex(&Sha256::digest(data)),
+            added_at,
+        }
+    }
+
+    fn add_to(&self, book: &mut Book, txn: TxnId) -> Result<AttachmentId, DomainError> {
+        book.add_attachment(
+            txn,
+            &self.filename,
+            self.mime,
+            self.size,
+            &self.sha256,
+            self.added_at,
+        )
+    }
 }
 
 fn hex(bytes: &[u8]) -> String {

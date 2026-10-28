@@ -11,7 +11,10 @@
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { byCategory, byDay, counts, matches, rows, type Filter, type Item } from '#lib/ledger.ts';
 	import { session } from '#lib/state/session.svelte.ts';
+	import type { Attachment } from '#lib/api/generated/Attachment.ts';
+	import { onFileDrop } from '#lib/dragdrop.ts';
 	import EntryPanel from './EntryPanel.svelte';
+	import Preview from './Preview.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
@@ -23,6 +26,26 @@
 	/** `undefined`: closed; `null`: a new entry; otherwise the transaction being edited. */
 	let editing = $state<TxnView | null | undefined>(undefined);
 	let panelKey = $state(0);
+	let pending = $state<string[]>([]);
+	let preview = $state<Attachment | null>(null);
+	let dragging = $state<string[] | null>(null);
+
+	// Dropping files anywhere attaches them to the open entry, or starts a new expense with
+	// them (R-ATT-5).
+	$effect(() =>
+		onFileDrop({
+			over: (names) => (dragging = names),
+			leave: () => (dragging = null),
+			drop: (paths) => {
+				dragging = null;
+				if (!paths.length) return;
+				if (editing === undefined) {
+					open(null);
+					pending = paths;
+				} else pending = [...pending, ...paths.filter((p) => !pending.includes(p))];
+			}
+		})
+	);
 
 	const all = $derived(rows(snapshot));
 	const visible = $derived(all.filter((r) => matches(r, filter, query, format)));
@@ -41,6 +64,8 @@
 	function open(txn: TxnView | null) {
 		selected = txn?.id ?? null;
 		editing = txn;
+		pending = [];
+		preview = null;
 		panelKey++;
 	}
 
@@ -85,110 +110,129 @@
 <svelte:window onkeydown={keydown} />
 
 <div class="ledger">
-	<section class="table">
-		<header>
-			<h1>Ledger</h1>
-			{#if all.length}
-				<Segmented
-					label="Group by"
-					bind:value={grouping}
-					options={[
-						{ value: 'day', label: 'Day' },
-						{ value: 'category', label: 'Category' }
-					]}
-				/>
-			{:else if editing === undefined}
-				<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}>New entry</Button
-				>
-			{/if}
-		</header>
-
-		{#if all.length}
-			<div class="toolbar">
-				<label class="search">
-					<Icon name="search" />
-					<input type="search" placeholder="Search" bind:value={query} />
-				</label>
-				{#each FILTERS as f (f.value)}
-					<Chip
-						label={f.label}
-						count={n[f.value]}
-						active={filter === f.value}
-						onclick={() => (filter = f.value)}
+	{#if dragging}
+		<section class="table">
+			<header><h1>Ledger</h1></header>
+			<div class="drop">
+				<Icon name="upload" size={28} />
+				<strong>{editing === undefined ? 'New expense' : 'Attach'}</strong>
+				{#if dragging.filter(Boolean).length}<span>{dragging.filter(Boolean).join(', ')}</span>{/if}
+			</div>
+		</section>
+	{:else if preview && editing !== undefined}
+		<Preview attachment={preview} onclose={() => (preview = null)} />
+	{:else}
+		<section class="table">
+			<header>
+				<h1>Ledger</h1>
+				{#if all.length}
+					<Segmented
+						label="Group by"
+						bind:value={grouping}
+						options={[
+							{ value: 'day', label: 'Day' },
+							{ value: 'category', label: 'Category' }
+						]}
 					/>
-				{/each}
-				<span class="grow"></span>
-				{#if editing === undefined}
+				{:else if editing === undefined}
 					<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}
 						>New entry</Button
 					>
 				{/if}
-			</div>
+			</header>
 
-			<div class="rows" role="table">
-				{#each groups as group (group.key)}
-					<div class="group" role="rowgroup">
-						{#if grouping === 'day'}
-							<span>{dayLabel(group.key)}</span>
-						{:else}
-							{#if group.account}<span
-									class="dot"
-									style:background={categoryColor(group.account, snapshot.accounts)}
-								></span>{/if}
-							<span>{group.label}</span>
-							<span class="grow"></span>
-							{#if group.total !== null && group.account}
-								<span class:plus={group.account.kind === 'income'}>
-									{formatAmount(
-										group.account.kind === 'income' ? group.total : -group.total,
-										format,
-										'always'
-									)}
-								</span>
-							{/if}
-						{/if}
-					</div>
-					{#each group.items as item (`${group.key}-${item.row.txn.id}`)}
-						{@const txn = item.row.txn}
-						<button
-							type="button"
-							id={grouping === 'day' ? `txn-${txn.id}` : undefined}
-							class="row"
-							class:selected={selected === txn.id}
-							role="row"
-							onclick={() => open(txn)}
-						>
-							<span class="date">{shortDate(txn.date)}</span>
-							<span class="title">
-								{item.row.title}
-								{#if item.split}<span class="tag">SPLIT</span>{/if}
-							</span>
-							{#if grouping === 'day'}
-								<span class="categories">
-									{#each item.row.categories as c (c.id)}
-										<span class="dot" style:background={categoryColor(c, snapshot.accounts)}></span>
-									{/each}
-									<span
-										>{item.row.categories.map((c) => c.name).join(', ') ||
-											(txn.kind === 'settle' ? 'Settle' : 'Transfer')}</span
-									>
-								</span>
-							{/if}
-							<span class="who">{item.row.who}</span>
-							<span class="amount {item.row.flow}">{amountText(item)}</span>
-							<ReceiptIndicator state={item.row.receipt} />
-						</button>
+			{#if all.length}
+				<div class="toolbar">
+					<label class="search">
+						<Icon name="search" />
+						<input type="search" placeholder="Search" bind:value={query} />
+					</label>
+					{#each FILTERS as f (f.value)}
+						<Chip
+							label={f.label}
+							count={n[f.value]}
+							active={filter === f.value}
+							onclick={() => (filter = f.value)}
+						/>
 					{/each}
-				{/each}
-			</div>
-		{/if}
-	</section>
+					<span class="grow"></span>
+					{#if editing === undefined}
+						<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}
+							>New entry</Button
+						>
+					{/if}
+				</div>
+
+				<div class="rows" role="table">
+					{#each groups as group (group.key)}
+						<div class="group" role="rowgroup">
+							{#if grouping === 'day'}
+								<span>{dayLabel(group.key)}</span>
+							{:else}
+								{#if group.account}<span
+										class="dot"
+										style:background={categoryColor(group.account, snapshot.accounts)}
+									></span>{/if}
+								<span>{group.label}</span>
+								<span class="grow"></span>
+								{#if group.total !== null && group.account}
+									<span class:plus={group.account.kind === 'income'}>
+										{formatAmount(
+											group.account.kind === 'income' ? group.total : -group.total,
+											format,
+											'always'
+										)}
+									</span>
+								{/if}
+							{/if}
+						</div>
+						{#each group.items as item (`${group.key}-${item.row.txn.id}`)}
+							{@const txn = item.row.txn}
+							<button
+								type="button"
+								id={grouping === 'day' ? `txn-${txn.id}` : undefined}
+								class="row"
+								class:selected={selected === txn.id}
+								role="row"
+								onclick={() => open(txn)}
+							>
+								<span class="date">{shortDate(txn.date)}</span>
+								<span class="title">
+									{item.row.title}
+									{#if item.split}<span class="tag">SPLIT</span>{/if}
+								</span>
+								{#if grouping === 'day'}
+									<span class="categories">
+										{#each item.row.categories as c (c.id)}
+											<span class="dot" style:background={categoryColor(c, snapshot.accounts)}
+											></span>
+										{/each}
+										<span
+											>{item.row.categories.map((c) => c.name).join(', ') ||
+												(txn.kind === 'settle' ? 'Settle' : 'Transfer')}</span
+										>
+									</span>
+								{/if}
+								<span class="who">{item.row.who}</span>
+								<span class="amount {item.row.flow}">{amountText(item)}</span>
+								<ReceiptIndicator state={item.row.receipt} />
+							</button>
+						{/each}
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 
 	{#if editing !== undefined}
 		{#key panelKey}
 			<EntryPanel
 				txn={editing}
-				onclose={() => (editing = undefined)}
+				bind:pending
+				previewing={preview?.id ?? null}
+				onpreview={(a) => (preview = a)}
+				onclose={() => ((editing = undefined), (preview = null))}
+				onescape={() => (preview ? (preview = null) : (editing = undefined))}
 				onsaved={(id) => {
 					if (id !== null) {
 						selected = id;
@@ -376,6 +420,27 @@
 	}
 
 	.amount.moved {
+		color: var(--color-ink-muted);
+	}
+
+	.drop {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		flex: 1;
+		border: 1px solid var(--color-ink);
+		border-radius: 12px;
+	}
+
+	.drop strong {
+		font-size: var(--type-md);
+		font-weight: 600;
+	}
+
+	.drop span {
+		font-size: 13px;
 		color: var(--color-ink-muted);
 	}
 </style>

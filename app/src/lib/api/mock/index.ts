@@ -198,7 +198,7 @@ function lines(draft: TxnDraft): Line[] {
 	}
 }
 
-function saveTxn(draft: TxnDraft, id: number | null) {
+function saveTxn(draft: TxnDraft, id: number | null, files: string[], remove: number[]) {
 	const built = lines(draft);
 	const amount = built.filter((l) => l.amount > 0).reduce((s, l) => s + l.amount, 0);
 	if (draft.total !== null && draft.total !== undefined && draft.total !== amount)
@@ -215,7 +215,27 @@ function saveTxn(draft: TxnDraft, id: number | null) {
 			notes: draft.notes,
 			lines: built,
 			amount,
-			attachments: s.txns.find((t) => t.id === id)?.attachments ?? []
+			attachments: [
+				...(s.txns.find((t) => t.id === id)?.attachments ?? []).filter(
+					(x) => !remove.includes(x.id)
+				),
+				...files.map((path, i) => {
+					const filename = path.split('/').pop() ?? path;
+					return {
+						id: Date.now() + i,
+						txn: saved,
+						filename,
+						mime: /\.pdf$/i.test(filename)
+							? 'application/pdf'
+							: /\.(jpe?g|png|heic)$/i.test(filename)
+								? 'image/jpeg'
+								: 'application/octet-stream',
+						size: 184_000,
+						sha256: '',
+						addedAt: new Date().toISOString()
+					};
+				})
+			]
 		};
 		s.txns = [...s.txns.filter((t) => t.id !== saved), txn].sort((a, b) =>
 			a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1
@@ -290,7 +310,15 @@ const commands: Record<string, (a: Args) => unknown> = {
 	backup_restore: (a) => opened(a.target as string, example as EventSnapshot),
 	amount_parse: (a) => parseAmount(a.input as string, a.allowNegative as boolean),
 	date_parse: (a) => parseDate(a.input as string),
-	txn_save: (a) => saveTxn(a.draft as TxnDraft, a.id as number | null),
+	txn_save: (a) =>
+		saveTxn(
+			a.draft as TxnDraft,
+			a.id as number | null,
+			(a.files as string[]) ?? [],
+			(a.remove as number[]) ?? []
+		),
+	attachment_open: () => null,
+	attachment_export: () => null,
 	txn_delete: (a) => changed((s) => (s.txns = s.txns.filter((t) => t.id !== a.id))),
 	account_add: (a) => addAccount(a.kind as AccountKind, a.name as string),
 	account_rename: (a) =>
@@ -309,8 +337,30 @@ export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
 }
 
 /** Stand-ins for the native dialogs: fixed paths, so flows can be clicked through. */
+/** A drawn receipt, so previews have something to show in the browser. */
+export function attachmentUrl(attachment: { filename: string }) {
+	const lines = [
+		'METRO Leipzig',
+		'13.06.2026  10:42',
+		'',
+		'Brötchen 60x   18,00',
+		'Kaffee 2 kg    31,90',
+		'Becher 200x    12,50',
+		'',
+		'SUMME         312,40'
+	];
+	const text = lines
+		.map(
+			(l, i) => `<text x="28" y="${48 + i * 26}" font-family="monospace" font-size="14">${l}</text>`
+		)
+		.join('');
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="460"><rect width="300" height="460" fill="white"/>${text}<text x="28" y="430" font-family="monospace" font-size="11" fill="#999">${attachment.filename}</text></svg>`;
+	return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 export const dialogs = {
 	open: async () => EXAMPLE,
+	receipts: async () => [`${DIR}/scan-${String(Date.now()).slice(-4)}.jpg`],
 	save: async (name: string) => `${DIR}/${name}`,
 	reveal: async () => {}
 };
