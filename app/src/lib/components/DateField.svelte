@@ -6,7 +6,6 @@
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatDate } from '../format';
 	import Field from './Field.svelte';
-	import Icon from './Icon.svelte';
 
 	let {
 		label,
@@ -102,7 +101,6 @@
 		aria-invalid={!!error}
 		aria-describedby={error ? `${id}-error` : undefined}
 	/>
-	{#if error}<span class="warn"><Icon name="warn" size={14} /></span>{/if}
 	{#snippet hint()}
 		{#if preview}= {preview}{/if}
 	{/snippet}
@@ -110,11 +108,6 @@
 
 <style>
 	.error {
-		color: var(--color-minus);
-	}
-
-	.warn {
-		display: flex;
 		color: var(--color-minus);
 	}
 </style>

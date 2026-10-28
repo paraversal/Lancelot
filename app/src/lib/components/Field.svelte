@@ -2,9 +2,11 @@
 	// The frame every input sits in: a label, a white box with a rule border (ink while focused,
 	// minus when invalid), and an optional hint line that carries data, never prose.
 	//
-	// An `error` says why the input was not accepted: in a tooltip under the box while the field
-	// has focus (so typing does not shift the layout), and in the hint line once it is left.
+	// An `error` says why the input was not accepted. While the field has focus, a warning icon
+	// shows the message on hover, so typing is not interrupted; once the field is left, the
+	// message stands in the hint line.
 	import type { Snippet } from 'svelte';
+	import Icon from './Icon.svelte';
 
 	let {
 		label,
@@ -31,9 +33,12 @@
 	{#if label}<label for={id}>{label}</label>{/if}
 	<div class="box" class:invalid={invalid || !!error} class:tall>
 		{@render children()}
-		{#if message}<span class="tip" role="tooltip" id={id ? `${id}-error` : undefined}
-				>{message}</span
-			>{/if}
+		{#if message}
+			<span class="warn">
+				<Icon name="warn" size={14} />
+				<span class="tip" role="tooltip" id={id ? `${id}-error` : undefined}>{message}</span>
+			</span>
+		{/if}
 	</div>
 	{#if message}
 		<div class="hint error">{message}</div>
@@ -108,11 +113,20 @@
 		color: var(--color-minus);
 	}
 
+	.warn {
+		position: relative;
+		display: flex;
+		flex: none;
+		color: var(--color-minus);
+		cursor: help;
+	}
+
 	.tip {
 		position: absolute;
-		top: calc(100% + 6px);
-		left: 0;
+		top: calc(100% + 10px);
+		right: -6px;
 		z-index: 10;
+		width: max-content;
 		max-width: 280px;
 		padding: 4px 8px;
 		border-radius: var(--radius-sm);
@@ -121,12 +135,12 @@
 		font-size: var(--type-xs);
 		line-height: 1.4;
 		pointer-events: none;
-		display: none;
+		visibility: hidden;
 	}
 
-	/* While typing: the tooltip. After leaving the field: the hint line. */
-	.field:focus-within .tip {
-		display: block;
+	/* While typing: on hovering the icon. After leaving the field: in the hint line. */
+	.warn:hover .tip {
+		visibility: visible;
 	}
 
 	.field:focus-within .hint.error {

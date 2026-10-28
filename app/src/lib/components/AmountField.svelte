@@ -8,7 +8,6 @@
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatAmount } from '../format';
 	import Field from './Field.svelte';
-	import Icon from './Icon.svelte';
 
 	let {
 		label,
@@ -118,9 +117,7 @@
 		aria-invalid={!!error}
 		aria-describedby={error ? `${id}-error` : undefined}
 	/>
-	{#if error}
-		<span class="warn"><Icon name="warn" size={14} /></span>
-	{:else if preview}
+	{#if !error && preview}
 		<span class="preview" class:ambiguous={parsed?.ambiguous}>= {preview}</span>
 	{/if}
 </Field>
@@ -144,11 +141,6 @@
 	}
 
 	.error {
-		color: var(--color-minus);
-	}
-
-	.warn {
-		display: flex;
 		color: var(--color-minus);
 	}
 
