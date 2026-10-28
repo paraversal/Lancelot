@@ -10,7 +10,9 @@
 	let { children }: LayoutProps = $props();
 
 	onMount(() => {
-		api.settings().then((s) => (session.settings = s));
+		api.settings().then((s) => {
+			session.settings = s;
+		});
 		return installShortcuts();
 	});
 </script>

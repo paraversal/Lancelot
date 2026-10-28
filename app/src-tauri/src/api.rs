@@ -57,6 +57,12 @@ impl From<StoreError> for ApiError {
     }
 }
 
+impl From<lancelot_core::IbanError> for ApiError {
+    fn from(e: lancelot_core::IbanError) -> ApiError {
+        ApiError::new(e.code(), e.to_string())
+    }
+}
+
 impl From<AmountError> for ApiError {
     fn from(e: AmountError) -> ApiError {
         ApiError::new(e.code(), e.to_string())
@@ -147,4 +153,12 @@ pub struct SavedTxn {
 pub struct Added {
     pub event: OpenEvent,
     pub id: AccountId,
+}
+
+/// A checked IBAN: as stored and as shown.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct CheckedIban {
+    pub iban: String,
+    pub formatted: String,
 }

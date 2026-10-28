@@ -22,6 +22,8 @@ pub struct PersonSummary {
     pub reimbursed: Cents,
     /// Paid back to the event by the person.
     pub repaid: Cents,
+    /// Settled in either direction: `reimbursed + repaid`.
+    pub settled: Cents,
     /// `advanced − held − reimbursed + repaid`. Positive: the event owes the person.
     pub net: Cents,
     pub status: PersonStatus,
@@ -121,6 +123,30 @@ pub struct Ledger {
     money: MoneyLocation,
     cash: Vec<CashStatus>,
     missing_receipts: Vec<TxnId>,
+    person_entries: BTreeMap<AccountId, Vec<PersonEntry>>,
+    person_totals: PersonTotals,
+}
+
+/// One line of a person's running balance (R-PER-3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct PersonEntry {
+    pub txn: TxnId,
+    /// What the transaction does to the person's net balance: positive when the event owes
+    /// them more (an advance), negative when less (money held, a reimbursement).
+    pub effect: Cents,
+    /// The net balance after this transaction.
+    pub balance: Cents,
+}
+
+/// The totals row of the People table.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct PersonTotals {
+    pub advanced: Cents,
+    pub held: Cents,
+    pub settled: Cents,
+    pub net: Cents,
 }
 
 impl Ledger {
@@ -158,6 +184,7 @@ impl Ledger {
         }
 
         for p in persons.values_mut() {
+            p.settled = p.reimbursed.checked_add(p.repaid)?;
             p.net = p
                 .advanced
                 .checked_sub(p.held)?
@@ -168,6 +195,34 @@ impl Ledger {
                 -1 => PersonStatus::Owes,
                 _ => PersonStatus::Settled,
             };
+        }
+
+        // Running balances, in date order (then by id), and the totals row.
+        let mut ordered: Vec<&Txn> = txns.values().collect();
+        ordered.sort_by_key(|t| (t.date, t.id));
+        let mut person_entries: BTreeMap<AccountId, Vec<PersonEntry>> = BTreeMap::new();
+        for txn in ordered {
+            for line in txn
+                .lines
+                .iter()
+                .filter(|l| persons.contains_key(&l.account))
+            {
+                let entries = person_entries.entry(line.account).or_default();
+                let before = entries.last().map(|e| e.balance).unwrap_or_default();
+                let effect = -line.amount;
+                entries.push(PersonEntry {
+                    txn: txn.id,
+                    effect,
+                    balance: before.checked_add(effect)?,
+                });
+            }
+        }
+        let mut person_totals = PersonTotals::default();
+        for p in persons.values() {
+            person_totals.advanced = person_totals.advanced.checked_add(p.advanced)?;
+            person_totals.held = person_totals.held.checked_add(p.held)?;
+            person_totals.settled = person_totals.settled.checked_add(p.settled)?;
+            person_totals.net = person_totals.net.checked_add(p.net)?;
         }
 
         let kind_of = |id: &AccountId| accounts.get(id).map(|a| a.kind);
@@ -251,6 +306,8 @@ impl Ledger {
             },
             cash,
             missing_receipts,
+            person_entries,
+            person_totals,
         })
     }
 
@@ -266,6 +323,18 @@ impl Ledger {
 
     pub fn person(&self, account: AccountId) -> Option<&PersonSummary> {
         self.persons.get(&account)
+    }
+
+    /// A person's transactions with their running balance, oldest first.
+    pub fn person_entries(&self, person: AccountId) -> &[PersonEntry] {
+        self.person_entries
+            .get(&person)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub fn person_totals(&self) -> PersonTotals {
+        self.person_totals
     }
 
     pub fn persons(&self) -> impl Iterator<Item = (AccountId, &PersonSummary)> {

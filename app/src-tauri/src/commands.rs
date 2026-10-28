@@ -3,12 +3,14 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use lancelot_core::{AccountId, AccountKind, AttachmentId, EventDetails, Parsed, TxnDraft, TxnId};
+use lancelot_core::{
+    AccountId, AccountKind, AttachmentId, EventDetails, Parsed, Person, TxnDraft, TxnId,
+};
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::api::{
-    Added, ApiError, AppInfo, BackupInfo, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
+    Added, ApiError, AppInfo, BackupInfo, CheckedIban, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
 };
 use crate::service::Service;
 use crate::settings::AppSettings;
@@ -196,4 +198,19 @@ pub async fn account_rename(
 #[tauri::command]
 pub async fn person_add(state: State<'_, AppState>, name: String) -> Result<Added> {
     with(&state, |s| s.add_person(&name))
+}
+
+#[tauri::command]
+pub async fn person_update(
+    state: State<'_, AppState>,
+    id: AccountId,
+    name: String,
+    person: Person,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_person(id, &name, person))
+}
+
+#[tauri::command]
+pub async fn iban_check(state: State<'_, AppState>, input: String) -> Result<CheckedIban> {
+    with(&state, |s| s.check_iban(&input))
 }

@@ -149,3 +149,30 @@ fn export_snapshots_for_the_ui_mock() {
         std::fs::write(dir.join(name), json).unwrap();
     }
 }
+
+#[test]
+fn running_balances_end_at_the_net_and_the_totals_add_up() {
+    let (book, m) = mock_event();
+    let l = book.ledger();
+    let anna = l.person_entries(m.anna);
+    // Groceries (advance), change money (advance), reimbursement.
+    let effects: Vec<Cents> = anna.iter().map(|e| e.effect).collect();
+    assert_eq!(effects, [eur("312,40"), eur("200"), eur("-300")]);
+    assert_eq!(anna.last().unwrap().balance, eur("212,40"));
+    for (id, p) in l.persons() {
+        assert_eq!(
+            l.person_entries(id)
+                .last()
+                .map(|e| e.balance)
+                .unwrap_or_default(),
+            p.net
+        );
+    }
+    let t = l.person_totals();
+    assert_eq!(
+        (t.advanced, t.held, t.settled),
+        (eur("837,40"), eur("300"), eur("395"))
+    );
+    assert_eq!(t.net, eur("142,40"));
+    assert_eq!(l.person(m.clara).unwrap().settled, eur("95"));
+}

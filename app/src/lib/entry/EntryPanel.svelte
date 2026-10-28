@@ -34,6 +34,7 @@
 
 	let {
 		txn,
+		settle = null,
 		pending = $bindable([]),
 		previewing,
 		onpreview,
@@ -43,6 +44,8 @@
 	}: {
 		/** The transaction being edited, or null for a new one. */
 		txn: TxnView | null;
+		/** For a new entry: start as a settle with this person, filled in from their balance. */
+		settle?: AccountId | null;
 		/** Files to attach on save (paths), e.g. dropped onto the window. */
 		pending?: string[];
 		previewing: number | null;
@@ -112,8 +115,6 @@
 			direction = (person?.amount ?? 0) > 0 ? 'reimburse' : 'repay';
 		}
 	}
-	// Loaded once: the ledger remounts the panel for every entry it opens.
-	untrack(() => load(txn));
 
 	// --- options ----------------------------------------------------------------------
 	const assets = $derived(snapshot.accounts.filter((a) => a.kind === 'asset'));
@@ -266,6 +267,16 @@
 	const partyLabel = $derived(
 		{ expense: 'Paid by', income: 'Received by', transfer: 'From', settle: 'Person' }[kind]
 	);
+
+	// Loaded once, after everything above is defined: the ledger remounts the panel for every
+	// entry it opens.
+	untrack(() => {
+		load(txn);
+		if (!txn && settle !== null) {
+			kind = 'settle';
+			pickPerson(settle);
+		}
+	});
 </script>
 
 <svelte:window onkeydown={keydown} />

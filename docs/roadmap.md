@@ -135,12 +135,18 @@ The cash box counts (R-ISO-3) moved to M5, next to the Overview's cash box row.
 
 ### M4 · People and payouts
 
-- [ ] Person records with IBAN validation (checksum and format) and an IBAN warning in the list. Covers R-PER-1 and R-PER-2.
-- [ ] People table: advanced, holds, settled and balance. A person panel with the running balance and a drill-down to transactions and receipts (R-PER-3).
-- [ ] Settle action, pre-filled with the net balance. Partial payments are allowed (R-TX-4).
-- [ ] Payout list export as CSV and PDF, with the optional itemised appendix (R-PER-4).
-- [ ] Repayment list (R-PER-7).
-- [ ] "Mark payout list as paid": record all of its reimbursements in one action (R-PER-5).
+Built in two steps.
+
+**M4a · People screen**
+- [x] Design: editing a person in the right-hand panel.
+- [x] Person records with IBAN validation as you type (checksum and length) and an IBAN warning in the list for people who are owed money. Covers R-PER-1 and R-PER-2.
+- [x] People table: advanced, holds, settled and balance, with a totals row. A person panel with bank details, the open balance and the running balance; each line opens its transaction in the ledger (R-PER-3).
+- [x] Settle from the person panel, filled in from the balance (R-TX-4).
+
+**M4b · Payout and repayment lists**
+- [ ] Payout list export as CSV (in the number format) and PDF (print layout, saved from the print dialog), with the optional itemised appendix (R-PER-4).
+- [ ] Repayment list, with "Repaid" per person when the money arrives (R-PER-7).
+- [ ] "Mark as paid": record all of the payout list's reimbursements in one action (R-PER-5).
 
 **Exit:** for the fixture event, the payout list says Anna 212,40 € and Malte 110,00 €, and the repayment list says Bob 180,00 €. One click settles both payouts.
 
@@ -222,4 +228,4 @@ The cash box counts (R-ISO-3) moved to M5, next to the Overview's cash box row.
 
 ## Next step
 
-M4: people and payouts — person details with IBAN, the People screen, payout and repayment lists.
+M4b: the payout and repayment lists, exports and "Mark as paid".

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import AmountField from './AmountField.svelte';
 import DateField from './DateField.svelte';
+import IbanField from './IbanField.svelte';
 
 // The real parsers live in Rust; here they are replaced by fixed answers.
 vi.mock('../api', async () => {
@@ -18,7 +19,8 @@ vi.mock('../api', async () => {
 	const dates: Record<string, string> = { '6.12.26': '2026-12-06', '06.12.2026': '2026-12-06' };
 	const messages: Record<string, string> = {
 		bad_grouping: 'thousands separators must form groups of three',
-		format: 'enter a date as 31.12.2026 or 2026-12-31'
+		format: 'enter a date as 31.12.2026 or 2026-12-31',
+		bad_checksum: 'checksum does not match; check for a typo'
 	};
 	const error = (code: string) =>
 		new ApiError({ code, message: messages[code], field: null, report: null });
@@ -28,6 +30,11 @@ vi.mock('../api', async () => {
 			parseAmount: vi.fn(async (input: string) => {
 				if (amounts[input]) return amounts[input];
 				throw error('bad_grouping');
+			}),
+			checkIban: vi.fn(async (input: string) => {
+				const iban = input.replace(/\s+/g, '').toUpperCase();
+				if (iban !== 'DE89370400440532013000') throw error('bad_checksum');
+				return { iban, formatted: 'DE89 3704 0044 0532 0130 00' };
 			}),
 			parseDate: vi.fn(async (input: string) => {
 				if (dates[input]) return { date: dates[input] };
@@ -194,6 +201,34 @@ describe('error messages', () => {
 		expect(oncommit).not.toHaveBeenCalled();
 		expect(screen.getByRole('tooltip').textContent).toBe(
 			'Enter a date as 31.12.2026 or 2026-12-31'
+		);
+	});
+});
+
+describe('IbanField', () => {
+	it('previews the grouped IBAN and commits it normalised', async () => {
+		const oncommit = vi.fn();
+		render(IbanField, { value: null, oncommit });
+		const input = screen.getByLabelText('IBAN') as HTMLInputElement;
+		await fireEvent.focus(input);
+		await type(input, 'de89370400440532013000');
+		expect(screen.getByText('= DE89 3704 0044 0532 0130 00')).toBeTruthy();
+		await fireEvent.blur(input);
+		await settle();
+		expect(oncommit).toHaveBeenCalledWith('DE89370400440532013000');
+		expect(input.value).toBe('DE89 3704 0044 0532 0130 00');
+	});
+
+	it('does not save an IBAN with a typo', async () => {
+		const oncommit = vi.fn();
+		render(IbanField, { value: null, oncommit });
+		const input = screen.getByLabelText('IBAN');
+		await type(input, 'DE88370400440532013000');
+		await fireEvent.blur(input);
+		await settle();
+		expect(oncommit).not.toHaveBeenCalled();
+		expect(screen.getByRole('tooltip').textContent).toBe(
+			'Checksum does not match; check for a typo'
 		);
 	});
 });

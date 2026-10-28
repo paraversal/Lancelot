@@ -8,7 +8,9 @@ use ts_rs::TS;
 
 use crate::book::Book;
 use crate::entry::txn_amount;
-use crate::ledger::{CashStatus, MoneyLocation, OpenItem, PersonSummary};
+use crate::ledger::{
+    CashStatus, MoneyLocation, OpenItem, PersonEntry, PersonSummary, PersonTotals,
+};
 use crate::model::{Account, AccountId, Attachment, ClosingCount, Event, Person, Txn};
 use crate::money::Cents;
 
@@ -20,6 +22,7 @@ pub struct EventSnapshot {
     /// All accounts and categories, in creation order, each with its displayed balance.
     pub accounts: Vec<AccountView>,
     pub persons: Vec<PersonView>,
+    pub person_totals: PersonTotals,
     /// Transactions by date, then by id.
     pub txns: Vec<TxnView>,
     pub totals: Totals,
@@ -45,6 +48,8 @@ pub struct PersonView {
     #[serde(flatten)]
     pub details: Person,
     pub summary: PersonSummary,
+    /// The running balance, oldest first.
+    pub entries: Vec<PersonEntry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -82,6 +87,7 @@ impl EventSnapshot {
                 name: a.name.clone(),
                 details: p.clone(),
                 summary: ledger.person(a.id).copied().unwrap_or_default(),
+                entries: ledger.person_entries(a.id).to_vec(),
             })
             .collect();
         let mut txns: Vec<TxnView> = book
@@ -98,6 +104,7 @@ impl EventSnapshot {
             event: book.event().clone(),
             accounts,
             persons,
+            person_totals: ledger.person_totals(),
             txns,
             totals: Totals {
                 income: ledger.income_total(),

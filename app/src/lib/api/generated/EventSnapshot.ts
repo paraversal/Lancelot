@@ -5,6 +5,7 @@ import type { ClosingCount } from "./ClosingCount";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
 import type { OpenItem } from "./OpenItem";
+import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
@@ -13,7 +14,7 @@ export type EventSnapshot = { event: Event,
 /**
  * All accounts and categories, in creation order, each with its displayed balance.
  */
-accounts: Array<AccountView>, persons: Array<PersonView>, 
+accounts: Array<AccountView>, persons: Array<PersonView>, personTotals: PersonTotals, 
 /**
  * Transactions by date, then by id.
  */
