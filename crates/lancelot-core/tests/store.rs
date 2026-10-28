@@ -577,3 +577,98 @@ proptest! {
         prop_assert_eq!(reopened.book(), &book);
     }
 }
+
+#[test]
+fn a_transaction_and_its_files_are_saved_together() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let (cash, kitchen) = (
+        role(store.book(), Role::CashBox),
+        expense(store.book(), "Kitchen"),
+    );
+    let entry = Entry::Expense {
+        payer: cash,
+        lines: vec![split(kitchen, "20")],
+    };
+    let jpg = b"\xFF\xD8\xFF\xE0 photo".to_vec();
+    let pdf = b"%PDF-1.7 scan".to_vec();
+
+    let saved = store
+        .save_txn_with_files(
+            &draft("Bakery", entry.clone()),
+            None,
+            &[("a.jpg".into(), jpg.clone()), ("b.pdf".into(), pdf.clone())],
+            &[],
+        )
+        .unwrap();
+    let ids: Vec<AttachmentId> = store
+        .book()
+        .attachments_of(saved.id)
+        .map(|a| a.id)
+        .collect();
+    assert_eq!(ids.len(), 2);
+    assert_eq!(store.attachment_data(ids[0]).unwrap(), jpg);
+    assert_eq!(
+        store.book().attachment(ids[1]).unwrap().mime,
+        "application/pdf"
+    );
+
+    // Edit: drop the photo, add another scan.
+    store
+        .save_txn_with_files(
+            &draft("Bakery", entry.clone()),
+            Some(saved.id),
+            &[("c.pdf".into(), pdf.clone())],
+            &[ids[0]],
+        )
+        .unwrap();
+    let names: Vec<String> = store
+        .book()
+        .attachments_of(saved.id)
+        .map(|a| a.filename.clone())
+        .collect();
+    assert_eq!(names, ["b.pdf", "c.pdf"]);
+
+    // A save that fails writes none of its files.
+    let before = store.book().clone();
+    let mut wrong = draft("Bakery", entry.clone());
+    wrong.total = Some(eur("99"));
+    let err = store
+        .save_txn_with_files(
+            &wrong,
+            Some(saved.id),
+            &[("d.pdf".into(), pdf.clone())],
+            &[],
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), "split_mismatch");
+    assert_eq!(store.book(), &before);
+
+    // Attachments of another transaction cannot be removed through this one.
+    let other = store
+        .save_txn_with_files(&draft("Other", entry), None, &[], &[])
+        .unwrap();
+    let foreign = store.book().attachments_of(saved.id).next().unwrap().id;
+    assert_eq!(
+        store
+            .save_txn_with_files(
+                &draft(
+                    "Other",
+                    Entry::Expense {
+                        payer: cash,
+                        lines: vec![split(kitchen, "20")]
+                    }
+                ),
+                Some(other.id),
+                &[],
+                &[foreign]
+            )
+            .unwrap_err()
+            .code(),
+        "unknown_attachment"
+    );
+    drop(store);
+    let (store, report) = open(&path);
+    assert!(store.check_integrity().unwrap().is_clean() && report.is_clean());
+    assert_eq!(store.book().attachments().count(), 2);
+}

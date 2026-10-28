@@ -6,7 +6,6 @@
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatDate } from '../format';
 	import Field from './Field.svelte';
-	import Icon from './Icon.svelte';
 
 	let {
 		label,
@@ -69,13 +68,18 @@
 	}
 
 	const shown = $derived(parsed ? formatDate(parsed, format) : null);
-	const preview = $derived(shown && shown !== text.trim() ? shown : null);
+	// As in AmountField: shown while typing, otherwise only when the text differs.
+	let focused = $state(false);
+	const preview = $derived(
+		shown && text.trim() && (focused || shown !== text.trim()) ? shown : null
+	);
 
 	async function commit() {
 		await parse();
-		if (error || (required && !parsed)) {
+		// Invalid input stays, with its message, until it is fixed; nothing is committed.
+		if (error) return;
+		if (required && !parsed) {
 			text = value ? formatDate(value, format) : '';
-			error = null;
 			return;
 		}
 		text = shown ?? '';
@@ -83,20 +87,20 @@
 	}
 </script>
 
-<Field {label} {id} invalid={!!error}>
+<Field {label} {id} {error}>
 	<input
 		{id}
 		type="text"
 		inputmode="numeric"
 		bind:value={text}
 		oninput={parse}
-		onblur={commit}
+		onfocus={() => (focused = true)}
+		onblur={() => ((focused = false), commit())}
 		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
 		class:error
-		title={error ?? undefined}
 		aria-invalid={!!error}
+		aria-describedby={error ? `${id}-error` : undefined}
 	/>
-	{#if error}<span class="warn"><Icon name="warn" size={14} /></span>{/if}
 	{#snippet hint()}
 		{#if preview}= {preview}{/if}
 	{/snippet}
@@ -104,11 +108,6 @@
 
 <style>
 	.error {
-		color: var(--color-minus);
-	}
-
-	.warn {
-		display: flex;
 		color: var(--color-minus);
 	}
 </style>

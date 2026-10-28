@@ -323,7 +323,9 @@ parseAmount(input, allowNegative): Parsed                 // uses the app's numb
 parseDate(input): { date }                                // ISO
 saveTxn(draft, id?): SavedTxn / deleteTxn(id): OpenEvent         // draft.total checks the split
 addAccount(kind, name) / addPerson(name): Added / renameAccount(id, name)
-// M3b onwards: attachments; M4: person details; M5: closing counts
+// saveTxn also takes `files` (paths) and `remove` (attachment ids), saved in one change
+openAttachment(id) / exportAttachment(id, target)
+// M4: person details; M5: closing counts
 ```
 
 `backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.
@@ -334,7 +336,9 @@ addAccount(kind, name) / addPerson(name): Added / renameAccount(id, name)
 
 **Development mock.** In a plain browser (`pnpm dev`), `lib/api` uses `lib/api/mock` instead of Tauri: the example event and an empty one, exported as JSON by `crates/lancelot-core/tests/mock_event.rs`, plus rough stand-ins for the commands and dialogs. It is loaded only in development and never in the app.
 
-**Attachments** are served through a custom URI scheme, `lancelot://attachment/<id>`, which is registered in Tauri. `<img>` and `<iframe>` load them directly, without base64 over IPC.
+**Attachments** are served through a custom URI scheme, `lancelot://localhost/attachment/<id>` (built with `convertFileSrc`), registered in `app/src-tauri/src/lib.rs`. `<img>` and `<iframe>` load them directly, without base64 over IPC; WebKit shows images, PDFs and HEIC itself. *Open* writes the file to a temporary folder under its own name and opens it with the system's default app.
+
+**Drag and drop** uses Tauri's webview drag-drop events, which give file paths; the shell reads the files when the transaction is saved, so a dropped file is only stored once the entry is saved.
 
 ## 6. Files
 

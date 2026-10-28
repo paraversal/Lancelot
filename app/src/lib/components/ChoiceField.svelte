@@ -12,6 +12,7 @@
 		options,
 		addLabel,
 		invalid = false,
+		error = null,
 		hint,
 		onchange,
 		onadd
@@ -22,6 +23,8 @@
 		/** The last option, e.g. `New person…`. */
 		addLabel: string;
 		invalid?: boolean;
+		/** Why the choice was not accepted, e.g. from the core when saving. */
+		error?: string | null;
 		hint?: import('svelte').Snippet;
 		onchange: (value: AccountId) => void;
 		/** Creates the entry and returns its id, or null when it could not be added. */
@@ -67,7 +70,7 @@
 	}
 </script>
 
-<Field {label} {id} {invalid} {hint}>
+<Field {label} {id} {invalid} {error} {hint}>
 	{#if adding}
 		<span class="muted"><Icon name="plus" size={14} /></span>
 		<input

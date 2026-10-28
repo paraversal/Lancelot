@@ -6,12 +6,15 @@
 	let {
 		title,
 		onclose,
+		onescape,
 		header,
 		footer,
 		children
 	}: {
 		title?: string;
 		onclose: () => void;
+		/** What Esc does; defaults to closing. */
+		onescape?: () => void;
 		/** Replaces the title, e.g. with a segmented control. */
 		header?: Snippet;
 		footer?: Snippet;
@@ -19,7 +22,13 @@
 	} = $props();
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && !e.defaultPrevented && onclose()} />
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key !== 'Escape' || e.defaultPrevented) return;
+		e.preventDefault();
+		(onescape ?? onclose)();
+	}}
+/>
 
 <aside class="panel">
 	<header>

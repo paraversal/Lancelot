@@ -8,7 +8,6 @@
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatAmount } from '../format';
 	import Field from './Field.svelte';
-	import Icon from './Icon.svelte';
 
 	let {
 		label,
@@ -82,8 +81,13 @@
 		}
 	}
 
+	// The preview confirms what was read while typing, even when the text already looks like
+	// the result (`1.20` in En); outside the field it shows only when the text differs.
+	let focused = $state(false);
 	const preview = $derived(
-		parsed && text.trim() !== canonical(parsed.cents) ? formatAmount(parsed.cents, format) : null
+		parsed && text.trim() && (focused || text.trim() !== canonical(parsed.cents))
+			? formatAmount(parsed.cents, format)
+			: null
 	);
 
 	async function commit() {
@@ -95,7 +99,7 @@
 	}
 </script>
 
-<Field {label} {id} invalid={!!error}>
+<Field {label} {id} {error}>
 	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		{id}
@@ -104,17 +108,16 @@
 		placeholder={canonical(0)}
 		bind:value={text}
 		oninput={parse}
-		onblur={commit}
+		onfocus={() => (focused = true)}
+		onblur={() => ((focused = false), commit())}
 		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
 		class:large
 		{autofocus}
 		class:error
-		title={error ?? undefined}
 		aria-invalid={!!error}
+		aria-describedby={error ? `${id}-error` : undefined}
 	/>
-	{#if error}
-		<span class="warn"><Icon name="warn" size={14} /></span>
-	{:else if preview}
+	{#if !error && preview}
 		<span class="preview" class:ambiguous={parsed?.ambiguous}>= {preview}</span>
 	{/if}
 </Field>
@@ -138,11 +141,6 @@
 	}
 
 	.error {
-		color: var(--color-minus);
-	}
-
-	.warn {
-		display: flex;
 		color: var(--color-minus);
 	}
 

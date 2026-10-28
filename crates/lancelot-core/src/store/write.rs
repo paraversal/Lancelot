@@ -83,12 +83,12 @@ impl Log<'_> {
 }
 
 /// Writes everything in `after` that differs from `before` (`None`: an empty file).
-/// `blob` holds the bytes of the one attachment the command added, if any.
+/// `blobs` holds the bytes of the attachments the command added, by their new ids.
 pub(crate) fn persist(
     conn: &Connection,
     before: Option<&Book>,
     after: &Book,
-    blob: Option<&[u8]>,
+    blobs: &BTreeMap<AttachmentId, &[u8]>,
     now: OffsetDateTime,
 ) -> Result<(), StoreError> {
     let log = Log {
@@ -240,8 +240,9 @@ pub(crate) fn persist(
     // New attachments, with their bytes.
     for (id, change) in &attachment_changes {
         if let Change::Create(a) = change {
-            let data =
-                blob.ok_or_else(|| StoreError::corrupt("attachment added without its data"))?;
+            let data = *blobs
+                .get(id)
+                .ok_or_else(|| StoreError::corrupt("attachment added without its data"))?;
             conn.execute(
                 "INSERT INTO attachment (id, txn_id, filename, mime, size, sha256, added_at, data)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",

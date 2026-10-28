@@ -1,9 +1,11 @@
 // Typed wrappers around the Tauri commands (docs/technical-design.md §5).
 // The types are generated from Rust by ts-rs; see ./generated.
-import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
 
 import type { AccountId } from './generated/AccountId';
 import type { AccountKind } from './generated/AccountKind';
+import type { Attachment } from './generated/Attachment';
+import type { AttachmentId } from './generated/AttachmentId';
 import type { Added } from './generated/Added';
 import type { ApiError as ApiErrorData } from './generated/ApiError';
 import type { AppInfo } from './generated/AppInfo';
@@ -91,9 +93,20 @@ export const api = {
 		call<Parsed>('amount_parse', { input, allowNegative }),
 	parseDate: (input: string) => call<ParsedDate>('date_parse', { input }),
 
-	saveTxn: (draft: TxnDraft, id: TxnId | null) => call<SavedTxn>('txn_save', { draft, id }),
+	/** Saves a transaction with the files to attach (paths) and the attachments to remove. */
+	saveTxn: (draft: TxnDraft, id: TxnId | null, files: string[] = [], remove: AttachmentId[] = []) =>
+		call<SavedTxn>('txn_save', { draft, id, files, remove }),
+	openAttachment: (id: AttachmentId) => call<void>('attachment_open', { id }),
+	exportAttachment: (id: AttachmentId, target: string) =>
+		call<void>('attachment_export', { id, target }),
 	deleteTxn: (id: TxnId) => call<OpenEvent>('txn_delete', { id }),
 	addAccount: (kind: AccountKind, name: string) => call<Added>('account_add', { kind, name }),
 	renameAccount: (id: AccountId, name: string) => call<OpenEvent>('account_rename', { id, name }),
 	addPerson: (name: string) => call<Added>('person_add', { name })
 };
+
+/** Where the webview loads an attachment from, for previews (`lancelot://` in the app). */
+export async function attachmentUrl(attachment: Attachment): Promise<string> {
+	if (isTauri()) return convertFileSrc(`attachment/${attachment.id}`, 'lancelot');
+	return (await import('./mock')).attachmentUrl(attachment);
+}

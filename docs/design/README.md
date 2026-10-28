@@ -59,6 +59,8 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 | Ledger | Transactions grouped by day, with filters, plus the entry panel (type switch, amount, payer with live balance, split lines, receipt) |
 | Ledger / Entry panels | Income (with a category being added), Transfer (delete confirmation), Settle (direction and amount from the person's balance) |
 | Ledger / Empty | The first entry, with its payer added on the spot |
+| Ledger / Receipt preview | A receipt in place of the table, with Open and Export; the panel stays |
+| Ledger / Drop | Dragging a file over the window: a new expense, or attach to the open entry |
 | Ledger / By category | The same list grouped by category with a total per category; a split transaction appears under each of its categories, tagged `SPLIT` |
 | People | Advanced / holds / settled / net balance per person, payout list export, person panel with a running balance and the settle action |
 | Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |

@@ -7,9 +7,9 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AccountKind, BackupPolicy, EventDetails, EventSnapshot, Parsed, Person, Report,
-    Store, StoreOptions, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
-    parse_amount, parse_date,
+    AccountId, AccountKind, AttachmentId, BackupPolicy, DomainError, EventDetails, EventSnapshot,
+    MAX_ATTACHMENT_SIZE, Parsed, Person, Report, Store, StoreOptions, TxnDraft, TxnId, backup_time,
+    event_uuid_of, format_date, list_backups, parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -202,10 +202,29 @@ impl Service {
         self.change(|s| Ok(s.set_default_reimbursement_account(account)?))
     }
 
-    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<SavedTxn> {
+    /// Saves a transaction with the files to attach (paths, e.g. dropped onto the window) and
+    /// the attachments to remove, all in one change.
+    pub fn save_txn(
+        &mut self,
+        draft: &TxnDraft,
+        id: Option<TxnId>,
+        files: &[PathBuf],
+        remove: &[AttachmentId],
+    ) -> Result<SavedTxn> {
+        let mut read = Vec::with_capacity(files.len());
+        for path in files {
+            if std::fs::metadata(path)?.len() > MAX_ATTACHMENT_SIZE {
+                return Err(DomainError::AttachmentTooLarge.into());
+            }
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "file".into());
+            read.push((name, std::fs::read(path)?));
+        }
         let mut saved = None;
         let event = self.change(|s| {
-            saved = Some(s.save_txn(draft, id)?);
+            saved = Some(s.save_txn_with_files(draft, id, &read, remove)?);
             Ok(())
         })?;
         let saved = saved.ok_or_else(ApiError::no_event)?;
@@ -214,6 +233,45 @@ impl Service {
             id: saved.id,
             warnings: saved.warnings,
         })
+    }
+
+    /// An attachment's type and bytes, for the preview protocol.
+    pub fn attachment(&self, id: AttachmentId) -> Result<(String, Vec<u8>)> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let meta = open
+            .store
+            .book()
+            .attachment(id)
+            .ok_or(DomainError::UnknownAttachment)?;
+        Ok((meta.mime.clone(), open.store.attachment_data(id)?))
+    }
+
+    /// Writes an attachment to a temporary file under its own name, for opening it in its
+    /// default app (R-ATT-3). Returns the path.
+    pub fn attachment_temp(&self, id: AttachmentId) -> Result<PathBuf> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let meta = open
+            .store
+            .book()
+            .attachment(id)
+            .ok_or(DomainError::UnknownAttachment)?;
+        let dir = std::env::temp_dir().join("lancelot").join(id.0.to_string());
+        std::fs::create_dir_all(&dir)?;
+        // Only the file name: a stored name can never point outside the folder.
+        let name = Path::new(&meta.filename)
+            .file_name()
+            .map(|n| n.to_owned())
+            .unwrap_or_else(|| "file".into());
+        let path = dir.join(name);
+        std::fs::write(&path, open.store.attachment_data(id)?)?;
+        Ok(path)
+    }
+
+    /// Exports an attachment to a path the user chose in the save dialog.
+    pub fn export_attachment(&self, id: AttachmentId, target: &Path) -> Result<()> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        std::fs::write(target, open.store.attachment_data(id)?)?;
+        Ok(())
     }
 
     pub fn delete_txn(&mut self, id: TxnId) -> Result<OpenEvent> {
@@ -558,7 +616,7 @@ mod tests {
             },
             total: Some(cents(31_240)),
         };
-        let saved = s.save_txn(&draft, None).unwrap();
+        let saved = s.save_txn(&draft, None, &[], &[]).unwrap();
         let txn = &saved.event.snapshot.txns[0];
         assert_eq!((txn.amount.get(), txn.txn.lines.len()), (31_240, 3));
         let person = &saved.event.snapshot.persons[0];
@@ -566,7 +624,7 @@ mod tests {
 
         let mut wrong = draft.clone();
         wrong.total = Some(cents(1));
-        let err = s.save_txn(&wrong, Some(saved.id)).unwrap_err();
+        let err = s.save_txn(&wrong, Some(saved.id), &[], &[]).unwrap_err();
         assert_eq!(
             (err.code.as_str(), err.field.as_deref()),
             ("split_mismatch", Some("lines"))
@@ -574,5 +632,71 @@ mod tests {
 
         let after = s.delete_txn(saved.id).unwrap();
         assert!(after.snapshot.txns.is_empty());
+    }
+
+    #[test]
+    fn attaches_files_from_disk_and_hands_them_out() {
+        use lancelot_core::{Entry, SplitLine};
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("e.lancelot");
+        let mut s = service(&dir);
+        let open = s.create_event(&path, details("E")).unwrap();
+        let id_of = |name: &str| {
+            open.snapshot
+                .accounts
+                .iter()
+                .find(|a| a.account.name == name)
+                .unwrap()
+                .account
+                .id
+        };
+        let receipt = dir.path().join("metro.pdf");
+        std::fs::write(&receipt, b"%PDF-1.7 receipt").unwrap();
+        let draft = TxnDraft {
+            date: time::macros::date!(2026 - 06 - 13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: Entry::Expense {
+                payer: id_of("Cash box"),
+                lines: vec![SplitLine {
+                    account: id_of("Kitchen"),
+                    amount: lancelot_core::Cents::new(500).unwrap(),
+                    memo: None,
+                }],
+            },
+            total: None,
+        };
+        let saved = s
+            .save_txn(&draft, None, std::slice::from_ref(&receipt), &[])
+            .unwrap();
+        let attachment = &saved.event.snapshot.txns[0].attachments[0];
+        assert_eq!(
+            (attachment.filename.as_str(), attachment.mime.as_str()),
+            ("metro.pdf", "application/pdf")
+        );
+
+        let (mime, bytes) = s.attachment(attachment.id).unwrap();
+        assert_eq!(
+            (mime.as_str(), bytes.as_slice()),
+            ("application/pdf", b"%PDF-1.7 receipt".as_slice())
+        );
+        let temp = s.attachment_temp(attachment.id).unwrap();
+        assert_eq!(temp.file_name().unwrap(), "metro.pdf");
+        let export = dir.path().join("copy.pdf");
+        s.export_attachment(attachment.id, &export).unwrap();
+        assert_eq!(std::fs::read(export).unwrap(), b"%PDF-1.7 receipt");
+
+        let missing = dir.path().join("gone.pdf");
+        assert_eq!(
+            s.save_txn(&draft, Some(saved.id), &[missing], &[])
+                .unwrap_err()
+                .code,
+            "io"
+        );
+        let cleared = s
+            .save_txn(&draft, Some(saved.id), &[], &[attachment.id])
+            .unwrap();
+        assert!(cleared.event.snapshot.txns[0].attachments.is_empty());
     }
 }
