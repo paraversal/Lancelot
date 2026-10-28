@@ -7,15 +7,16 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AccountKind, AttachmentId, BackupPolicy, DomainError, EventDetails, EventSnapshot,
-    MAX_ATTACHMENT_SIZE, Parsed, Person, Report, Store, StoreOptions, TxnDraft, TxnId, backup_time,
-    event_uuid_of, format_date, list_backups, parse_amount, parse_date,
+    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, DomainError, EventDetails,
+    EventSnapshot, MAX_ATTACHMENT_SIZE, Parsed, Person, Report, Store, StoreOptions, TxnDraft,
+    TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use crate::api::{
-    Added, ApiError, BackupInfo, CheckedIban, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
+    Added, ApiError, BackupInfo, CheckedIban, CountInput, OpenEvent, ParsedDate, RecentEvent,
+    SavedTxn,
 };
 use crate::settings::{AppSettings, RecentEntry, SettingsFile};
 
@@ -291,6 +292,45 @@ impl Service {
             event,
             id: id.ok_or_else(ApiError::no_event)?,
         })
+    }
+
+    /// Adds a bank or cash account (R-ACC-1).
+    pub fn add_asset(&mut self, name: &str, asset_type: AssetType) -> Result<Added> {
+        let mut id = None;
+        let event = self.change(|s| {
+            id = Some(s.add_asset(name, asset_type)?);
+            Ok(())
+        })?;
+        Ok(Added {
+            event,
+            id: id.ok_or_else(ApiError::no_event)?,
+        })
+    }
+
+    pub fn set_asset_type(&mut self, id: AccountId, asset_type: AssetType) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.set_asset_type(id, asset_type)?))
+    }
+
+    /// Replaces an asset account's opening and closing counts (R-ISO-3).
+    pub fn set_counts(
+        &mut self,
+        account: AccountId,
+        opening: Option<CountInput>,
+        closing: Option<CountInput>,
+    ) -> Result<OpenEvent> {
+        let parse = |c: Option<CountInput>, field: &str| {
+            c.map(|c| {
+                parse_date(&c.date)
+                    .map(|d| (d, c.amount))
+                    .map_err(|e| ApiError {
+                        field: Some(format!("{field}.date")),
+                        ..ApiError::from(e)
+                    })
+            })
+            .transpose()
+        };
+        let (opening, closing) = (parse(opening, "opening")?, parse(closing, "closing")?);
+        self.change(|s| Ok(s.set_counts(account, opening, closing)?))
     }
 
     pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<OpenEvent> {
@@ -827,5 +867,60 @@ mod tests {
             .unwrap();
         assert!(paid.snapshot.payouts.payouts.is_empty());
         assert_eq!(paid.snapshot.persons[0].summary.net.get(), 0);
+    }
+
+    #[test]
+    fn adds_cash_accounts_and_saves_both_counts_at_once() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        s.create_event(&dir.path().join("e.lancelot"), details("Fest"))
+            .unwrap();
+        let bar = s.add_asset("Bar till", AssetType::Cash).unwrap();
+        let account = bar
+            .event
+            .snapshot
+            .accounts
+            .iter()
+            .find(|a| a.account.id == bar.id)
+            .unwrap();
+        assert_eq!(account.account.asset_type, Some(AssetType::Cash));
+
+        let count = |date: &str, cents| CountInput {
+            date: date.into(),
+            amount: lancelot_core::Cents::new(cents).unwrap(),
+        };
+        let open = s
+            .set_counts(
+                bar.id,
+                Some(count("12.06.2026", 5_000)),
+                Some(count("2026-06-14", 4_800)),
+            )
+            .unwrap();
+        let status = open
+            .snapshot
+            .cash
+            .iter()
+            .find(|c| c.account == bar.id)
+            .unwrap();
+        assert_eq!(status.opening.map(|o| o.amount.get()), Some(5_000));
+        assert_eq!(status.difference.map(|d| d.get()), Some(-200));
+
+        let err = s
+            .set_counts(bar.id, Some(count("someday", 5_000)), None)
+            .unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("opening.date"));
+
+        let open = s.set_counts(bar.id, None, None).unwrap();
+        let status = open
+            .snapshot
+            .cash
+            .iter()
+            .find(|c| c.account == bar.id)
+            .unwrap();
+        assert_eq!((status.opening, status.counted), (None, None));
+        assert!(open.snapshot.txns.is_empty());
+
+        let open = s.set_asset_type(bar.id, AssetType::Bank).unwrap();
+        assert!(open.snapshot.cash.iter().all(|c| c.account != bar.id));
     }
 }

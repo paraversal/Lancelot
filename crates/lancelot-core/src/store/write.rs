@@ -105,15 +105,17 @@ pub(crate) fn persist(
         match &change {
             Change::Create(a) => {
                 let role = a.role.as_ref().map(enum_text).transpose()?;
+                let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                 conn.execute(
-                    "INSERT INTO account (id, kind, name, role) VALUES (?1, ?2, ?3, ?4)",
-                    params![id.0, enum_text(&a.kind)?, a.name, role],
+                    "INSERT INTO account (id, kind, name, role, asset_type) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![id.0, enum_text(&a.kind)?, a.name, role, asset_type],
                 )?;
             }
             Change::Update(_, a) => {
+                let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                 conn.execute(
-                    "UPDATE account SET name = ?2 WHERE id = ?1",
-                    params![id.0, a.name],
+                    "UPDATE account SET name = ?2, asset_type = ?3 WHERE id = ?1",
+                    params![id.0, a.name, asset_type],
                 )?;
             }
             Change::Delete(_) => {

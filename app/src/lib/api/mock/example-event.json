@@ -15,6 +15,7 @@
       "kind": "asset",
       "name": "Verein account",
       "role": "verein",
+      "assetType": "bank",
       "balance": 175700
     },
     {
@@ -22,6 +23,7 @@
       "kind": "asset",
       "name": "Cash box",
       "role": "cash_box",
+      "assetType": "cash",
       "balance": 41290
     },
     {
@@ -29,6 +31,7 @@
       "kind": "opening",
       "name": "Opening balance",
       "role": "opening",
+      "assetType": null,
       "balance": 0
     },
     {
@@ -36,6 +39,7 @@
       "kind": "income",
       "name": "Tickets",
       "role": null,
+      "assetType": null,
       "balance": 652750
     },
     {
@@ -43,6 +47,7 @@
       "kind": "income",
       "name": "Drink donations",
       "role": null,
+      "assetType": null,
       "balance": 81250
     },
     {
@@ -50,6 +55,7 @@
       "kind": "income",
       "name": "General",
       "role": null,
+      "assetType": null,
       "balance": 5000
     },
     {
@@ -57,6 +63,7 @@
       "kind": "expense",
       "name": "Kitchen",
       "role": null,
+      "assetType": null,
       "balance": 210000
     },
     {
@@ -64,6 +71,7 @@
       "kind": "expense",
       "name": "Drinks",
       "role": null,
+      "assetType": null,
       "balance": 45200
     },
     {
@@ -71,6 +79,7 @@
       "kind": "expense",
       "name": "Pfand",
       "role": null,
+      "assetType": null,
       "balance": 3200
     },
     {
@@ -78,6 +87,7 @@
       "kind": "expense",
       "name": "Mobility",
       "role": null,
+      "assetType": null,
       "balance": 0
     },
     {
@@ -85,6 +95,7 @@
       "kind": "expense",
       "name": "Venue",
       "role": null,
+      "assetType": null,
       "balance": 180000
     },
     {
@@ -92,6 +103,7 @@
       "kind": "expense",
       "name": "Tech",
       "role": null,
+      "assetType": null,
       "balance": 61000
     },
     {
@@ -99,6 +111,7 @@
       "kind": "expense",
       "name": "General",
       "role": null,
+      "assetType": null,
       "balance": 36850
     },
     {
@@ -106,6 +119,7 @@
       "kind": "person",
       "name": "Anna",
       "role": null,
+      "assetType": null,
       "balance": 21240
     },
     {
@@ -113,6 +127,7 @@
       "kind": "person",
       "name": "Malte",
       "role": null,
+      "assetType": null,
       "balance": 11000
     },
     {
@@ -120,6 +135,7 @@
       "kind": "person",
       "name": "Bob",
       "role": null,
+      "assetType": null,
       "balance": -18000
     },
     {
@@ -127,6 +143,7 @@
       "kind": "person",
       "name": "Clara",
       "role": null,
+      "assetType": null,
       "balance": 0
     }
   ],
@@ -822,6 +839,8 @@
   "cash": [
     {
       "account": 2,
+      "assetType": "cash",
+      "opening": null,
       "computed": 41290,
       "counted": 41000,
       "difference": -290

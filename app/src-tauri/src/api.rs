@@ -1,10 +1,10 @@
 //! What crosses the IPC boundary besides the core's own types (`docs/technical-design.md` §5).
 
 use lancelot_core::{
-    AccountId, AmountError, DateError, DomainError, EventSnapshot, Report, StoreError, TxnId,
-    Warning,
+    AccountId, AmountError, Cents, DateError, DomainError, EventSnapshot, Report, StoreError,
+    TxnId, Warning,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Every command fails with this. `code` is stable; `message` is for people.
@@ -161,4 +161,13 @@ pub struct Added {
 pub struct CheckedIban {
     pub iban: String,
     pub formatted: String,
+}
+
+/// An opening or closing count as the count panel sends it.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, TS)]
+#[ts(export)]
+pub struct CountInput {
+    /// Any format `date_parse` accepts.
+    pub date: String,
+    pub amount: Cents,
 }

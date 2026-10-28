@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.6. M0 to M4 are done (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.7. M0 to M4 are done, and M5 is under way (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -153,12 +153,13 @@ Built in two steps.
 
 ### M5 · Settlement and closing (MVP release)
 
-- [ ] Cash box opening and closing count with the difference (R-ISO-3), on the Overview's cash box row.
-- [ ] Overview screen, MVP version: result, in/out by category, "where the money is" and open items. The forecast and ticket blocks are hidden until Phase 2.
+- [x] Asset accounts are bank or cash, managed in Settings (R-ACC-1).
+- [x] Opening and closing count with the difference for every cash account (R-ISO-3), from its row on the Overview.
+- [x] Overview screen, MVP version: result, in/out by category, "where the money is" and open items, each leading to its fix. The forecast and ticket blocks wait for Phase 2.
 - [ ] Settlement report: income and expenses by category, result, final balance per asset account, and open items. Covers R-SET-1, R-SET-4 and R-SET-5.
 - [ ] Exports: PDF, plus CSV/XLSX of the raw transactions (R-SET-6).
 - [ ] Closing is blocked while there are open items, and each blocker can be overridden with a note. After closing, the final balance stays visible (R-SET-7, R-SET-8).
-- [ ] Signed macOS build, or at least notarised. This needs an Apple Developer account, and the open question is whose.
+- [ ] Unsigned macOS build from CI, attached to a GitHub release. Signing waits.
 - [ ] **Parallel run** with the Excel sheet at the next event.
 
 **Exit:** a real event is settled with Lancelot and its final balance matches Excel to the cent. Tag `v0.1.0`.
@@ -223,7 +224,7 @@ Built in two steps.
 | What | Needed by | Owner |
 |---|---|---|
 | Date of the next event: sets the MVP deadline | M0 | you |
-| Apple Developer account for signing | M5 | you |
+| Apple Developer account for signing | after v0.1.0 | you |
 | Sale date column in the ticket sheet | M8 | Verein |
 | A real (anonymised) ticket sheet as a fixture | M7 | you |
 

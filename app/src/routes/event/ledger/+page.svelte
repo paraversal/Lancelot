@@ -63,8 +63,10 @@
 		{ value: 'missing', label: 'No receipt' }
 	];
 
-	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`.
+	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`, or
+	// "New entry" on the overview: `/event/ledger?new`.
 	onMount(() => {
+		if (page.url.searchParams.has('new')) return open(null);
 		const id = Number(page.url.searchParams.get('txn'));
 		const txn = snapshot.txns.find((t) => t.id === id);
 		if (txn) {

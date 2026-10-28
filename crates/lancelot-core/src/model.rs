@@ -63,13 +63,25 @@ pub enum Role {
     Opening,
 }
 
+/// What an asset account holds. Cash accounts are counted at the start and the end (R-ISO-3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "lowercase")]
+pub enum AssetType {
+    Bank,
+    Cash,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct Account {
     pub id: AccountId,
     pub kind: AccountKind,
     pub name: String,
     pub role: Option<Role>,
+    /// Set exactly for asset accounts.
+    pub asset_type: Option<AssetType>,
 }
 
 /// Bank and contact details of a person. The person's name is the name of their account.
@@ -167,7 +179,7 @@ pub struct Attachment {
     pub added_at: OffsetDateTime,
 }
 
-/// The amount counted in an asset account at the end, e.g. the cash box (R-ISO-3).
+/// The amount counted in an asset account at the end, e.g. a cash box (R-ISO-3).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 pub struct ClosingCount {

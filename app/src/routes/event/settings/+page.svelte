@@ -1,9 +1,11 @@
 <script lang="ts">
-	// Settings: the event's details, the display format, the file and its integrity, backups.
-	// Every field saves when it is left; there is no Save button.
+	// Settings: the event's details, its accounts, the display format, the file and its
+	// integrity, backups. Every field saves when it is left; there is no Save button.
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '#lib/api/index.ts';
 	import { chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
+	import type { AssetType } from '#lib/api/generated/AssetType.ts';
 	import type { BackupInfo } from '#lib/api/generated/BackupInfo.ts';
 	import type { EventDetails } from '#lib/api/generated/EventDetails.ts';
 	import type { NumberFormat } from '#lib/api/generated/NumberFormat.ts';
@@ -14,7 +16,7 @@
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatSize, formatTimestamp } from '#lib/format.ts';
+	import { formatAmount, formatSize, formatTimestamp } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	// The layout only renders pages while an event is open.
@@ -82,11 +84,41 @@
 			await goto('/event/overview');
 		});
 
-	const assets = $derived(
-		open.snapshot.accounts
-			.filter((a) => a.kind === 'asset')
-			.map((a) => ({ value: a.id, label: a.name }))
-	);
+	const accounts = $derived(open.snapshot.accounts.filter((a) => a.kind === 'asset'));
+	const assets = $derived(accounts.map((a) => ({ value: a.id, label: a.name })));
+	const TYPES: { value: AssetType; label: string }[] = [
+		{ value: 'bank', label: 'Bank' },
+		{ value: 'cash', label: 'Cash' }
+	];
+
+	function rename(id: number, input: HTMLInputElement) {
+		const name = input.value.trim();
+		const current = accounts.find((a) => a.id === id)?.name ?? '';
+		if (!name || name === current) {
+			input.value = current;
+			return;
+		}
+		run(async () => {
+			try {
+				await session.change(() => api.renameAccount(id, name));
+			} catch (e) {
+				input.value = current;
+				throw e;
+			}
+		});
+	}
+
+	const addAccount = () =>
+		run(async () => {
+			let name = 'New account';
+			for (let n = 2; accounts.some((a) => a.name.toLowerCase() === name.toLowerCase()); n++)
+				name = `New account ${n}`;
+			const added = await session.run(() => api.addAsset(name, 'cash'));
+			await tick();
+			const input = document.getElementById(`account-${added.id}`) as HTMLInputElement | null;
+			input?.focus();
+			input?.select();
+		});
 	const issues = $derived(open.integrity.issues.length);
 	const shortPath = $derived(open.path.replace(/^\/Users\/[^/]+/, '~'));
 	const checked = $derived(
@@ -100,47 +132,82 @@
 	<h1>Settings</h1>
 
 	<div class="columns">
-		<section>
-			<h2>Event</h2>
-			<TextField
-				label="Name"
-				value={event.name}
-				required
-				oncommit={(v) => v && update({ name: v })}
-			/>
-			<div class="pair">
-				<DateField
-					label="From"
-					value={event.startsOn}
-					{format}
-					oncommit={(v) => update({ startsOn: v })}
+		<div class="stack">
+			<section>
+				<h2>Event</h2>
+				<TextField
+					label="Name"
+					value={event.name}
+					required
+					oncommit={(v) => v && update({ name: v })}
 				/>
-				<DateField
-					label="To"
-					value={event.endsOn}
-					{format}
-					oncommit={(v) => update({ endsOn: v })}
+				<div class="pair">
+					<DateField
+						label="From"
+						value={event.startsOn}
+						{format}
+						oncommit={(v) => update({ startsOn: v })}
+					/>
+					<DateField
+						label="To"
+						value={event.endsOn}
+						{format}
+						oncommit={(v) => update({ endsOn: v })}
+					/>
+				</div>
+				<TextField
+					label="Location"
+					value={event.location}
+					oncommit={(v) => update({ location: v })}
 				/>
-			</div>
-			<TextField
-				label="Location"
-				value={event.location}
-				oncommit={(v) => update({ location: v })}
-			/>
-			<TextField
-				label="Notes"
-				value={event.notes}
-				multiline
-				oncommit={(v) => update({ notes: v })}
-			/>
-			<Select
-				label="Reimburse from"
-				value={event.defaultReimbursementAccount}
-				options={assets}
-				onchange={(account) =>
-					run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
-			/>
-		</section>
+				<TextField
+					label="Notes"
+					value={event.notes}
+					multiline
+					oncommit={(v) => update({ notes: v })}
+				/>
+				<Select
+					label="Reimburse from"
+					value={event.defaultReimbursementAccount}
+					options={assets}
+					onchange={(account) =>
+						run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
+				/>
+			</section>
+
+			<section>
+				<h2>Accounts</h2>
+				<ul class="accounts">
+					{#each accounts as a (a.id)}
+						<li>
+							<input
+								id="account-{a.id}"
+								class="name"
+								type="text"
+								aria-label="Account name"
+								value={a.name}
+								onblur={(e) => rename(a.id, e.currentTarget)}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') e.currentTarget.blur();
+									if (e.key === 'Escape') {
+										e.currentTarget.value = a.name;
+										e.currentTarget.blur();
+									}
+								}}
+							/>
+							<Segmented
+								label="{a.name} holds"
+								value={a.assetType ?? 'bank'}
+								options={TYPES}
+								onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
+							/>
+							<span class="balance">{formatAmount(a.balance, format)}</span>
+						</li>
+					{/each}
+				</ul>
+				<div><Button size="sm" icon="plus" onclick={addAccount}>Account</Button></div>
+			</section>
+		</div>
 
 		<div class="stack">
 			<section>
@@ -229,7 +296,7 @@
 
 	.columns {
 		display: grid;
-		grid-template-columns: minmax(0, 440px) minmax(0, 460px);
+		grid-template-columns: minmax(0, 480px) minmax(0, 460px);
 		gap: 60px;
 	}
 
@@ -319,6 +386,49 @@
 
 	.count {
 		width: 64px;
+	}
+
+	.accounts {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.accounts li {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-4);
+		height: 44px;
+		border-bottom: 1px solid var(--color-rule);
+	}
+
+	.accounts .name {
+		flex: 1;
+		min-width: 0;
+		height: 34px;
+		margin-left: -9px;
+		padding: 0 8px;
+		border: 1px solid transparent;
+		border-radius: var(--radius-field);
+		background: none;
+		font: inherit;
+		color: inherit;
+	}
+
+	.accounts .name:hover {
+		border-color: var(--color-rule);
+	}
+
+	.accounts .name:focus {
+		border-color: var(--color-ink);
+		outline: none;
+		background: var(--color-field);
+	}
+
+	.accounts .balance {
+		width: 110px;
+		flex: none;
+		text-align: right;
 	}
 
 	.backups {

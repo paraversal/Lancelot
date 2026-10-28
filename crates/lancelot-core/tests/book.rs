@@ -473,3 +473,136 @@ fn a_split_must_add_up_to_the_receipt_total() {
         eur("312,40")
     );
 }
+
+#[test]
+fn asset_accounts_are_bank_or_cash() {
+    let mut book = new_book();
+    let types = |book: &Book| {
+        book.accounts()
+            .map(|a| (a.name.clone(), a.asset_type))
+            .filter(|(_, t)| t.is_some())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        types(&book),
+        [
+            ("Verein account".into(), Some(AssetType::Bank)),
+            ("Cash box".into(), Some(AssetType::Cash)),
+        ]
+    );
+    assert!(
+        book.accounts()
+            .all(|a| a.asset_type.is_some() == (a.kind == AccountKind::Asset))
+    );
+
+    let bar = book.add_asset("Cash – Bar", AssetType::Cash).unwrap();
+    let savings = book.add_account(AccountKind::Asset, "Savings").unwrap();
+    assert_eq!(
+        book.account(savings).unwrap().asset_type,
+        Some(AssetType::Bank)
+    );
+    book.set_asset_type(savings, AssetType::Cash).unwrap();
+    assert_eq!(
+        book.account(savings).unwrap().asset_type,
+        Some(AssetType::Cash)
+    );
+    assert_eq!(
+        book.set_asset_type(expense(&book, "Kitchen"), AssetType::Cash)
+            .unwrap_err()
+            .code(),
+        "wrong_account_kind"
+    );
+    assert_eq!(
+        book.add_asset("cash box", AssetType::Cash)
+            .unwrap_err()
+            .code(),
+        "duplicate_name"
+    );
+
+    // Every cash account needs a closing count; bank accounts don't.
+    let cash = role(&book, Role::CashBox);
+    let missing: Vec<_> = book
+        .ledger()
+        .open_items()
+        .into_iter()
+        .filter(|i| matches!(i, OpenItem::ClosingCountMissing { .. }))
+        .collect();
+    assert_eq!(
+        missing,
+        [cash, bar, savings].map(|account| OpenItem::ClosingCountMissing { account })
+    );
+}
+
+#[test]
+fn an_opening_count_is_one_opening_transaction() {
+    let mut book = new_book();
+    let cash = role(&book, Role::CashBox);
+    let status = |book: &Book| {
+        *book
+            .ledger()
+            .cash()
+            .iter()
+            .find(|c| c.account == cash)
+            .unwrap()
+    };
+    assert_eq!(status(&book).opening, None);
+
+    let txn = book.set_opening_count(cash, june(12), eur("80")).unwrap();
+    let opening = status(&book).opening.unwrap();
+    assert_eq!(
+        (opening.txn, opening.date, opening.amount),
+        (txn, june(12), eur("80"))
+    );
+    assert_eq!(book.txn(txn).unwrap().kind, TxnKind::Opening);
+    assert_eq!(status(&book).computed, eur("80"));
+
+    // A second opening entered by hand is merged into the count when it is set again.
+    save(
+        &mut book,
+        "More change",
+        Entry::Opening {
+            account: cash,
+            amount: eur("20"),
+        },
+    );
+    assert_eq!(status(&book).opening.unwrap().amount, eur("100"));
+    assert_eq!(
+        book.set_opening_count(cash, june(11), eur("90")).unwrap(),
+        txn
+    );
+    let opening = status(&book).opening.unwrap();
+    assert_eq!((opening.date, opening.amount), (june(11), eur("90")));
+    assert_eq!(
+        book.txns().filter(|t| t.kind == TxnKind::Opening).count(),
+        1
+    );
+    assert_eq!(
+        book.set_opening_count(cash, june(11), Cents::ZERO)
+            .unwrap_err()
+            .code(),
+        "non_positive_amount"
+    );
+
+    book.clear_opening_count(cash).unwrap();
+    assert_eq!(status(&book).opening, None);
+    assert_eq!(book.txns().count(), 0);
+
+    // A bank account with an opening count shows up among the counts, but needs no closing count.
+    let verein = role(&book, Role::Verein);
+    book.set_opening_count(verein, june(12), eur("1000"))
+        .unwrap();
+    let bank = book
+        .ledger()
+        .cash()
+        .iter()
+        .find(|c| c.account == verein)
+        .copied()
+        .unwrap();
+    assert_eq!(bank.asset_type, AssetType::Bank);
+    assert!(
+        !book
+            .ledger()
+            .open_items()
+            .contains(&OpenItem::ClosingCountMissing { account: verein })
+    );
+}

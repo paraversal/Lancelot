@@ -25,12 +25,12 @@ pub use error::DomainError;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};
 pub use ledger::{
-    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, PersonEntry, PersonStatus,
-    PersonSummary, PersonTotals,
+    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, OpeningCount, PersonEntry,
+    PersonStatus, PersonSummary, PersonTotals,
 };
 pub use model::{
-    Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
-    Line, Person, Role, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, ClosingCount, Event,
+    EventDetails, Line, Person, Role, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};

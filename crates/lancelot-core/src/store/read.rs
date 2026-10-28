@@ -41,20 +41,23 @@ fn next_id(conn: &Connection, key: &str) -> Result<i64, StoreError> {
 }
 
 pub(crate) fn accounts(conn: &Connection) -> Result<BTreeMap<AccountId, Account>, StoreError> {
-    let mut stmt = conn.prepare("SELECT id, kind, name, role FROM account ORDER BY id")?;
+    let mut stmt =
+        conn.prepare("SELECT id, kind, name, role, asset_type FROM account ORDER BY id")?;
     let rows = stmt.query_map([], |r| {
         Ok((
             r.get::<_, i64>(0)?,
             r.get::<_, String>(1)?,
             r.get::<_, String>(2)?,
             r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<String>>(4)?,
         ))
     })?;
     let mut out = BTreeMap::new();
     for row in rows {
-        let (id, kind, name, role) = row?;
+        let (id, kind, name, role, asset_type) = row?;
         let id = AccountId(id);
         let role = role.as_deref().map(text_enum).transpose()?;
+        let asset_type = asset_type.as_deref().map(text_enum).transpose()?;
         out.insert(
             id,
             Account {
@@ -62,6 +65,7 @@ pub(crate) fn accounts(conn: &Connection) -> Result<BTreeMap<AccountId, Account>
                 kind: text_enum(&kind)?,
                 name,
                 role,
+                asset_type,
             },
         );
     }

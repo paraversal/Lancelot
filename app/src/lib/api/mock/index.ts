@@ -9,6 +9,8 @@ import type { ApiError } from '../generated/ApiError';
 import type { AppSettings } from '../generated/AppSettings';
 import type { BackupInfo } from '../generated/BackupInfo';
 import type { AccountKind } from '../generated/AccountKind';
+import type { AssetType } from '../generated/AssetType';
+import type { CountInput } from '../generated/CountInput';
 import type { EventDetails } from '../generated/EventDetails';
 import type { EventSnapshot } from '../generated/EventSnapshot';
 import type { OpenEvent } from '../generated/OpenEvent';
@@ -244,7 +246,7 @@ function saveTxn(draft: TxnDraft, id: number | null, files: string[], remove: nu
 	return { event, id: saved, warnings: [] };
 }
 
-function addAccount(kind: AccountKind, name: string) {
+function addAccount(kind: AccountKind, name: string, assetType: AssetType | null = null) {
 	let id = 0;
 	const event = changed((s) => {
 		if (
@@ -252,7 +254,15 @@ function addAccount(kind: AccountKind, name: string) {
 		)
 			fail('duplicate_name', 'this name is already used', { field: 'name' });
 		id = Math.max(...s.accounts.map((a) => a.id)) + 1;
-		s.accounts.push({ id, kind, name: name.trim(), role: null, balance: 0 });
+		s.accounts.push({
+			id,
+			kind,
+			name: name.trim(),
+			role: null,
+			assetType: kind === 'asset' ? (assetType ?? 'bank') : null,
+			balance: 0
+		});
+		if (kind === 'asset') s.whereTheMoneyIs.assets.push({ account: id, balance: 0 });
 		if (kind === 'person')
 			s.persons.push({
 				account: id,
@@ -275,6 +285,63 @@ function addAccount(kind: AccountKind, name: string) {
 			});
 	});
 	return { event, id };
+}
+
+// The counts of an asset account, roughly as the core derives them: the opening count moves the
+// balance, the closing count is compared with it, and cash accounts need a closing count.
+function recount(
+	s: EventSnapshot,
+	id: number,
+	opening?: CountInput | null,
+	closing?: CountInput | null
+) {
+	const account = s.accounts.find((a) => a.id === id);
+	if (!account?.assetType) fail('wrong_account_kind', 'not an asset account', { field: 'account' });
+	let status = s.cash.find((c) => c.account === id);
+	if (!status) {
+		status = {
+			account: id,
+			assetType: account.assetType,
+			opening: null,
+			computed: account.balance,
+			counted: null,
+			difference: null
+		};
+		s.cash.push(status);
+	}
+	status.assetType = account.assetType;
+	if (opening !== undefined) {
+		const amount = opening && opening.amount > 0 ? opening.amount : 0;
+		const delta = amount - (status.opening?.amount ?? 0);
+		account.balance += delta;
+		s.whereTheMoneyIs.opening += delta;
+		const where = s.whereTheMoneyIs.assets.find((a) => a.account === id);
+		if (where) where.balance = account.balance;
+		status.opening = amount
+			? { txn: status.opening?.txn ?? 0, date: parseDate(opening!.date).date, amount }
+			: null;
+	}
+	if (closing !== undefined) {
+		s.closingCounts = s.closingCounts.filter((c) => c.account !== id);
+		if (closing)
+			s.closingCounts.push({
+				account: id,
+				date: parseDate(closing.date).date,
+				amount: closing.amount
+			});
+		status.counted = closing?.amount ?? null;
+	}
+	status.computed = account.balance;
+	status.difference = status.counted === null ? null : status.counted - status.computed;
+	if (account.assetType === 'bank' && !status.opening && status.counted === null)
+		s.cash = s.cash.filter((c) => c.account !== id);
+	s.openItems = s.openItems.filter(
+		(i) => !((i.type === 'closingCountMissing' || i.type === 'cashDifference') && i.account === id)
+	);
+	if (account.assetType === 'cash' && status.counted === null)
+		s.openItems.push({ type: 'closingCountMissing', account: id });
+	else if (status.difference)
+		s.openItems.push({ type: 'cashDifference', account: id, difference: status.difference });
 }
 
 type Args = Record<string, unknown>;
@@ -335,6 +402,26 @@ const commands: Record<string, (a: Args) => unknown> = {
 			const account = s.accounts.find((x) => x.id === a.id);
 			if (account) account.name = a.name as string;
 		}),
+	asset_add: (a) => {
+		const added = addAccount('asset', a.name as string, a.assetType as AssetType);
+		return { ...added, event: changed((s) => recount(s, added.id)) };
+	},
+	asset_set_type: (a) =>
+		changed((s) => {
+			const account = s.accounts.find((x) => x.id === a.id);
+			if (account?.kind !== 'asset') fail('wrong_account_kind', 'not an asset account');
+			account.assetType = a.assetType as AssetType;
+			recount(s, account.id);
+		}),
+	counts_set: (a) =>
+		changed((s) =>
+			recount(
+				s,
+				a.account as number,
+				a.opening as CountInput | null,
+				a.closing as CountInput | null
+			)
+		),
 	person_add: (a) => addAccount('person', a.name as string),
 	person_update: (a) =>
 		changed((s) => {

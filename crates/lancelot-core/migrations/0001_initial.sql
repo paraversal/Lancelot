@@ -9,7 +9,9 @@ CREATE TABLE account (
   id    INTEGER PRIMARY KEY,
   kind  TEXT NOT NULL CHECK (kind IN ('asset','person','income','expense','opening')),
   name  TEXT NOT NULL,
-  role  TEXT UNIQUE CHECK (role IN ('verein','cash_box','opening'))
+  role  TEXT UNIQUE CHECK (role IN ('verein','cash_box','opening')),
+  asset_type TEXT CHECK (asset_type IN ('bank','cash')),   -- set exactly for assets
+  CHECK ((kind = 'asset') = (asset_type IS NOT NULL))
 ) STRICT;
 
 CREATE TABLE event (                   -- exactly one row

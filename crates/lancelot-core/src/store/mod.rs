@@ -30,7 +30,7 @@ use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Depth, Report};
 use crate::ledger::BlockerOverride;
-use crate::model::{AccountId, AccountKind, AttachmentId, EventDetails, Person, TxnId};
+use crate::model::{AccountId, AccountKind, AssetType, AttachmentId, EventDetails, Person, TxnId};
 use crate::money::Cents;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
@@ -362,6 +362,22 @@ impl Store {
         self.apply(&BTreeMap::new(), |b| b.add_account(kind, name))
     }
 
+    pub fn add_asset(
+        &mut self,
+        name: &str,
+        asset_type: AssetType,
+    ) -> Result<AccountId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_asset(name, asset_type))
+    }
+
+    pub fn set_asset_type(
+        &mut self,
+        id: AccountId,
+        asset_type: AssetType,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.set_asset_type(id, asset_type))
+    }
+
     pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.rename_account(id, name))
     }
@@ -503,6 +519,48 @@ impl Store {
 
     pub fn clear_closing_count(&mut self, account: AccountId) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.clear_closing_count(account))
+    }
+
+    /// Replaces both counts of an asset account in one change, as the count panel saves them.
+    /// `None` removes a count.
+    pub fn set_counts(
+        &mut self,
+        account: AccountId,
+        opening: Option<(Date, Cents)>,
+        closing: Option<(Date, Cents)>,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            if b.account(account).map(|a| a.kind) != Some(AccountKind::Asset) {
+                return Err(DomainError::WrongAccountKind {
+                    field: "account".into(),
+                });
+            }
+            match opening {
+                Some((date, amount)) if amount.is_positive() => {
+                    b.set_opening_count(account, date, amount)?;
+                }
+                _ => b.clear_opening_count(account)?,
+            }
+            match closing {
+                Some((date, amount)) => b.set_closing_count(account, date, amount),
+                None => b.clear_closing_count(account),
+            }
+        })
+    }
+
+    pub fn set_opening_count(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<TxnId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            b.set_opening_count(account, date, amount)
+        })
+    }
+
+    pub fn clear_opening_count(&mut self, account: AccountId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.clear_opening_count(account))
     }
 
     /// Applies a command to a copy of the book, writes the difference and checks it in one SQL
