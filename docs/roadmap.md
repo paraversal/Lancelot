@@ -113,15 +113,22 @@ Built in two steps, each in its own pull request.
 
 ### M3 · Ledger
 
-The first slice the treasurer can use: entering the stack of receipts.
+The first slice the treasurer can use: entering the stack of receipts. Built in two steps.
 
-- [ ] Ledger table: grouped by day or by category with totals (R-TX-7), filter chips (type, account, person, category, missing receipt), and search.
-- [ ] Entry panel with the Expense / Income / Transfer / Settle switch, split lines with a running remainder, and the payer's live balance.
-- [ ] Editing and deleting, with every change in the change log.
-- [ ] Attachments: add, preview (image and PDF), open the original, and export. Drag a file onto the window to start a new transaction with the file attached. Covers R-ATT-3 and R-ATT-5.
-- [ ] HEIC preview: convert in Rust, or fall back to "open externally". To be decided in M0.
-- [ ] A "missing receipts" filter (R-ATT-4).
-- [ ] Opening and closing count for the cash box, with the discrepancy (R-ISO-3).
+**M3a · Entering and editing**
+- [x] Designs: the Income, Transfer and Settle panels, deleting, adding a person or category on the spot, the empty ledger.
+- [x] Ledger table: grouped by day or by category with totals (R-TX-7), type chips with counts, a No receipt chip (R-ATT-4), and a search over titles, people, categories and amounts.
+- [x] Entry panel with the Expense / Income / Transfer / Settle switch, split lines with the amount left, the payer's live balance, and Settle filled in from the person's balance.
+- [x] People and categories added from the panel's selects (people by name; details in M4).
+- [x] Editing and deleting (with a confirmation), every change in the change log.
+- [x] Keyboard: N, ↑/↓/Enter, ⌘↵, ⇧⌘↵ (save and next, keeping date and payer), Esc.
+- [x] The core checks a split against the receipt total (`TxnDraft.total`).
+
+**M3b · Attachments**
+- [ ] Attachments: add, preview (image, PDF, HEIC via WebKit), open the original, and export. Saved together with the transaction. Covers R-ATT-3.
+- [ ] Drag a file onto the window to start a new transaction with the file attached (R-ATT-5).
+
+The cash box counts (R-ISO-3) moved to M5, next to the Overview's cash box row.
 
 **Exit:** the 30–40 receipts of a past event can be entered with the keyboard alone in under 30 minutes.
 
@@ -138,6 +145,7 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ### M5 · Settlement and closing (MVP release)
 
+- [ ] Cash box opening and closing count with the difference (R-ISO-3), on the Overview's cash box row.
 - [ ] Overview screen, MVP version: result, in/out by category, "where the money is" and open items. The forecast and ticket blocks are hidden until Phase 2.
 - [ ] Settlement report: income and expenses by category, result, final balance per asset account, and open items. Covers R-SET-1, R-SET-4 and R-SET-5.
 - [ ] Exports: PDF, plus CSV/XLSX of the raw transactions (R-SET-6).
@@ -213,4 +221,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M3: the ledger — entry panel, splits, attachments, grouping by day or category.
+M3b: attachments — preview, open and export, drag and drop.

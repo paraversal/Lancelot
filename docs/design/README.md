@@ -57,6 +57,8 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 | System | Tokens, type scale, controls, input states, value styles, rules |
 | Overview | Result, forecast and tickets; in/out composition; where the money is (reconciles to the result); open items |
 | Ledger | Transactions grouped by day, with filters, plus the entry panel (type switch, amount, payer with live balance, split lines, receipt) |
+| Ledger / Entry panels | Income (with a category being added), Transfer (delete confirmation), Settle (direction and amount from the person's balance) |
+| Ledger / Empty | The first entry, with its payer added on the spot |
 | Ledger / By category | The same list grouped by category with a total per category; a split transaction appears under each of its categories, tagged `SPLIT` |
 | People | Advanced / holds / settled / net balance per person, payout list export, person panel with a running balance and the settle action |
 | Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |
@@ -66,5 +68,7 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 | Start / States | An event open in another window, and a damaged file with its issues and backups to restore |
 | Settings | Event details and the reimbursement account; number and date format; file path and integrity check; backups with Restore |
 | Event / Integrity banner | One line per issue above the page, with Check again |
+
+In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says *Note*.
 
 Budget is not designed yet.

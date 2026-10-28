@@ -70,6 +70,28 @@ describe('AmountField', () => {
 	});
 });
 
+describe('AmountField with a live parent', () => {
+	it('keeps the typed text when the parent passes the parsed value back', async () => {
+		let value: number | null = null;
+		const { rerender } = render(AmountField, {
+			label: 'Amount',
+			value,
+			format: 'de',
+			oninput: (v: number | null) => (value = v)
+		});
+		const input = screen.getByLabelText('Amount') as HTMLInputElement;
+		// Halfway through, the input is not an amount yet and the field reports null.
+		await type(input, '1.234,');
+		await rerender({ value });
+		expect(input.value).toBe('1.234,');
+		await type(input, '1.234,5');
+		await rerender({ value });
+		expect(value).toBe(123450);
+		expect(input.value).toBe('1.234,5');
+		expect(screen.getByText(/^= 1\.234,50.€$/)).toBeTruthy();
+	});
+});
+
 describe('DateField', () => {
 	it('previews a short date and commits it as ISO', async () => {
 		const oncommit = vi.fn();

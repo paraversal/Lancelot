@@ -96,111 +96,131 @@
 	);
 </script>
 
-<h1>Settings</h1>
+<div class="page">
+	<h1>Settings</h1>
 
-<div class="columns">
-	<section>
-		<h2>Event</h2>
-		<TextField
-			label="Name"
-			value={event.name}
-			required
-			oncommit={(v) => v && update({ name: v })}
-		/>
-		<div class="pair">
-			<DateField
-				label="From"
-				value={event.startsOn}
-				{format}
-				oncommit={(v) => update({ startsOn: v })}
-			/>
-			<DateField label="To" value={event.endsOn} {format} oncommit={(v) => update({ endsOn: v })} />
-		</div>
-		<TextField label="Location" value={event.location} oncommit={(v) => update({ location: v })} />
-		<TextField label="Notes" value={event.notes} multiline oncommit={(v) => update({ notes: v })} />
-		<Select
-			label="Reimburse from"
-			value={event.defaultReimbursementAccount}
-			options={assets}
-			onchange={(account) =>
-				run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
-		/>
-	</section>
-
-	<div class="stack">
+	<div class="columns">
 		<section>
-			<h2>Display</h2>
-			<div class="labelled">
-				<span class="label">Numbers and dates</span>
-				<Segmented
-					label="Numbers and dates"
-					value={format}
-					onchange={setFormat}
-					options={[
-						{ value: 'de', label: '1.234,56 €  ·  31.12.2026' },
-						{ value: 'en', label: '€1,234.56  ·  2026-12-31' }
-					]}
+			<h2>Event</h2>
+			<TextField
+				label="Name"
+				value={event.name}
+				required
+				oncommit={(v) => v && update({ name: v })}
+			/>
+			<div class="pair">
+				<DateField
+					label="From"
+					value={event.startsOn}
+					{format}
+					oncommit={(v) => update({ startsOn: v })}
+				/>
+				<DateField
+					label="To"
+					value={event.endsOn}
+					{format}
+					oncommit={(v) => update({ endsOn: v })}
 				/>
 			</div>
+			<TextField
+				label="Location"
+				value={event.location}
+				oncommit={(v) => update({ location: v })}
+			/>
+			<TextField
+				label="Notes"
+				value={event.notes}
+				multiline
+				oncommit={(v) => update({ notes: v })}
+			/>
+			<Select
+				label="Reimburse from"
+				value={event.defaultReimbursementAccount}
+				options={assets}
+				onchange={(account) =>
+					run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
+			/>
 		</section>
 
-		<section>
-			<h2>File</h2>
-			<div class="line">
-				<span class="muted"><Icon name="file" /></span>
-				<span class="path" title={open.path}>{shortPath}</span>
-				<Button size="sm" onclick={() => run(() => revealFile(open.path))}>Show in Finder</Button>
-			</div>
-			<div class="line">
-				{#if issues}
-					<span class="warn"><Icon name="warn" /></span>
-					<strong class="warn">{issues === 1 ? '1 issue' : `${issues} issues`}</strong>
-				{:else}
-					<span class="ok"><Icon name="check" /></span>
-					<strong>No issues</strong>
-				{/if}
-				{#if checked}<span class="muted">Checked {checked}</span>{/if}
-				<span class="grow"></span>
-				<Button size="sm" icon="refresh" onclick={check}>Check again</Button>
-			</div>
-		</section>
-
-		<section>
-			<h2>Backups</h2>
-			<div class="keep">
-				<span>Keep</span>
-				<div class="count">
-					<Field invalid={keepInvalid}>
-						<input
-							type="text"
-							inputmode="numeric"
-							aria-label="Backups to keep"
-							bind:value={keepText}
-							onblur={setKeep}
-							onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-						/>
-					</Field>
+		<div class="stack">
+			<section>
+				<h2>Display</h2>
+				<div class="labelled">
+					<span class="label">Numbers and dates</span>
+					<Segmented
+						label="Numbers and dates"
+						value={format}
+						onchange={setFormat}
+						options={[
+							{ value: 'de', label: '1.234,56 €  ·  31.12.2026' },
+							{ value: 'en', label: '€1,234.56  ·  2026-12-31' }
+						]}
+					/>
 				</div>
-			</div>
-			<ul class="backups">
-				{#each backups as b (b.path)}
-					<li>
-						<span>{b.takenAt ? formatTimestamp(b.takenAt, format) : b.path}</span>
-						<span class="grow"></span>
-						<span class="muted size">{formatSize(b.size, format)}</span>
-						<span class="restore"
-							><Button size="sm" onclick={() => restore(b)}>Restore</Button></span
-						>
-					</li>
-				{/each}
-			</ul>
-		</section>
+			</section>
+
+			<section>
+				<h2>File</h2>
+				<div class="line">
+					<span class="muted"><Icon name="file" /></span>
+					<span class="path" title={open.path}>{shortPath}</span>
+					<Button size="sm" onclick={() => run(() => revealFile(open.path))}>Show in Finder</Button>
+				</div>
+				<div class="line">
+					{#if issues}
+						<span class="warn"><Icon name="warn" /></span>
+						<strong class="warn">{issues === 1 ? '1 issue' : `${issues} issues`}</strong>
+					{:else}
+						<span class="ok"><Icon name="check" /></span>
+						<strong>No issues</strong>
+					{/if}
+					{#if checked}<span class="muted">Checked {checked}</span>{/if}
+					<span class="grow"></span>
+					<Button size="sm" icon="refresh" onclick={check}>Check again</Button>
+				</div>
+			</section>
+
+			<section>
+				<h2>Backups</h2>
+				<div class="keep">
+					<span>Keep</span>
+					<div class="count">
+						<Field invalid={keepInvalid}>
+							<input
+								type="text"
+								inputmode="numeric"
+								aria-label="Backups to keep"
+								bind:value={keepText}
+								onblur={setKeep}
+								onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+							/>
+						</Field>
+					</div>
+				</div>
+				<ul class="backups">
+					{#each backups as b (b.path)}
+						<li>
+							<span>{b.takenAt ? formatTimestamp(b.takenAt, format) : b.path}</span>
+							<span class="grow"></span>
+							<span class="muted size">{formatSize(b.size, format)}</span>
+							<span class="restore"
+								><Button size="sm" onclick={() => restore(b)}>Restore</Button></span
+							>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		</div>
 	</div>
+
+	{#if error}<p class="error" role="alert">{error}</p>{/if}
 </div>
 
-{#if error}<p class="error" role="alert">{error}</p>{/if}
-
 <style>
+	.page {
+		padding: var(--spacing-10);
+	}
+
 	h1 {
 		margin: 0 0 28px;
 		font-size: var(--type-lg);

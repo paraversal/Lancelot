@@ -17,6 +17,8 @@
 		allowNegative = false,
 		large = false,
 		text: initial,
+		autofocus = false,
+		oninput: onvalue,
 		oncommit
 	}: {
 		label?: string;
@@ -27,6 +29,9 @@
 		large?: boolean;
 		/** Pre-fills the input, e.g. on the design page. */
 		text?: string;
+		autofocus?: boolean;
+		/** The parsed value after every keystroke (null while empty or invalid). */
+		oninput?: (value: Cents | null) => void;
 		oncommit?: (value: Cents | null) => void;
 	} = $props();
 
@@ -45,7 +50,10 @@
 	$effect.pre(() => {
 		const key = `${value}|${format}|${initial}`;
 		if (key === synced) return;
+		const echo = synced?.split('|')[1] === format && value === untrack(() => parsed?.cents ?? null);
 		synced = key;
+		// The parent passing back what this field just reported (`oninput`) is not a change.
+		if (echo) return;
 		text = initial ?? canonical(value);
 		parsed = value === null ? null : { cents: value, ambiguous: false };
 		error = null;
@@ -57,6 +65,7 @@
 		if (!text.trim()) {
 			parsed = null;
 			error = null;
+			onvalue?.(null);
 			return;
 		}
 		try {
@@ -64,10 +73,12 @@
 			if (mine !== seq) return;
 			parsed = r;
 			error = null;
+			onvalue?.(r.cents);
 		} catch (e) {
 			if (mine !== seq) return;
 			parsed = null;
 			error = e instanceof ApiError ? e.message : String(e);
+			onvalue?.(null);
 		}
 	}
 
@@ -85,6 +96,7 @@
 </script>
 
 <Field {label} {id} invalid={!!error}>
+	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		{id}
 		type="text"
@@ -95,6 +107,7 @@
 		onblur={commit}
 		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
 		class:large
+		{autofocus}
 		class:error
 		title={error ?? undefined}
 		aria-invalid={!!error}

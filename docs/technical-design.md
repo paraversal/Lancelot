@@ -321,7 +321,9 @@ checkIntegrity(): OpenEvent
 backups(): BackupInfo[] / restoreBackup(backup, target): OpenEvent
 parseAmount(input, allowNegative): Parsed                 // uses the app's number format
 parseDate(input): { date }                                // ISO
-// M3 onwards: txnSave, txnDelete, personSave, attachmentAdd, closingCountSet, …
+saveTxn(draft, id?): SavedTxn / deleteTxn(id): OpenEvent         // draft.total checks the split
+addAccount(kind, name) / addPerson(name): Added / renameAccount(id, name)
+// M3b onwards: attachments; M4: person details; M5: closing counts
 ```
 
 `backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.

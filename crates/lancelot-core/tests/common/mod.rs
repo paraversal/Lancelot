@@ -35,6 +35,7 @@ pub fn draft(description: &str, entry: Entry) -> TxnDraft {
         counterparty: None,
         notes: None,
         entry,
+        total: None,
     }
 }
 

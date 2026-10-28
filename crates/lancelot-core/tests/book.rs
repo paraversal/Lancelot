@@ -446,3 +446,30 @@ fn attachments_belong_to_transactions() {
     book.delete_txn(id).unwrap();
     assert_eq!(book.attachments().count(), 0);
 }
+
+#[test]
+fn a_split_must_add_up_to_the_receipt_total() {
+    let mut book = new_book();
+    let (cash, kitchen, drinks) = (
+        role(&book, Role::CashBox),
+        expense(&book, "Kitchen"),
+        expense(&book, "Drinks"),
+    );
+    let mut d = draft(
+        "Metro",
+        Entry::Expense {
+            payer: cash,
+            lines: vec![split(kitchen, "248,90"), split(drinks, "63,50")],
+        },
+    );
+    d.total = Some(eur("312,40"));
+    assert!(book.save_txn(&d, None).is_ok());
+    d.total = Some(eur("320"));
+    let err = book.save_txn(&d, None).unwrap_err();
+    assert_eq!((err.code(), err.field()), ("split_mismatch", Some("lines")));
+    assert_eq!(book.txns().count(), 1);
+    assert_eq!(
+        txn_amount(&book.txns().next().unwrap().lines),
+        eur("312,40")
+    );
+}

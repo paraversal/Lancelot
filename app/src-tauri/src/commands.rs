@@ -3,10 +3,12 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use lancelot_core::{AccountId, EventDetails, Parsed};
+use lancelot_core::{AccountId, AccountKind, EventDetails, Parsed, TxnDraft, TxnId};
 use tauri::State;
 
-use crate::api::{ApiError, AppInfo, BackupInfo, OpenEvent, ParsedDate, RecentEvent};
+use crate::api::{
+    Added, ApiError, AppInfo, BackupInfo, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
+};
 use crate::service::Service;
 use crate::settings::AppSettings;
 
@@ -125,4 +127,41 @@ pub async fn amount_parse(
 #[tauri::command]
 pub async fn date_parse(state: State<'_, AppState>, input: String) -> Result<ParsedDate> {
     with(&state, |s| s.parse_date(&input))
+}
+
+#[tauri::command]
+pub async fn txn_save(
+    state: State<'_, AppState>,
+    draft: TxnDraft,
+    id: Option<TxnId>,
+) -> Result<SavedTxn> {
+    with(&state, |s| s.save_txn(&draft, id))
+}
+
+#[tauri::command]
+pub async fn txn_delete(state: State<'_, AppState>, id: TxnId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_txn(id))
+}
+
+#[tauri::command]
+pub async fn account_add(
+    state: State<'_, AppState>,
+    kind: AccountKind,
+    name: String,
+) -> Result<Added> {
+    with(&state, |s| s.add_account(kind, &name))
+}
+
+#[tauri::command]
+pub async fn account_rename(
+    state: State<'_, AppState>,
+    id: AccountId,
+    name: String,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.rename_account(id, &name))
+}
+
+#[tauri::command]
+pub async fn person_add(state: State<'_, AppState>, name: String) -> Result<Added> {
+    with(&state, |s| s.add_person(&name))
 }
