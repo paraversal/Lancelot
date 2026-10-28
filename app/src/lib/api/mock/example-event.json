@@ -1,0 +1,786 @@
+{
+  "event": {
+    "name": "Sommerfest 2026",
+    "startsOn": "2026-06-12",
+    "endsOn": "2026-06-14",
+    "location": null,
+    "notes": null,
+    "closed": false,
+    "defaultReimbursementAccount": 1,
+    "closingOverrides": []
+  },
+  "accounts": [
+    {
+      "id": 1,
+      "kind": "asset",
+      "name": "Verein account",
+      "role": "verein",
+      "balance": 175700
+    },
+    {
+      "id": 2,
+      "kind": "asset",
+      "name": "Cash box",
+      "role": "cash_box",
+      "balance": 41290
+    },
+    {
+      "id": 3,
+      "kind": "opening",
+      "name": "Opening balance",
+      "role": "opening",
+      "balance": 0
+    },
+    {
+      "id": 4,
+      "kind": "income",
+      "name": "Tickets",
+      "role": null,
+      "balance": 652750
+    },
+    {
+      "id": 5,
+      "kind": "income",
+      "name": "Drink donations",
+      "role": null,
+      "balance": 81250
+    },
+    {
+      "id": 6,
+      "kind": "income",
+      "name": "General",
+      "role": null,
+      "balance": 5000
+    },
+    {
+      "id": 7,
+      "kind": "expense",
+      "name": "Kitchen",
+      "role": null,
+      "balance": 210000
+    },
+    {
+      "id": 8,
+      "kind": "expense",
+      "name": "Drinks",
+      "role": null,
+      "balance": 45200
+    },
+    {
+      "id": 9,
+      "kind": "expense",
+      "name": "Pfand",
+      "role": null,
+      "balance": 3200
+    },
+    {
+      "id": 10,
+      "kind": "expense",
+      "name": "Mobility",
+      "role": null,
+      "balance": 0
+    },
+    {
+      "id": 11,
+      "kind": "expense",
+      "name": "Venue",
+      "role": null,
+      "balance": 180000
+    },
+    {
+      "id": 12,
+      "kind": "expense",
+      "name": "Tech",
+      "role": null,
+      "balance": 61000
+    },
+    {
+      "id": 13,
+      "kind": "expense",
+      "name": "General",
+      "role": null,
+      "balance": 36850
+    },
+    {
+      "id": 14,
+      "kind": "person",
+      "name": "Anna",
+      "role": null,
+      "balance": 21240
+    },
+    {
+      "id": 15,
+      "kind": "person",
+      "name": "Malte",
+      "role": null,
+      "balance": 11000
+    },
+    {
+      "id": 16,
+      "kind": "person",
+      "name": "Bob",
+      "role": null,
+      "balance": -18000
+    },
+    {
+      "id": 17,
+      "kind": "person",
+      "name": "Clara",
+      "role": null,
+      "balance": 0
+    }
+  ],
+  "persons": [
+    {
+      "account": 14,
+      "name": "Anna",
+      "holder": null,
+      "iban": null,
+      "bic": null,
+      "contact": null,
+      "notes": null,
+      "summary": {
+        "advanced": 51240,
+        "held": 0,
+        "reimbursed": 30000,
+        "repaid": 0,
+        "net": 21240,
+        "status": "owed"
+      }
+    },
+    {
+      "account": 15,
+      "name": "Malte",
+      "holder": null,
+      "iban": null,
+      "bic": null,
+      "contact": null,
+      "notes": null,
+      "summary": {
+        "advanced": 11000,
+        "held": 0,
+        "reimbursed": 0,
+        "repaid": 0,
+        "net": 11000,
+        "status": "owed"
+      }
+    },
+    {
+      "account": 16,
+      "name": "Bob",
+      "holder": null,
+      "iban": null,
+      "bic": null,
+      "contact": null,
+      "notes": null,
+      "summary": {
+        "advanced": 12000,
+        "held": 30000,
+        "reimbursed": 0,
+        "repaid": 0,
+        "net": -18000,
+        "status": "owes"
+      }
+    },
+    {
+      "account": 17,
+      "name": "Clara",
+      "holder": null,
+      "iban": null,
+      "bic": null,
+      "contact": null,
+      "notes": null,
+      "summary": {
+        "advanced": 9500,
+        "held": 0,
+        "reimbursed": 9500,
+        "repaid": 0,
+        "net": 0,
+        "status": "settled"
+      }
+    }
+  ],
+  "txns": [
+    {
+      "id": 1,
+      "kind": "income",
+      "date": "2026-06-13",
+      "description": "Ticket sheet",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 4,
+          "amount": -622750,
+          "memo": null
+        },
+        {
+          "account": 1,
+          "amount": 622750,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 2,
+      "kind": "income",
+      "date": "2026-06-13",
+      "description": "Tickets, paid to Bob",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 4,
+          "amount": -30000,
+          "memo": null
+        },
+        {
+          "account": 16,
+          "amount": 30000,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 3,
+      "kind": "income",
+      "date": "2026-06-13",
+      "description": "Drink donations",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 5,
+          "amount": -81250,
+          "memo": null
+        },
+        {
+          "account": 2,
+          "amount": 81250,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 4,
+      "kind": "income",
+      "date": "2026-06-13",
+      "description": "Donation box",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 6,
+          "amount": -5000,
+          "memo": null
+        },
+        {
+          "account": 2,
+          "amount": 5000,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 5,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Hall rent",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -180000,
+          "memo": null
+        },
+        {
+          "account": 11,
+          "amount": 180000,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 1,
+          "txn": 5,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Hoffmann drinks",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -45200,
+          "memo": null
+        },
+        {
+          "account": 8,
+          "amount": 42000,
+          "memo": null
+        },
+        {
+          "account": 9,
+          "amount": 3200,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 2,
+          "txn": 6,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "PA rental",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -50000,
+          "memo": null
+        },
+        {
+          "account": 12,
+          "amount": 50000,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 3,
+          "txn": 7,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Catering",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -109850,
+          "memo": null
+        },
+        {
+          "account": 7,
+          "amount": 109850,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 4,
+          "txn": 8,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Event insurance",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -22500,
+          "memo": null
+        },
+        {
+          "account": 13,
+          "amount": 22500,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 5,
+          "txn": 9,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Großmarkt",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 2,
+          "amount": -39125,
+          "memo": null
+        },
+        {
+          "account": 7,
+          "amount": 34275,
+          "memo": null
+        },
+        {
+          "account": 13,
+          "amount": 4850,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 6,
+          "txn": 10,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Bakery",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 2,
+          "amount": -22635,
+          "memo": null
+        },
+        {
+          "account": 7,
+          "amount": 22635,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 7,
+          "txn": 11,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Groceries",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 14,
+          "amount": -31240,
+          "memo": null
+        },
+        {
+          "account": 7,
+          "amount": 31240,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 8,
+          "txn": 12,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Cables",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 15,
+          "amount": -11000,
+          "memo": null
+        },
+        {
+          "account": 12,
+          "amount": 11000,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 9,
+          "txn": 13,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Snacks",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 16,
+          "amount": -12000,
+          "memo": null
+        },
+        {
+          "account": 7,
+          "amount": 12000,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 10,
+          "txn": 14,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Decoration",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 17,
+          "amount": -9500,
+          "memo": null
+        },
+        {
+          "account": 13,
+          "amount": 9500,
+          "memo": null
+        }
+      ],
+      "attachments": [
+        {
+          "id": 11,
+          "txn": 15,
+          "filename": "receipt.jpg",
+          "mime": "image/jpeg",
+          "size": 1024,
+          "sha256": "00",
+          "addedAt": "2026-06-14T18:00:00Z"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "kind": "expense",
+      "date": "2026-06-13",
+      "description": "Cups and ice",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 2,
+          "amount": -3200,
+          "memo": null
+        },
+        {
+          "account": 8,
+          "amount": 3200,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 17,
+      "kind": "transfer",
+      "date": "2026-06-13",
+      "description": "Change money",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 14,
+          "amount": -20000,
+          "memo": null
+        },
+        {
+          "account": 2,
+          "amount": 20000,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 18,
+      "kind": "settle",
+      "date": "2026-06-13",
+      "description": "Reimbursement Anna",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -30000,
+          "memo": null
+        },
+        {
+          "account": 14,
+          "amount": 30000,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    },
+    {
+      "id": 19,
+      "kind": "settle",
+      "date": "2026-06-13",
+      "description": "Reimbursement Clara",
+      "counterparty": null,
+      "notes": null,
+      "lines": [
+        {
+          "account": 1,
+          "amount": -9500,
+          "memo": null
+        },
+        {
+          "account": 17,
+          "amount": 9500,
+          "memo": null
+        }
+      ],
+      "attachments": []
+    }
+  ],
+  "totals": {
+    "income": 739000,
+    "expense": 536250,
+    "result": 202750
+  },
+  "whereTheMoneyIs": {
+    "assets": [
+      {
+        "account": 1,
+        "balance": 175700
+      },
+      {
+        "account": 2,
+        "balance": 41290
+      }
+    ],
+    "heldByPeople": 18000,
+    "owedToPeople": 32240,
+    "opening": 0,
+    "total": 202750
+  },
+  "cash": [
+    {
+      "account": 2,
+      "computed": 41290,
+      "counted": 41000,
+      "difference": -290
+    }
+  ],
+  "closingCounts": [
+    {
+      "account": 2,
+      "date": "2026-06-14",
+      "amount": 41000
+    }
+  ],
+  "openItems": [
+    {
+      "type": "personBalance",
+      "person": 14,
+      "net": 21240
+    },
+    {
+      "type": "personBalance",
+      "person": 15,
+      "net": 11000
+    },
+    {
+      "type": "personBalance",
+      "person": 16,
+      "net": -18000
+    },
+    {
+      "type": "missingReceipt",
+      "txn": 16
+    },
+    {
+      "type": "cashDifference",
+      "account": 2,
+      "difference": -290
+    }
+  ]
+}

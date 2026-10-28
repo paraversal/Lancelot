@@ -324,7 +324,13 @@ parseDate(input): { date }                                // ISO
 // M3 onwards: txnSave, txnDelete, personSave, attachmentAdd, closingCountSet, …
 ```
 
-`restoreBackup` only accepts a backup of the open event. It copies it to `target`, never over an existing file, and opens the copy.
+`backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.
+
+**Menu and keyboard.** New Event (⇧⌘N), Open (⌘O), Close (⌘W) and Settings (⌘,) are native menu items (`app/src-tauri/src/lib.rs`); they send a `menu` event that `app/src/lib/shortcuts.ts` turns into the action. ⌘1–3 switch pages and Esc closes the right-hand panel.
+
+**Saving edits.** Fields save when they are left (blur or Enter). Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
+
+**Development mock.** In a plain browser (`pnpm dev`), `lib/api` uses `lib/api/mock` instead of Tauri: the example event and an empty one, exported as JSON by `crates/lancelot-core/tests/mock_event.rs`, plus rough stand-ins for the commands and dialogs. It is loaded only in development and never in the app.
 
 **Attachments** are served through a custom URI scheme, `lancelot://attachment/<id>`, which is registered in Tauri. `<img>` and `<iframe>` load them directly, without base64 over IPC.
 
@@ -347,7 +353,7 @@ parseDate(input): { date }                                // ISO
 
 - **Where:** `<backup dir>/<event_uuid>/<UTC timestamp>.lancelot`, written with `VACUUM INTO`, which gives a consistent copy even while the file is open. The core takes the backup folder as an option; the app passes `<app data>/backups`. The UUID is validated when it is read, so a damaged file cannot point backups elsewhere.
 - **When:**
-  - on open, before the first write;
+  - on open, once the file has passed the integrity check (a damaged file is never backed up, so retrying it cannot push the good backups out);
   - before every migration;
   - after a write, if the last backup is older than 10 minutes.
 - **How many:** the last **N = 20** are kept. N is an app setting.
@@ -390,6 +396,7 @@ Event settings (name, dates, default reimbursement account) live inside the even
   | `/event/ledger` | Ledger |
   | `/event/people` | People |
   | `/event/settings` | Settings |
+  | `/design` | the components in their states, next to the System frame (development builds only) |
 
   Phase 2 adds `/event/budget`, `/event/tickets` and `/event/drinks`.
 

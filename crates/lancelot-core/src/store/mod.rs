@@ -177,8 +177,8 @@ impl Store {
         Store::open(path, options)
     }
 
-    /// Opens an event file: checks that it is one, takes the single-writer lock, backs it up,
-    /// migrates it if needed, runs the full integrity check and loads the book.
+    /// Opens an event file: checks that it is one, takes the single-writer lock, migrates it if
+    /// needed, runs the full integrity check, loads the book and backs it up.
     ///
     /// A file that cannot be loaded is reported as [`StoreError::Damaged`]. A file that loads
     /// but has issues opens, and the issues are in the returned report (R-COR-5).
@@ -218,13 +218,20 @@ impl Store {
         }
         let uuid = read::event_uuid(&conn)?;
 
+        // Back up before migrating, so the original survives a failed migration. A file of the
+        // current version is checked first instead: a damaged file is never backed up, so
+        // retrying it can never push the good backups out.
         let now = (options.clock)();
         let mut last_backup = None;
-        if let Some(policy) = &options.backups {
-            backup::write(&conn, policy, &uuid, now)?;
-            last_backup = Some(now);
-        }
+        let mut backup = |conn: &Connection| -> Result<(), StoreError> {
+            if let Some(policy) = &options.backups {
+                backup::write(conn, policy, &uuid, now)?;
+                last_backup = Some(now);
+            }
+            Ok(())
+        };
         if version < SCHEMA_VERSION {
+            backup(&conn)?;
             migrate(&mut conn, version)?;
         }
 
@@ -237,6 +244,9 @@ impl Store {
             Err(_) if report.has_errors() => return Err(StoreError::Damaged(report)),
             Err(reason) => return Err(StoreError::corrupt(reason)),
         };
+        if version == SCHEMA_VERSION {
+            backup(&conn)?;
+        }
         let store = Store {
             conn,
             path: path.to_owned(),
@@ -465,6 +475,21 @@ impl Store {
             Err(e) => self.backup_error = Some(e.to_string()),
         }
     }
+}
+
+/// Reads the UUID of an event file without opening it as a store, e.g. to list the backups of a
+/// file that is damaged. Fails while another store holds the file open.
+pub fn event_uuid_of(path: &Path) -> Result<String, StoreError> {
+    check_header(path)?;
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    let app_id: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
+    if app_id != i64::from(APPLICATION_ID) {
+        return Err(StoreError::NotAnEventFile);
+    }
+    read::event_uuid(&conn)
 }
 
 fn configure(conn: &Connection) -> Result<(), StoreError> {

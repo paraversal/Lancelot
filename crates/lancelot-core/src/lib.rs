@@ -33,7 +33,8 @@ pub use model::{
 pub use money::{Cents, MoneyError};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
-    BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, list_backups,
+    BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,
+    list_backups,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

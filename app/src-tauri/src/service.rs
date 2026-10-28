@@ -8,13 +8,13 @@ use std::path::{Path, PathBuf};
 
 use lancelot_core::{
     AccountId, BackupPolicy, EventDetails, EventSnapshot, Parsed, Report, Store, StoreOptions,
-    backup_time, format_date, list_backups, parse_amount, parse_date,
+    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 use crate::api::{ApiError, BackupInfo, OpenEvent, ParsedDate, RecentEvent};
-use crate::settings::{AppSettings, SettingsFile};
+use crate::settings::{AppSettings, RecentEntry, SettingsFile};
 
 pub struct Service {
     data_dir: PathBuf,
@@ -29,6 +29,19 @@ struct Opened {
 }
 
 type Result<T> = std::result::Result<T, ApiError>;
+
+fn recent_entry(store: &Store) -> RecentEntry {
+    let d = &store.book().event().details;
+    let iso =
+        |date: Option<time::Date>| date.map(|d| format_date(d, lancelot_core::NumberFormat::En));
+    RecentEntry {
+        path: store.path().to_owned(),
+        name: d.name.clone(),
+        starts_on: iso(d.starts_on),
+        ends_on: iso(d.ends_on),
+        last_opened: now(),
+    }
+}
 
 fn now() -> String {
     OffsetDateTime::now_utc()
@@ -89,6 +102,8 @@ impl Service {
             .map(|r| RecentEvent {
                 path: r.path.display().to_string(),
                 name: r.name.clone(),
+                starts_on: r.starts_on.clone(),
+                ends_on: r.ends_on.clone(),
                 last_opened: r.last_opened.clone(),
                 exists: r.path.is_file(),
             })
@@ -126,8 +141,7 @@ impl Service {
     }
 
     fn adopt(&mut self, store: Store, integrity: Report) -> Result<OpenEvent> {
-        self.file
-            .remember(store.path(), &store.book().event().details.name, &now());
+        self.file.remember(recent_entry(&store));
         self.file.save(&self.settings_path())?;
         self.open = Some(Opened {
             store,
@@ -162,15 +176,16 @@ impl Service {
         let open = self.open.as_mut().ok_or_else(ApiError::no_event)?;
         command(&mut open.store)?;
         open.revision += 1;
-        let name = open.store.book().event().details.name.clone();
-        let path = open.store.path().to_owned();
-        if self
-            .file
-            .recent
-            .first()
-            .is_some_and(|r| r.path == path && r.name != name)
-        {
-            self.file.remember(&path, &name, &now());
+        // Keep the start screen's name and dates in step with the event.
+        let entry = recent_entry(&open.store);
+        let stale = self.file.recent.first().is_some_and(|r| {
+            r.path == entry.path
+                && (r.name != entry.name
+                    || r.starts_on != entry.starts_on
+                    || r.ends_on != entry.ends_on)
+        });
+        if stale {
+            self.file.remember(entry);
             self.file.save(&self.settings_path())?;
         }
         self.current().ok_or_else(ApiError::no_event)
@@ -194,29 +209,39 @@ impl Service {
 
     // --- backups -------------------------------------------------------------------------
 
-    pub fn backups(&self) -> Result<Vec<BackupInfo>> {
-        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
-        let paths = list_backups(&self.backups_dir(), open.store.event_uuid())?;
+    /// The backups of an event file, newest first. Works for the open event and for a file
+    /// that cannot be opened, e.g. a damaged one.
+    pub fn backups(&self, event: &Path) -> Result<Vec<BackupInfo>> {
+        let uuid = match &self.open {
+            Some(o) if o.store.path() == event => o.store.event_uuid().to_owned(),
+            _ => event_uuid_of(event)?,
+        };
+        let paths = list_backups(&self.backups_dir(), &uuid)?;
         Ok(paths
             .into_iter()
             .map(|p| BackupInfo {
                 taken_at: backup_time(&p).and_then(|t| t.format(&Rfc3339).ok()),
+                size: std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0),
                 path: p.display().to_string(),
             })
             .collect())
     }
 
-    /// Copies a backup of the open event to `target` (never over an existing file) and opens
-    /// the copy instead.
-    pub fn restore_backup(&mut self, backup: &Path, target: &Path) -> Result<OpenEvent> {
+    /// Copies a backup of `event` to `target` (never over an existing file) and opens the copy.
+    pub fn restore_backup(
+        &mut self,
+        event: &Path,
+        backup: &Path,
+        target: &Path,
+    ) -> Result<OpenEvent> {
         let known = self
-            .backups()?
+            .backups(event)?
             .into_iter()
             .any(|b| Path::new(&b.path) == backup);
         if !known {
             return Err(ApiError::new(
                 "not_a_backup",
-                "this file is not a backup of the open event",
+                "this file is not a backup of this event",
             ));
         }
         let mut from = std::fs::File::open(backup)?;
@@ -290,8 +315,14 @@ mod tests {
         assert_eq!(open.snapshot.event.details.name, "Sommerfest");
         assert!(open.integrity.is_clean());
 
-        let renamed = s.update_event(details("Sommerfest 2026")).unwrap();
+        let mut dated = details("Sommerfest 2026");
+        dated.starts_on = Some(time::macros::date!(2026 - 06 - 12));
+        let renamed = s.update_event(dated).unwrap();
         assert_eq!(renamed.revision, 2);
+        assert_eq!(
+            s.recent_events()[0].starts_on.as_deref(),
+            Some("2026-06-12")
+        );
         s.close_file();
         assert_eq!(
             s.update_event(details("x")).unwrap_err().code,
@@ -377,7 +408,7 @@ mod tests {
         let path = dir.path().join("e.lancelot");
         let mut s = service(&dir);
         s.create_event(&path, details("Before")).unwrap();
-        let backups = s.backups().unwrap();
+        let backups = s.backups(&path).unwrap();
         assert_eq!(backups.len(), 1);
         assert!(backups[0].taken_at.is_some());
         s.update_event(details("After")).unwrap();
@@ -385,15 +416,15 @@ mod tests {
         let backup = PathBuf::from(&backups[0].path);
         let copy = dir.path().join("restored.lancelot");
         assert_eq!(
-            s.restore_backup(&backup, &path).unwrap_err().code,
+            s.restore_backup(&path, &backup, &path).unwrap_err().code,
             "already_exists"
         );
         assert_eq!(
-            s.restore_backup(&path, &copy).unwrap_err().code,
+            s.restore_backup(&path, &path, &copy).unwrap_err().code,
             "not_a_backup"
         );
 
-        let restored = s.restore_backup(&backup, &copy).unwrap();
+        let restored = s.restore_backup(&path, &backup, &copy).unwrap();
         assert_eq!(restored.snapshot.event.details.name, "Before");
         assert_eq!(restored.file_name, "restored.lancelot");
         // The original is untouched and free again.
@@ -402,5 +433,33 @@ mod tests {
             s.open_event(&path).unwrap().snapshot.event.details.name,
             "After"
         );
+    }
+
+    #[test]
+    fn a_damaged_file_can_be_restored_from_its_backups() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("damaged.lancelot");
+        let mut s = service(&dir);
+        s.create_event(&path, details("Winterfest")).unwrap();
+        s.close_file();
+
+        // Break the file behind Lancelot's back: an empty transaction that is sealed.
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "PRAGMA foreign_keys = OFF; INSERT INTO line (txn_id, position, account_id, amount) VALUES (99, 0, 1, 5);",
+        )
+        .unwrap();
+        drop(conn);
+        let err = s.open_event(&path).unwrap_err();
+        assert_eq!(err.code, "damaged");
+        assert!(err.report.is_some());
+
+        let backups = s.backups(&path).unwrap();
+        assert_eq!(backups.len(), 1);
+        let copy = dir.path().join("restored.lancelot");
+        let open = s
+            .restore_backup(&path, Path::new(&backups[0].path), &copy)
+            .unwrap();
+        assert_eq!(open.snapshot.event.details.name, "Winterfest");
     }
 }

@@ -104,6 +104,8 @@ pub struct OpenEvent {
 pub struct RecentEvent {
     pub path: String,
     pub name: String,
+    pub starts_on: Option<String>,
+    pub ends_on: Option<String>,
     pub last_opened: String,
     /// False when the file was moved or deleted since.
     pub exists: bool,
@@ -116,6 +118,8 @@ pub struct BackupInfo {
     pub path: String,
     /// RFC 3339 UTC, from the file name.
     pub taken_at: Option<String>,
+    #[ts(type = "number")]
+    pub size: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]

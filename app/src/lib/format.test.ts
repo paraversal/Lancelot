@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import amountCases from '../../../fixtures/amount-format.json';
-import { formatAmount, formatDate } from './format';
+import { formatAmount, formatDate, formatDateRange, formatSize, formatTimestamp } from './format';
 import type { NumberFormat } from './api/generated/NumberFormat';
 import type { SignStyle } from './api/generated/SignStyle';
 
@@ -26,5 +26,38 @@ describe('formatDate', () => {
 	it('formats both styles', () => {
 		expect(formatDate('2026-06-03', 'de')).toBe('03.06.2026');
 		expect(formatDate('2026-06-03', 'en')).toBe('2026-06-03');
+	});
+});
+
+describe('formatDateRange', () => {
+	it('shortens the shared parts in De', () => {
+		expect(formatDateRange('2026-06-12', '2026-06-14', 'de')).toBe('12.–14.06.2026');
+		expect(formatDateRange('2026-06-28', '2026-07-02', 'de')).toBe('28.06.–02.07.2026');
+		expect(formatDateRange('2026-12-30', '2027-01-02', 'de')).toBe('30.12.2026–02.01.2027');
+		expect(formatDateRange('2026-06-12', '2026-06-12', 'de')).toBe('12.06.2026');
+	});
+
+	it('handles En and missing dates', () => {
+		expect(formatDateRange('2026-06-12', '2026-06-14', 'en')).toBe('2026-06-12 – 2026-06-14');
+		expect(formatDateRange('2026-06-12', null, 'de')).toBe('12.06.2026');
+		expect(formatDateRange(null, null, 'de')).toBe('');
+	});
+});
+
+describe('formatTimestamp and formatSize', () => {
+	it('shows today as Today', () => {
+		const now = new Date(2026, 5, 14, 20, 0);
+		expect(formatTimestamp(new Date(2026, 5, 14, 18, 2).toISOString(), 'de', now)).toBe(
+			'Today 18:02'
+		);
+		expect(formatTimestamp(new Date(2026, 5, 13, 23, 10).toISOString(), 'de', now)).toBe(
+			'13.06.2026 23:10'
+		);
+	});
+
+	it('formats sizes in the number format', () => {
+		expect(formatSize(2_412_000, 'de')).toBe('2,4 MB');
+		expect(formatSize(2_412_000, 'en')).toBe('2.4 MB');
+		expect(formatSize(512, 'en')).toBe('512 B');
 	});
 });

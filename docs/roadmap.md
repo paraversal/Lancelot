@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.3. M0 and M1 are done. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.4. M0, M1 and M2 are done. It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -97,19 +97,19 @@ Built in two steps, each in its own pull request.
 - [x] UI: typed command wrappers, the session state, and `formatAmount`/`formatDate` tested against the shared fixture.
 
 **M2b · Screens and components**
-- [ ] **Design the start screen, the new-event panel and the Settings screen** in `UI.fig`, plus the integrity banner and the "already open" and "damaged" states.
-- [ ] Svelte components from `docs/design/README.md`, on a development-only `/design` page that mirrors the System frame:
-  - [ ] Button, filter chip, segmented control, text field, select, date field
-  - [ ] **Amount input with live preview** (calls the core parser)
-  - [ ] Balance cell, receipt indicator, table with day groups, right-hand panel, stacked bar
-- [ ] A start screen with recent events, plus New and Open, using native file dialogs.
-- [ ] The event window: sidebar with the event, its state and dates, navigation with counts and attention badges, and the file name.
-- [ ] Settings: number/date format (R-NF-6), backup count and the backup list with restore, event details and the default reimbursement account, the file and its integrity check.
-- [ ] A keyboard model: ⌘O, ⇧⌘N, ⌘, , ⌘W, ⌘1–3 and Esc (R-NF-7).
-- [ ] An integrity banner with "Check again" (R-COR-5).
-- [ ] A development-only mock backend, so the screens can be checked in a browser.
+- [x] **Design the start screen, the new-event panel and the Settings screen** in `UI.fig`, plus the integrity banner and the "already open" and "damaged" states.
+- [x] Svelte components from `docs/design/README.md`, on a development-only `/design` page that mirrors the System frame:
+  - [x] Button, filter chip, segmented control, text field, select, date field
+  - [x] **Amount input with live preview** (calls the core parser)
+  - [x] Balance cell, receipt indicator, table with day groups, right-hand panel, stacked bar
+- [x] A start screen with recent events, plus New and Open, using native file dialogs.
+- [x] The event window: sidebar with the event, its state and dates, navigation with counts and attention badges, and the file name.
+- [x] Settings: number/date format (R-NF-6), backup count and the backup list with restore, event details and the default reimbursement account, the file and its integrity check.
+- [x] A keyboard model: ⌘O, ⇧⌘N, ⌘, , ⌘W as native menu items, ⌘1–3 and Esc (R-NF-7).
+- [x] An integrity banner with "Check again" (R-COR-5).
+- [x] A development-only mock backend, so the screens can be checked in a browser.
 
-**Exit:** you can create, open and rename an event and switch the number format. The amount input behaves as it does in the System frame.
+**Exit:** you can create, open and rename an event and switch the number format. The amount input behaves as it does in the System frame. ✓ Checked in the browser against the mock backend; the native dialogs and menu still need a click-through in the app.
 
 ### M3 · Ledger
 
@@ -213,4 +213,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M2b: the screens and components, starting with the designs in `UI.fig`.
+M3: the ledger — entry panel, splits, attachments, grouping by day or category.

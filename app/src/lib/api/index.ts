@@ -1,6 +1,6 @@
 // Typed wrappers around the Tauri commands (docs/technical-design.md §5).
 // The types are generated from Rust by ts-rs; see ./generated.
-import { invoke } from '@tauri-apps/api/core';
+import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
 
 import type { AccountId } from './generated/AccountId';
 import type { ApiError as ApiErrorData } from './generated/ApiError';
@@ -33,10 +33,26 @@ function isErrorData(value: unknown): value is ApiErrorData {
 	return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
 }
 
+type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
+
+/** Tauri's invoke in the app; in a plain browser during development, the mock backend. */
+async function backend(): Promise<Invoke> {
+	if (isTauri()) return tauriInvoke;
+	if (import.meta.env.DEV) return (await import('./mock')).invoke;
+	throw new ApiError({
+		code: 'internal',
+		message: 'not running in Lancelot',
+		field: null,
+		report: null
+	});
+}
+
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+	const invoke = await backend();
 	try {
 		return await invoke<T>(command, args);
 	} catch (e) {
+		if (e instanceof ApiError) throw e;
 		if (isErrorData(e)) throw new ApiError(e);
 		throw new ApiError({ code: 'internal', message: String(e), field: null, report: null });
 	}
@@ -61,9 +77,10 @@ export const api = {
 		call<OpenEvent>('event_set_default_reimbursement_account', { account }),
 
 	checkIntegrity: () => call<OpenEvent>('integrity_check'),
-	backups: () => call<BackupInfo[]>('backups_list'),
-	restoreBackup: (backup: string, target: string) =>
-		call<OpenEvent>('backup_restore', { backup, target }),
+	/** Backups of an event file: the open one, or one that cannot be opened. */
+	backups: (event: string) => call<BackupInfo[]>('backups_list', { event }),
+	restoreBackup: (event: string, backup: string, target: string) =>
+		call<OpenEvent>('backup_restore', { event, backup, target }),
 
 	parseAmount: (input: string, allowNegative: boolean) =>
 		call<Parsed>('amount_parse', { input, allowNegative }),

@@ -99,17 +99,18 @@ pub async fn integrity_check(state: State<'_, AppState>) -> Result<OpenEvent> {
 }
 
 #[tauri::command]
-pub async fn backups_list(state: State<'_, AppState>) -> Result<Vec<BackupInfo>> {
-    with(&state, |s| s.backups())
+pub async fn backups_list(state: State<'_, AppState>, event: PathBuf) -> Result<Vec<BackupInfo>> {
+    with(&state, |s| s.backups(&event))
 }
 
 #[tauri::command]
 pub async fn backup_restore(
     state: State<'_, AppState>,
+    event: PathBuf,
     backup: PathBuf,
     target: PathBuf,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.restore_backup(&backup, &target))
+    with(&state, |s| s.restore_backup(&event, &backup, &target))
 }
 
 #[tauri::command]
