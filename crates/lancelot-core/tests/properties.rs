@@ -97,7 +97,13 @@ proptest! {
                 let l = b.ledger();
                 let balances: Vec<_> = b.accounts().map(|a| l.balance(a.id)).collect();
                 let persons: Vec<_> = l.persons().map(|(id, p)| (id, *p)).collect();
-                (balances, persons, l.where_the_money_is().clone(), l.cash().to_vec(), l.missing_receipts().len())
+                // The opening count points at the first opening transaction, so drop its id.
+                let cash: Vec<_> = l
+                    .cash()
+                    .iter()
+                    .map(|c| (c.account, c.opening.map(|o| (o.date, o.amount)), c.computed, c.counted))
+                    .collect();
+                (balances, persons, l.where_the_money_is().clone(), cash, l.missing_receipts().len())
             };
             prop_assert_eq!(figures(&edited), figures(&replaced));
         }

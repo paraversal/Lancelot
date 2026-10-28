@@ -13,8 +13,8 @@ use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
 use crate::model::{
-    Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
-    Person, Role, Txn, TxnId,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, ClosingCount, Event,
+    EventDetails, Person, Role, Txn, TxnId, TxnKind,
 };
 use crate::money::Cents;
 
@@ -27,6 +27,9 @@ const DEFAULT_INCOME: &[&str] = &["Tickets", "Drink donations", "General"];
 const DEFAULT_EXPENSE: &[&str] = &[
     "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General",
 ];
+
+/// The description of an opening transaction made by [`Book::set_opening_count`].
+const OPENING_DESCRIPTION: &str = "Opening count";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Book {
@@ -143,11 +146,14 @@ impl Book {
             Some(Role::Verein | Role::CashBox) => a.kind == AccountKind::Asset,
             _ => true,
         });
+        let types_ok = accounts
+            .values()
+            .all(|a| a.asset_type.is_some() == (a.kind == AccountKind::Asset));
         let names: BTreeSet<(AccountKind, String)> = accounts
             .values()
             .map(|a| (a.kind, a.name.to_ascii_lowercase()))
             .collect();
-        if !opening_ok || !roles_ok || names.len() != accounts.len() {
+        if !opening_ok || !roles_ok || !types_ok || names.len() != accounts.len() {
             return Err(bad("account kinds, roles or names are inconsistent"));
         }
 
@@ -284,7 +290,8 @@ impl Book {
 
     // --- accounts and persons ------------------------------------------------------------
 
-    /// Adds an asset account or a category. Persons are added with [`Book::add_person`].
+    /// Adds an asset account (a bank account) or a category. Persons are added with
+    /// [`Book::add_person`].
     pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<AccountId, DomainError> {
         if !matches!(
             kind,
@@ -297,6 +304,36 @@ impl Book {
         self.change(|book| {
             let name = book.unique_name(kind, name, None)?;
             Ok(book.insert_account(kind, &name, None))
+        })
+    }
+
+    /// Adds a bank or cash account.
+    pub fn add_asset(
+        &mut self,
+        name: &str,
+        asset_type: AssetType,
+    ) -> Result<AccountId, DomainError> {
+        let id = self.add_account(AccountKind::Asset, name)?;
+        self.set_asset_type(id, asset_type)?;
+        Ok(id)
+    }
+
+    /// Makes an asset account a bank or a cash account. Its counts stay.
+    pub fn set_asset_type(
+        &mut self,
+        id: AccountId,
+        asset_type: AssetType,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            let account = book
+                .accounts
+                .get_mut(&id)
+                .ok_or(DomainError::UnknownAccount { field: "id".into() })?;
+            if account.kind != AccountKind::Asset {
+                return Err(DomainError::WrongAccountKind { field: "id".into() });
+            }
+            account.asset_type = Some(asset_type);
+            Ok(())
         })
     }
 
@@ -407,11 +444,7 @@ impl Book {
 
     /// Deletes a transaction together with its attachments.
     pub fn delete_txn(&mut self, id: TxnId) -> Result<Txn, DomainError> {
-        self.change(|book| {
-            let txn = book.txns.remove(&id).ok_or(DomainError::UnknownTxn)?;
-            book.attachments.retain(|_, a| a.txn != id);
-            Ok(txn)
-        })
+        self.change(|book| book.remove_txn(id).ok_or(DomainError::UnknownTxn))
     }
 
     // --- attachments and counts ----------------------------------------------------------
@@ -499,6 +532,59 @@ impl Book {
                     amount,
                 },
             );
+            Ok(())
+        })
+    }
+
+    /// Records the amount counted in an asset account at the start (R-ISO-3) as its one
+    /// opening transaction, replacing any it had. Returns that transaction.
+    pub fn set_opening_count(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<TxnId, DomainError> {
+        self.change(|book| {
+            let entry = Entry::Opening { account, amount };
+            let lines = build_lines(&entry, &book.accounts)?;
+            let existing = book.opening_txns(account);
+            let (id, description) = match existing.first() {
+                Some(first) => (*first, book.txns[first].description.clone()),
+                None => {
+                    let id = TxnId(book.next.txn);
+                    book.next.txn += 1;
+                    (id, OPENING_DESCRIPTION.to_owned())
+                }
+            };
+            for other in existing.iter().skip(1) {
+                book.remove_txn(*other);
+            }
+            let previous = book.txns.get(&id);
+            let (counterparty, notes) = previous
+                .map(|t| (t.counterparty.clone(), t.notes.clone()))
+                .unwrap_or_default();
+            book.txns.insert(
+                id,
+                Txn {
+                    id,
+                    kind: TxnKind::Opening,
+                    date,
+                    description,
+                    counterparty,
+                    notes,
+                    lines,
+                },
+            );
+            Ok(id)
+        })
+    }
+
+    /// Removes the account's opening transactions.
+    pub fn clear_opening_count(&mut self, account: AccountId) -> Result<(), DomainError> {
+        self.change(|book| {
+            for id in book.opening_txns(account) {
+                book.remove_txn(id);
+            }
             Ok(())
         })
     }
@@ -603,6 +689,11 @@ impl Book {
     fn insert_account(&mut self, kind: AccountKind, name: &str, role: Option<Role>) -> AccountId {
         let id = AccountId(self.next.account);
         self.next.account += 1;
+        let asset_type = match (kind, role) {
+            (AccountKind::Asset, Some(Role::CashBox)) => Some(AssetType::Cash),
+            (AccountKind::Asset, _) => Some(AssetType::Bank),
+            _ => None,
+        };
         self.accounts.insert(
             id,
             Account {
@@ -610,9 +701,25 @@ impl Book {
                 kind,
                 name: name.to_owned(),
                 role,
+                asset_type,
             },
         );
         id
+    }
+
+    fn remove_txn(&mut self, id: TxnId) -> Option<Txn> {
+        let txn = self.txns.remove(&id)?;
+        self.attachments.retain(|_, a| a.txn != id);
+        Some(txn)
+    }
+
+    /// The opening transactions that bring money into `account`, oldest first.
+    fn opening_txns(&self, account: AccountId) -> Vec<TxnId> {
+        self.txns
+            .values()
+            .filter(|t| t.kind == TxnKind::Opening && t.lines.iter().any(|l| l.account == account))
+            .map(|t| t.id)
+            .collect()
     }
 
     /// A trimmed, non-empty name that no other account of the same kind uses (ignoring case).

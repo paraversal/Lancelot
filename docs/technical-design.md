@@ -105,19 +105,19 @@ Check against Bob from requirements §4.1:
 - He advanced 120 € for food: line `−120`.
 - Raw balance `+180`, displayed `−180,00 €`, which means "Bob owes 180,00 €". ✓
 
-### 3.2 Schema (MVP, schema version 1)
+### 3.2 Schema (MVP, schema version 2)
 
-The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql) plus [`0002_asset_type.sql`](../crates/lancelot-core/migrations/0002_asset_type.sql). Files of an older version are backed up and migrated on open. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
 | Table | Holds |
 |---|---|
 | `meta` | Key/value pairs: `event_uuid`, `created_at`, `created_by`, and `next_account_id`, `next_txn_id`, `next_attachment_id`. Ids are never reused, so the change log stays unambiguous. |
 | `event` | Exactly one row: details, the `closed` flag, default reimbursement account, and the closing overrides as JSON. |
-| `account` | `id`, `kind`, `name`, and an optional unique `role` (`verein`, `cash_box`, `opening`). |
+| `account` | `id`, `kind`, `name`, an optional unique `role` (`verein`, `cash_box`, `opening`), and `asset_type` (`bank`, `cash`), set exactly for assets. Every cash account needs a closing count before the event can close. |
 | `person` | Bank and contact details, 1:1 with an account of kind `person`. |
 | `txn` | Kind, date, description, counterparty, notes, `origin` (`manual`; later `ticket_import`) and the `sealed` flag. |
 | `line` | `txn_id`, `position`, `account_id`, a signed `amount` that is never 0, and a memo. |
-| `closing_count` | One per asset account at most: date and counted amount (R-ISO-3). Opening counts are `opening` transactions. |
+| `closing_count` | One per asset account at most: date and counted amount (R-ISO-3). Opening counts are `opening` transactions; the count panel keeps one per account. |
 | `attachment` | File name, type, size, SHA-256, `added_at`, and the bytes as a BLOB. |
 | `change_log` | `at`, `entity`, `entity_id`, `op` (`create`, `update`, `delete`, `close`, `reopen`) and the before and after values as JSON (R-TX-6). |
 
@@ -129,8 +129,8 @@ Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case
 
 | Kind | Accounts | Role |
 |---|---|---|
-| asset | `Verein account` | `verein` |
-| asset | `Cash box` | `cash_box` |
+| asset (bank) | `Verein account` | `verein` |
+| asset (cash) | `Cash box` | `cash_box` |
 | opening | `Opening balance` | `opening` |
 | income | Tickets, Drink donations, General | |
 | expense | Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General | |

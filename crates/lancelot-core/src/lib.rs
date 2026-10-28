@@ -25,12 +25,12 @@ pub use error::DomainError;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};
 pub use ledger::{
-    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, PersonEntry, PersonStatus,
-    PersonSummary, PersonTotals,
+    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, OpeningCount, PersonEntry,
+    PersonStatus, PersonSummary, PersonTotals,
 };
 pub use model::{
-    Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
-    Line, Person, Role, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, ClosingCount, Event,
+    EventDetails, Line, Person, Role, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
@@ -41,7 +41,7 @@ pub use store::{
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// SQLite `application_id` of an event file: `LNCL`.
 pub const APPLICATION_ID: u32 = u32::from_be_bytes(*b"LNCL");

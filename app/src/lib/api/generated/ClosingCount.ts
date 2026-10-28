@@ -3,6 +3,6 @@ import type { AccountId } from "./AccountId";
 import type { Cents } from "./Cents";
 
 /**
- * The amount counted in an asset account at the end, e.g. the cash box (R-ISO-3).
+ * The amount counted in an asset account at the end, e.g. a cash box (R-ISO-3).
  */
 export type ClosingCount = { account: AccountId, date: string, amount: Cents, };

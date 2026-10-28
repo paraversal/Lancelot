@@ -4,13 +4,14 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
-    AccountId, AccountKind, AttachmentId, EventDetails, Parsed, Person, TxnDraft, TxnId,
+    AccountId, AccountKind, AssetType, AttachmentId, EventDetails, Parsed, Person, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::api::{
-    Added, ApiError, AppInfo, BackupInfo, CheckedIban, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
+    Added, ApiError, AppInfo, BackupInfo, CheckedIban, CountInput, OpenEvent, ParsedDate,
+    RecentEvent, SavedTxn,
 };
 use crate::service::Service;
 use crate::settings::AppSettings;
@@ -184,6 +185,34 @@ pub async fn account_add(
     name: String,
 ) -> Result<Added> {
     with(&state, |s| s.add_account(kind, &name))
+}
+
+#[tauri::command]
+pub async fn asset_add(
+    state: State<'_, AppState>,
+    name: String,
+    asset_type: AssetType,
+) -> Result<Added> {
+    with(&state, |s| s.add_asset(&name, asset_type))
+}
+
+#[tauri::command]
+pub async fn asset_set_type(
+    state: State<'_, AppState>,
+    id: AccountId,
+    asset_type: AssetType,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.set_asset_type(id, asset_type))
+}
+
+#[tauri::command]
+pub async fn counts_set(
+    state: State<'_, AppState>,
+    account: AccountId,
+    opening: Option<CountInput>,
+    closing: Option<CountInput>,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.set_counts(account, opening, closing))
 }
 
 #[tauri::command]

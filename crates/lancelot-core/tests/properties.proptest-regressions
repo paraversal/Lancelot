@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 364b8a4a3e4484070ed85e404834621ca1d39978eb37c6d61c38589739f76b66 # shrinks to ops = [Add(Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false })], first = Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false }, second = Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false }
+cc 61ed449ab573a5dc3a3c3ad546639b25fe6d8faf23cfb4264a685fc6431872f0 # shrinks to ops = [Add(Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false })], first = Spec { kind: 0, a: 0, b: 0, amounts: [1], flag: false }, second = Spec { kind: 4, a: 0, b: 0, amounts: [1], flag: false }

@@ -269,6 +269,7 @@ fn check_splits(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::AssetType;
 
     fn accounts() -> BTreeMap<AccountId, Account> {
         [
@@ -290,6 +291,7 @@ mod tests {
                     kind,
                     name: format!("a{}", id.0),
                     role,
+                    asset_type: (kind == AccountKind::Asset).then_some(AssetType::Bank),
                 },
             )
         })

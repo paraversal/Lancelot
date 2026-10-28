@@ -1,7 +1,9 @@
 <script lang="ts">
 	// People (R-PER-3): advanced, held, settled and the net balance per person, with totals.
 	// A person opens in the panel; "Settle" there opens the settle entry.
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { api } from '#lib/api/index.ts';
 	import BalanceCell from '#lib/components/BalanceCell.svelte';
 	import Button from '#lib/components/Button.svelte';
@@ -22,6 +24,12 @@
 	const person = $derived(people.find((p) => p.account === selected) ?? null);
 
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
+
+	// Opened from the overview's open items: `/event/people?person=7`.
+	onMount(() => {
+		const id = Number(page.url.searchParams.get('person'));
+		if (people.some((p) => p.account === id)) open(id);
+	});
 
 	function open(id: number) {
 		selected = id;

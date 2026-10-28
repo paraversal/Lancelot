@@ -708,3 +708,61 @@ fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
     drop(store);
     assert!(open(&path).1.is_clean());
 }
+
+#[test]
+fn asset_types_and_counts_survive_reopening() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let bar = store.add_asset("Cash – Bar", AssetType::Cash).unwrap();
+    let verein = role(store.book(), Role::Verein);
+    store.set_asset_type(verein, AssetType::Cash).unwrap();
+    store.set_opening_count(bar, june(12), eur("40")).unwrap();
+    store.set_opening_count(bar, june(12), eur("50")).unwrap();
+    let book = store.book().clone();
+    drop(store);
+    let (mut reopened, report) = open(&path);
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(reopened.book(), &book);
+    reopened.clear_opening_count(bar).unwrap();
+    assert_eq!(reopened.book().txns().count(), 0);
+}
+
+#[test]
+fn version_1_files_get_asset_types() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let savings = store.add_account(AccountKind::Asset, "Savings").unwrap();
+    drop(store);
+    {
+        let conn = raw(&path);
+        conn.execute_batch("ALTER TABLE account DROP COLUMN asset_type; PRAGMA user_version = 1;")
+            .unwrap();
+    }
+    let (store, report) = open(&path);
+    assert!(report.is_clean(), "{report:?}");
+    let book = store.book();
+    let asset_type = |id| book.account(id).unwrap().asset_type;
+    assert_eq!(asset_type(role(book, Role::Verein)), Some(AssetType::Bank));
+    assert_eq!(asset_type(role(book, Role::CashBox)), Some(AssetType::Cash));
+    assert_eq!(asset_type(savings), Some(AssetType::Bank));
+    assert_eq!(asset_type(expense(book, "Kitchen")), None);
+    drop(store);
+    let version: u32 = raw(&path)
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, SCHEMA_VERSION);
+}
+
+#[test]
+fn an_asset_without_a_type_is_reported() {
+    let dir = TempDir::new().unwrap();
+    let (store, path) = create(&dir);
+    drop(store);
+    raw(&path)
+        .execute(
+            "UPDATE account SET asset_type = NULL WHERE role = 'cash_box'",
+            [],
+        )
+        .unwrap();
+    assert!(Store::open(&path, StoreOptions::default()).is_err());
+}

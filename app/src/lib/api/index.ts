@@ -5,6 +5,7 @@ import { convertFileSrc, invoke as tauriInvoke, isTauri } from '@tauri-apps/api/
 import type { AccountId } from './generated/AccountId';
 import type { AccountKind } from './generated/AccountKind';
 import type { Attachment } from './generated/Attachment';
+import type { AssetType } from './generated/AssetType';
 import type { AttachmentId } from './generated/AttachmentId';
 import type { Added } from './generated/Added';
 import type { ApiError as ApiErrorData } from './generated/ApiError';
@@ -12,6 +13,7 @@ import type { AppInfo } from './generated/AppInfo';
 import type { AppSettings } from './generated/AppSettings';
 import type { BackupInfo } from './generated/BackupInfo';
 import type { CheckedIban } from './generated/CheckedIban';
+import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
 import type { OpenEvent } from './generated/OpenEvent';
 import type { Parsed } from './generated/Parsed';
@@ -104,6 +106,12 @@ export const api = {
 	deleteTxn: (id: TxnId) => call<OpenEvent>('txn_delete', { id }),
 	addAccount: (kind: AccountKind, name: string) => call<Added>('account_add', { kind, name }),
 	renameAccount: (id: AccountId, name: string) => call<OpenEvent>('account_rename', { id, name }),
+	addAsset: (name: string, assetType: AssetType) => call<Added>('asset_add', { name, assetType }),
+	setAssetType: (id: AccountId, assetType: AssetType) =>
+		call<OpenEvent>('asset_set_type', { id, assetType }),
+	/** Replaces both counts of an asset account; `null` removes one. */
+	setCounts: (account: AccountId, opening: CountInput | null, closing: CountInput | null) =>
+		call<OpenEvent>('counts_set', { account, opening, closing }),
 	addPerson: (name: string) => call<Added>('person_add', { name }),
 	updatePerson: (id: AccountId, name: string, person: Person) =>
 		call<OpenEvent>('person_update', { id, name, person }),

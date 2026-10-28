@@ -6,7 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::model::{Account, AccountId, AccountKind, ClosingCount, Role, Txn, TxnId, TxnKind};
+use time::Date;
+
+use crate::model::{Account, AccountId, AccountKind, AssetType, ClosingCount, Txn, TxnId, TxnKind};
 use crate::money::{Cents, MoneyError};
 
 /// Per-person figures for the People view (R-PER-3, R-TX-5).
@@ -62,16 +64,30 @@ pub struct MoneyLocation {
     pub total: Cents,
 }
 
-/// The closing count of an asset account against its computed balance (R-ISO-3).
+/// The counts of an asset account against its computed balance (R-ISO-3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct CashStatus {
     pub account: AccountId,
+    pub asset_type: AssetType,
+    /// What was counted at the start: the account's opening transactions.
+    pub opening: Option<OpeningCount>,
     pub computed: Cents,
     pub counted: Option<Cents>,
     /// `counted − computed`: positive when there is more money than the books say.
     pub difference: Option<Cents>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct OpeningCount {
+    /// The first opening transaction; the one the count panel edits.
+    pub txn: TxnId,
+    #[ts(type = "string")]
+    pub date: Date,
+    /// Of all the account's opening transactions.
+    pub amount: Cents,
 }
 
 /// Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches and
@@ -84,7 +100,7 @@ pub enum OpenItem {
     PersonBalance { person: AccountId, net: Cents },
     /// An expense without an attachment (R-ATT-4).
     MissingReceipt { txn: TxnId },
-    /// The cash box has no closing count yet.
+    /// A cash account has no closing count yet.
     ClosingCountMissing { account: AccountId },
     /// The closing count differs from the computed balance.
     CashDifference {
@@ -268,16 +284,45 @@ impl Ledger {
             .checked_sub(owed_to_people)?
             .checked_sub(opening)?;
 
+        let mut openings: BTreeMap<AccountId, OpeningCount> = BTreeMap::new();
+        for t in txns.values().filter(|t| t.kind == TxnKind::Opening) {
+            for l in t
+                .lines
+                .iter()
+                .filter(|l| kind_of(&l.account) == Some(AccountKind::Asset))
+            {
+                match openings.get_mut(&l.account) {
+                    Some(o) => o.amount = o.amount.checked_add(l.amount)?,
+                    None => {
+                        openings.insert(
+                            l.account,
+                            OpeningCount {
+                                txn: t.id,
+                                date: t.date,
+                                amount: l.amount,
+                            },
+                        );
+                    }
+                }
+            }
+        }
+
         let mut cash = Vec::new();
-        for a in accounts.values().filter(|a| a.kind == AccountKind::Asset) {
+        for a in accounts.values() {
+            let Some(asset_type) = a.asset_type.filter(|_| a.kind == AccountKind::Asset) else {
+                continue;
+            };
             let counted = closing_counts.get(&a.id).map(|c| c.amount);
-            if counted.is_none() && a.role != Some(Role::CashBox) {
+            let opening = openings.get(&a.id).copied();
+            if asset_type == AssetType::Bank && counted.is_none() && opening.is_none() {
                 continue;
             }
             let computed = displayed.get(&a.id).copied().unwrap_or_default();
             let difference = counted.map(|c| c.checked_sub(computed)).transpose()?;
             cash.push(CashStatus {
                 account: a.id,
+                asset_type,
+                opening,
                 computed,
                 counted,
                 difference,
@@ -358,8 +403,8 @@ impl Ledger {
         &self.money
     }
 
-    /// Closing counts against computed balances: the cash box, plus every asset account
-    /// that has a closing count.
+    /// Counts against computed balances: every cash account, plus every bank account that
+    /// has an opening or a closing count.
     pub fn cash(&self) -> &[CashStatus] {
         &self.cash
     }
@@ -384,7 +429,10 @@ impl Ledger {
             .iter()
             .map(|txn| OpenItem::MissingReceipt { txn: *txn });
         let cash = self.cash.iter().filter_map(|c| match c.difference {
-            None => Some(OpenItem::ClosingCountMissing { account: c.account }),
+            None if c.asset_type == AssetType::Cash => {
+                Some(OpenItem::ClosingCountMissing { account: c.account })
+            }
+            None => None,
             Some(d) if !d.is_zero() => Some(OpenItem::CashDifference {
                 account: c.account,
                 difference: d,

@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.8 · 2026-10-28
+Status: draft v0.9 · 2026-10-28
 
 ## 1. Purpose
 
@@ -34,7 +34,7 @@ Mathematical correctness is **not** a non-goal. It is the top priority.
 | **Event** | The unit of planning and settlement. Self-contained. |
 | **Account** | A place where the event's money sits, or a party the event owes money to or is owed money by. |
 | **Verein account** | The bank account of a related Verein. Most ticket revenue goes here, some invoices are paid from it, and reimbursements are paid out of it. The group does not control it directly. |
-| **Cash box** | Physical cash. Persists between events in real life; each event sees only an opening and a closing count. |
+| **Cash box** | Physical cash. Persists between events in real life; each event sees only an opening and a closing count. An event can have several cash accounts (e.g. the box and a bar till). Cash in someone's pocket is not a cash account; it is that person holding event money. |
 | **Person** | Someone who advances money, or holds event money (e.g. tickets sold outside the regular channels and paid to their private account), or both. Has bank details. The two amounts net against each other into one balance. |
 | **Ticket tier** | A ticket type with a fixed price, e.g. "Early Bird €25". |
 | **Ticket sheet** | The spreadsheet from the Verein listing tickets sold: an `.ods` file with one sheet and one row per ticket. Its `Ticket` column holds the tier name, and an order ID column identifies the order a ticket belongs to (one order can have several tickets). It also contains personal data that Lancelot does not need. It has no prices and currently no sale dates. It is the source of truth for ticket income. |
@@ -87,7 +87,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 - **R-ISO-1** Each event lives in its own file and has no references to other events.
 - **R-ISO-2** Asset accounts track only this event's movements, plus an optional opening balance. The Verein account's real total balance is irrelevant and never entered.
-- **R-ISO-3** The cash box gets an **opening count** at the start and a **closing count** at the end of the event. The difference between the closing count and the computed balance is shown as a discrepancy.
+- **R-ISO-3** Every **cash** account gets an **opening count** at the start and a **closing count** at the end of the event. The difference between the closing count and the computed balance is shown as a discrepancy. A bank account can be counted too, but need not be.
 - **R-ISO-4** Convenience features may *copy* data from another event file into a new one (a budget template, person details). After copying, the files are independent.
 
 ## 5. Functional requirements
@@ -101,7 +101,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 ### 5.2 Accounts
 
-- **R-ACC-1** Configurable asset accounts per event. Defaults: Verein account, Cash box. Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
+- **R-ACC-1** Configurable asset accounts per event, each either **bank** or **cash**. They are added, renamed and switched between bank and cash in Settings. Defaults: Verein account (bank), Cash box (cash). Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
 - **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, Drink donations, General; expenses Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General.
 - **R-ACC-3** Every account shows its derived balance and its transaction history.
 - **R-ACC-4** **Reconciliation checkpoints**: the user enters "statement shows X on date D" for an asset account. Lancelot flags any mismatch with the computed balance at D. For the Verein account this compares the net movement for the event, not the absolute balance.
