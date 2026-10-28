@@ -11,6 +11,9 @@
 	import Panel from '#lib/components/Panel.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { stampIn } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
+	import MovingAmount from '#lib/motion/MovingAmount.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -117,13 +120,17 @@
 		<section>
 			{#if net > 0}
 				<span class="label">Owed to {first}</span>
-				<span class="figure">{formatAmount(net, format, 'magnitude')}</span>
+				<span class="figure"
+					><MovingAmount value={Math.abs(net)} {format} level={level('A5')} /></span
+				>
 			{:else if net < 0}
 				<span class="label">{first} owes</span>
-				<span class="figure attention">{formatAmount(net, format, 'magnitude')}</span>
+				<span class="figure attention"
+					><MovingAmount value={Math.abs(net)} {format} level={level('A5')} /></span
+				>
 			{:else}
 				<span class="label">Balance</span>
-				<span class="figure settled">Settled</span>
+				<span class="figure settled" in:stampIn={{ level: level('C1') }}>Settled</span>
 			{/if}
 		</section>
 

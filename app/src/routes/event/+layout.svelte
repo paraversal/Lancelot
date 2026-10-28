@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import { pageIn } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { api } from '#lib/api/index.ts';
 	import IntegrityBanner from '#lib/components/IntegrityBanner.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
@@ -27,7 +30,12 @@
 		<Sidebar event={session.event} />
 		<div class="content">
 			<IntegrityBanner report={session.event.integrity} oncheck={check} />
-			<main>{@render children()}</main>
+			<main>
+				<!-- Every page arrives (A1, F1 when the event opens). -->
+				{#key page.url.pathname}
+					<div class="page" in:pageIn|global={{ level: level('A1') }}>{@render children()}</div>
+				{/key}
+			</main>
 		</div>
 	</div>
 {/if}
@@ -50,5 +58,15 @@
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
+	}
+
+	.page {
+		height: 100%;
+	}
+
+	@media print {
+		.page {
+			height: auto;
+		}
 	}
 </style>

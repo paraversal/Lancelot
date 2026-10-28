@@ -4,6 +4,8 @@
 	import type { Cents } from '../api/generated/Cents';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatAmount } from '../format';
+	import { growBar } from '../motion/effects';
+	import { level } from '../motion/mode.svelte';
 
 	let {
 		segments,
@@ -28,11 +30,12 @@
 
 <div class="stack" style:width="{width}px">
 	<div class="bar">
-		{#each sized as s (s.label)}
+		{#each sized as s, i (s.label)}
 			<span
 				style:width="{s.w}px"
 				style:background={s.color}
 				title="{s.label} {formatAmount(s.value, format)}"
+				{@attach (node) => growBar(node, level('D2'), i)}
 			></span>
 		{/each}
 	</div>
@@ -62,6 +65,7 @@
 
 	.bar span {
 		height: 14px;
+		transform-origin: left center;
 	}
 
 	.legend > span {

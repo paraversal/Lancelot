@@ -7,6 +7,8 @@
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatSize } from '#lib/format.ts';
+	import { growFrom } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let { attachment, onclose }: { attachment: Attachment; onclose: () => void } = $props();
@@ -36,7 +38,16 @@
 		});
 </script>
 
-<section class="preview">
+<section
+	class="preview"
+	{@attach (node) =>
+		growFrom(
+			node,
+			document.querySelector(`[data-attachment="${attachment.id}"]`)?.getBoundingClientRect() ??
+				null,
+			level('B6')
+		)}
+>
 	<header>
 		<h2>{attachment.filename}</h2>
 		<span class="size">{formatSize(attachment.size, session.format)}</span>

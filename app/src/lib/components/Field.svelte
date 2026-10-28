@@ -7,6 +7,8 @@
 	// message stands in the hint line. Only then does it take room, so typing never moves the
 	// rest of the form.
 	import type { Snippet } from 'svelte';
+	import { shake, warnIn } from '../motion/effects';
+	import { level } from '../motion/mode.svelte';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -28,14 +30,21 @@
 	} = $props();
 
 	const message = $derived(error ? error.charAt(0).toUpperCase() + error.slice(1) : null);
+	let box: HTMLDivElement;
+
+	// A6: leaving a field with input it did not accept gives it a short shake.
+	function left(e: FocusEvent) {
+		const into = e.relatedTarget instanceof Node ? e.relatedTarget : null;
+		if (message && !box.contains(into)) shake(box, level('A6'));
+	}
 </script>
 
-<div class="field">
+<div class="field" onfocusout={left}>
 	{#if label}<label for={id}>{label}</label>{/if}
-	<div class="box" class:invalid={invalid || !!error} class:tall>
+	<div class="box" class:invalid={invalid || !!error} class:tall bind:this={box}>
 		{@render children()}
 		{#if message}
-			<span class="warn">
+			<span class="warn" in:warnIn={{ level: level('A6') }}>
 				<Icon name="warn" size={14} />
 				<span class="tip" role="tooltip" id={id ? `${id}-error` : undefined}>{message}</span>
 			</span>

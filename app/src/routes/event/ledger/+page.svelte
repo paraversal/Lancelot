@@ -1,6 +1,9 @@
 <script lang="ts">
 	// The ledger: every transaction, grouped by day or by category (R-TX-7), with type filters
 	// and search. Entering and editing happens in the panel on the right.
+	import { flip } from 'svelte/animate';
+	import { flipOptions, rowIn, rowOut } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
@@ -211,7 +214,11 @@
 								class:selected={selected === txn.id}
 								role="row"
 								onclick={() => open(txn)}
+								in:rowIn={{ level: level('B1') }}
+								out:rowOut={{ level: level('B2') }}
+								animate:flip={flipOptions(level('B3'))}
 							>
+								<span class="sweep"></span>
 								<span class="date">{shortDate(txn.date)}</span>
 								<span class="title">
 									{item.row.title}
@@ -343,6 +350,8 @@
 	}
 
 	.row {
+		position: relative;
+		isolation: isolate;
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-3);
@@ -353,6 +362,18 @@
 		background: none;
 		text-align: left;
 		cursor: pointer;
+	}
+
+	/* B1: the highlighter that runs across a new row (motion/effects.ts). */
+	.sweep {
+		position: absolute;
+		inset: 3px 0;
+		z-index: -1;
+		border-radius: var(--radius-sm);
+		background: var(--color-marker);
+		opacity: 0;
+		transform-origin: left center;
+		pointer-events: none;
 	}
 
 	.row.selected {

@@ -7,6 +7,8 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import { formatAmount } from '#lib/format.ts';
+	import { centreOf, confetti } from '#lib/motion/confetti.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { describe } from '#lib/openItems.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -23,8 +25,11 @@
 	const key = (i: unknown) => JSON.stringify(i);
 	const missing = $derived(items.filter((i) => !notes[key(i)]?.trim()).length);
 
+	let confirmButton = $state<HTMLElement>();
+
 	async function confirm() {
 		if (missing) return;
+		const origin = confirmButton ? centreOf(confirmButton) : null;
 		try {
 			error = null;
 			const overrides = items.map((item) => ({
@@ -32,6 +37,8 @@
 				note: notes[key(item)].trim()
 			}));
 			await session.change(() => api.closeEvent(overrides));
+			// E1: the big strength throws confetti from the button that was pressed.
+			if (origin && level('E1') === 'big') confetti(origin);
 			onclose();
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : String(e);
@@ -79,9 +86,11 @@
 	{/if}
 	{#if error}<p class="error">{error}</p>{/if}
 	{#snippet footer()}
-		<Button kind="primary" icon="lock" shortcut="⌘↵" disabled={!!missing} onclick={confirm}
-			>Close event</Button
-		>
+		<span bind:this={confirmButton}>
+			<Button kind="primary" icon="lock" shortcut="⌘↵" disabled={!!missing} onclick={confirm}
+				>Close event</Button
+			>
+		</span>
 		<Button shortcut="esc" onclick={onclose}>Cancel</Button>
 	{/snippet}
 </Panel>

@@ -11,6 +11,12 @@
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import { categoryColor } from '#lib/colors.ts';
 	import { differenceText, formatAmount, formatDate } from '#lib/format.ts';
+	import { rowOut, riseIn, stampIn } from '#lib/motion/effects.ts';
+	import { centreOf, confetti, sparkle } from '#lib/motion/confetti.ts';
+	import { isPlayful, level } from '#lib/motion/mode.svelte.ts';
+	import MovingAmount from '#lib/motion/MovingAmount.svelte';
+	import Check from '#lib/motion/Check.svelte';
+	import Lock from '#lib/motion/Lock.svelte';
 	import { describe } from '#lib/openItems.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import ClosePanel from './ClosePanel.svelte';
@@ -22,6 +28,8 @@
 	const where = $derived(snapshot.whereTheMoneyIs);
 
 	let counting = $state<number | null>(null);
+	const a5 = $derived(level('A5'));
+	const countUp = isPlayful(level('D1'));
 	let closing = $state(false);
 	let error = $state<string | null>(null);
 	const closed = $derived(session.closed);
@@ -71,9 +79,23 @@
 				: i.type === 'missingReceipt'
 					? () => goto(`/event/ledger?txn=${i.txn}`)
 					: () => (counting = i.account);
-		return { ...describe(i, snapshot, format), go };
+		return { ...describe(i, snapshot, format), go, key: JSON.stringify(i) };
 	}
 	const open = $derived(snapshot.openItems.map(item));
+
+	// E3: the last open item resolved. Only while the event is open: closing with accepted items
+	// is E1's moment.
+	let openSection = $state<HTMLElement>();
+	let hadOpen = false;
+	$effect(() => {
+		const n = open.length;
+		if (hadOpen && n === 0 && !closed && openSection) {
+			const l = level('E3');
+			if (l === 'big') confetti(centreOf(openSection), 90, 0.9);
+			else if (isPlayful(l)) sparkle(centreOf(openSection));
+		}
+		hadOpen = n > 0;
+	});
 </script>
 
 <svelte:window
@@ -100,7 +122,8 @@
 		<header>
 			<div class="title">
 				<h1>Overview</h1>
-				{#if closedOn}<span class="closed"><Icon name="lock" size={14} />Closed {closedOn}</span
+				{#if closedOn}<span class="closed" in:stampIn={{ level: level('E1') }}
+						><Lock closed level={level('E1')} size={14} />Closed {closedOn}</span
 					>{/if}
 			</div>
 			<div class="actions">
@@ -118,39 +141,40 @@
 		</header>
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 
-		<div class="hero">
+		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
 			<div class="figure">
 				<span class="label">{closed ? 'Result' : 'Result so far'}</span>
 				<span
 					class="result"
 					class:plus={totals.result > 0}
 					class:minus={totals.result < 0}
-					data-testid="result">{formatAmount(totals.result, format, 'always')}</span
+					data-testid="result"
+					><MovingAmount value={totals.result} {format} sign="always" level={a5} {countUp} /></span
 				>
 			</div>
 			<div class="figure">
 				<span class="label">Income</span>
-				<span class="total">{formatAmount(totals.income, format)}</span>
+				<span class="total"><MovingAmount value={totals.income} {format} level={a5} /></span>
 			</div>
 			<div class="figure">
 				<span class="label">Expenses</span>
-				<span class="total">{formatAmount(totals.expense, format)}</span>
+				<span class="total"><MovingAmount value={totals.expense} {format} level={a5} /></span>
 			</div>
 		</div>
 
 		{#if totals.income || totals.expense}
-			<div class="flows" bind:clientWidth={width}>
+			<div class="flows" bind:clientWidth={width} in:riseIn|global={{ level: level('D1'), i: 1 }}>
 				{#each [{ label: 'In', kind: 'income', total: totals.income }, { label: 'Out', kind: 'expense', total: totals.expense }] as const as f (f.kind)}
 					<div class="flow">
 						<strong class="side">{f.label}</strong>
 						<StackedBar segments={flows(f.kind)} {max} {format} width={barWidth} />
-						<strong class="sum">{formatAmount(f.total, format)}</strong>
+						<strong class="sum"><MovingAmount value={f.total} {format} level={a5} /></strong>
 					</div>
 				{/each}
 			</div>
 		{/if}
 
-		<div class="columns">
+		<div class="columns" in:riseIn|global={{ level: level('D1'), i: 2 }}>
 			<section>
 				<h2>{closed ? 'Final balance' : 'Where the money is'}</h2>
 				<ul>
@@ -172,19 +196,25 @@
 									>Count</Button
 								>
 							{/if}
-							<span class="amount">{formatAmount(account.balance, format)}</span>
+							<span class="amount"
+								><MovingAmount value={account.balance} {format} level={a5} /></span
+							>
 						</li>
 					{/each}
 					{#if where.heldByPeople}
 						<li>
 							<span class="name">Held by people</span>
-							<span class="amount">{formatAmount(where.heldByPeople, format)}</span>
+							<span class="amount"
+								><MovingAmount value={where.heldByPeople} {format} level={a5} /></span
+							>
 						</li>
 					{/if}
 					{#if where.owedToPeople}
 						<li>
 							<span class="name">Owed to people</span>
-							<span class="amount">{formatAmount(-where.owedToPeople, format)}</span>
+							<span class="amount"
+								><MovingAmount value={-where.owedToPeople} {format} level={a5} /></span
+							>
 						</li>
 					{/if}
 					{#if where.opening}
@@ -196,13 +226,13 @@
 					<li class="sumrow">
 						<span class="name">Result</span>
 						<span class="amount" class:plus={where.total > 0} class:minus={where.total < 0}
-							>{formatAmount(where.total, format, 'always')}</span
+							><MovingAmount value={where.total} {format} sign="always" level={a5} /></span
 						>
 					</li>
 				</ul>
 			</section>
 
-			<section>
+			<section bind:this={openSection}>
 				{#if closed}
 					<h2>Accepted when closing</h2>
 					<ul>
@@ -219,8 +249,8 @@
 					<h2>Open</h2>
 					{#if open.length}
 						<ul>
-							{#each open as o, i (i)}
-								<li>
+							{#each open as o (o.key)}
+								<li out:rowOut={{ level: level('D3') }}>
 									<button type="button" class="item" onclick={o.go}>
 										<span class="dot"></span>
 										<span class="name">{o.text}</span>
@@ -233,7 +263,7 @@
 							{/each}
 						</ul>
 					{:else}
-						<p class="done"><Icon name="check" size={16} />Nothing open</p>
+						<p class="done"><Check level={level('E3')} size={16} delay={120} />Nothing open</p>
 					{/if}
 				{/if}
 			</section>

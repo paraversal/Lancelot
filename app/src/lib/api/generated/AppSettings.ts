@@ -8,4 +8,9 @@ export type AppSettings = { numberFormat: NumberFormat,
 /**
  * Backups kept per event (R-NF-5).
  */
-backupCount: number, };
+backupCount: number, 
+/**
+ * Reduced motion (`docs/design/motion.md`): `None` follows macOS's "reduce motion",
+ * `Some` overrides it.
+ */
+reducedMotion: boolean | null, };

@@ -18,6 +18,10 @@ pub struct AppSettings {
     pub number_format: NumberFormat,
     /// Backups kept per event (R-NF-5).
     pub backup_count: u32,
+    /// Reduced motion (`docs/design/motion.md`): `None` follows macOS's "reduce motion",
+    /// `Some` overrides it.
+    #[serde(default)]
+    pub reduced_motion: Option<bool>,
 }
 
 impl AppSettings {
@@ -29,6 +33,7 @@ impl Default for AppSettings {
         AppSettings {
             number_format: format_for_locale(sys_locale::get_locale().as_deref()),
             backup_count: 20,
+            reduced_motion: None,
         }
     }
 }
@@ -141,6 +146,20 @@ mod tests {
         file.save(&path).unwrap();
         assert_eq!(SettingsFile::load(&path), file);
         assert!(!path.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn an_older_file_follows_the_systems_motion() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("settings.json");
+        std::fs::write(
+            &path,
+            r#"{"numberFormat":"de","backupCount":7,"recent":[]}"#,
+        )
+        .unwrap();
+        let file = SettingsFile::load(&path);
+        assert_eq!(file.settings.backup_count, 7);
+        assert_eq!(file.settings.reduced_motion, None);
     }
 
     #[test]

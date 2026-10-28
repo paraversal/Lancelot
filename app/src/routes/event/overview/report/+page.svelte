@@ -11,6 +11,8 @@
 	import { differenceText, formatAmount, formatDate, formatDateRange } from '#lib/format.ts';
 	import { rows, type Row } from '#lib/ledger.ts';
 	import { describe } from '#lib/openItems.ts';
+	import { nudge } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { renderPdf } from '#lib/report/pdf.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -80,6 +82,15 @@
 	});
 
 	const printable = $derived(!withReceipts || ready === receipts.length);
+
+	// F3: Print gives a little nudge when the last receipt is ready.
+	let printButton = $state<HTMLElement>();
+	let wasPrintable = true;
+	$effect(() => {
+		const now = printable;
+		if (now && !wasPrintable && printButton) nudge(printButton, level('F3'));
+		wasPrintable = now;
+	});
 </script>
 
 <svelte:window
@@ -103,12 +114,14 @@
 				<span class="muted">{ready < receipts.length ? `${ready}/` : ''}{receipts.length}</span>
 			{/if}
 		</label>
-		<Button
-			kind="primary"
-			icon="file"
-			shortcut="⌘P"
-			disabled={!printable}
-			onclick={() => api.print()}>Print</Button
+		<span bind:this={printButton}
+			><Button
+				kind="primary"
+				icon="file"
+				shortcut="⌘P"
+				disabled={!printable}
+				onclick={() => api.print()}>Print</Button
+			></span
 		>
 	</header>
 
@@ -513,12 +526,20 @@
 		font-size: 11pt;
 	}
 
+	/* F3: a receipt fades in when it has loaded. */
 	.receipt img {
+		animation: arrive var(--motion-normal) var(--ease-out) backwards;
 		display: block;
 		max-width: 100%;
 		max-height: 215mm;
 		margin: 0 auto;
 		object-fit: contain;
+	}
+
+	@keyframes arrive {
+		from {
+			opacity: 0;
+		}
 	}
 
 	.placeholder {

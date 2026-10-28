@@ -27,6 +27,8 @@
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import Receipts from './Receipts.svelte';
 	import { formatAmount } from '#lib/format.ts';
+	import { formIn, formOut } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	type Kind = 'expense' | 'income' | 'transfer' | 'settle';
@@ -300,180 +302,190 @@
 
 	<!-- A closed event shows its entries as they are (R-EVT-2). -->
 	<fieldset class="plain body" disabled={session.closed}>
-		{#key generation}
-			{#if kind === 'settle'}
-				<ChoiceField
-					label="Person"
-					value={party}
-					options={personOptions}
-					addLabel="New person…"
-					error={fieldError('party')}
-					onchange={pickPerson}
-					onadd={addPerson}
-				>
-					{#snippet hint()}
-						{#if party !== null}<BalanceCell {net} {format} />{/if}
-					{/snippet}
-				</ChoiceField>
-				<div class="labelled">
-					<span class="label">Direction</span>
-					<Segmented
-						label="Direction"
-						bind:value={direction}
-						options={[
-							{ value: 'reimburse', label: 'Reimburse' },
-							{ value: 'repay', label: 'Repay' }
-						]}
-					/>
-				</div>
-			{/if}
+		<!-- B4: "Save & next" turns the form like a page; both forms share one grid cell. -->
+		<div class="stage">
+			{#key generation}
+				<div class="gen" in:formIn={{ level: level('B4') }} out:formOut={{ level: level('B4') }}>
+					{#if kind === 'settle'}
+						<ChoiceField
+							label="Person"
+							value={party}
+							options={personOptions}
+							addLabel="New person…"
+							error={fieldError('party')}
+							onchange={pickPerson}
+							onadd={addPerson}
+						>
+							{#snippet hint()}
+								{#if party !== null}<BalanceCell {net} {format} />{/if}
+							{/snippet}
+						</ChoiceField>
+						<div class="labelled">
+							<span class="label">Direction</span>
+							<Segmented
+								label="Direction"
+								bind:value={direction}
+								options={[
+									{ value: 'reimburse', label: 'Reimburse' },
+									{ value: 'repay', label: 'Repay' }
+								]}
+							/>
+						</div>
+					{/if}
 
-			<div class="amount">
-				<AmountField
-					label="Amount"
-					value={amount}
-					{format}
-					large
-					autofocus={kind !== 'settle'}
-					oninput={(v) => (amount = v)}
-					oncommit={(v) => (amount = v)}
-				/>
-				{#if overSettles}
-					<span class="attention">more than {formatAmount(net, format, 'magnitude')}</span>
-				{/if}
-				{#if fieldError('amount')}<span class="error">{fieldError('amount')}</span>{/if}
-			</div>
+					<div class="amount">
+						<AmountField
+							label="Amount"
+							value={amount}
+							{format}
+							large
+							autofocus={kind !== 'settle'}
+							oninput={(v) => (amount = v)}
+							oncommit={(v) => (amount = v)}
+						/>
+						{#if overSettles}
+							<span class="attention">more than {formatAmount(net, format, 'magnitude')}</span>
+						{/if}
+						{#if fieldError('amount')}<span class="error">{fieldError('amount')}</span>{/if}
+					</div>
 
-			{#if kind !== 'settle'}
-				<ChoiceField
-					label={partyLabel}
-					value={party}
-					options={sources}
-					addLabel="New person…"
-					error={fieldError('party')}
-					onchange={(v) => (party = v)}
-					onadd={addPerson}
-				>
-					{#snippet hint()}{balanceHint(party) ?? ''}{/snippet}
-				</ChoiceField>
-			{/if}
+					{#if kind !== 'settle'}
+						<ChoiceField
+							label={partyLabel}
+							value={party}
+							options={sources}
+							addLabel="New person…"
+							error={fieldError('party')}
+							onchange={(v) => (party = v)}
+							onadd={addPerson}
+						>
+							{#snippet hint()}{balanceHint(party) ?? ''}{/snippet}
+						</ChoiceField>
+					{/if}
 
-			{#if kind === 'transfer' || kind === 'settle'}
-				<ChoiceField
-					label={kind === 'transfer' ? 'To' : direction === 'reimburse' ? 'From' : 'To'}
-					value={other}
-					options={assetOptions}
-					addLabel="New account…"
-					error={fieldError('other')}
-					onchange={(v) => (other = v)}
-					onadd={async (name) => {
-						try {
-							return (await session.run(() => api.addAccount('asset', name))).id;
-						} catch (e) {
-							error = { field: 'other', message: e instanceof ApiError ? e.message : String(e) };
-							return null;
-						}
-					}}
-				/>
-			{/if}
+					{#if kind === 'transfer' || kind === 'settle'}
+						<ChoiceField
+							label={kind === 'transfer' ? 'To' : direction === 'reimburse' ? 'From' : 'To'}
+							value={other}
+							options={assetOptions}
+							addLabel="New account…"
+							error={fieldError('other')}
+							onchange={(v) => (other = v)}
+							onadd={async (name) => {
+								try {
+									return (await session.run(() => api.addAccount('asset', name))).id;
+								} catch (e) {
+									error = {
+										field: 'other',
+										message: e instanceof ApiError ? e.message : String(e)
+									};
+									return null;
+								}
+							}}
+						/>
+					{/if}
 
-			{#if kind === 'expense' || kind === 'income'}
-				<div class="split">
-					<div class="split-head">
-						<span class="label">Split</span>
-						{#if left !== null}
-							<span class="left" class:done={left === 0}>{formatAmount(left, format)} left</span>
+					{#if kind === 'expense' || kind === 'income'}
+						<div class="split">
+							<div class="split-head">
+								<span class="label">Split</span>
+								{#if left !== null}
+									<span class="left" class:done={left === 0}>{formatAmount(left, format)} left</span
+									>
+								{/if}
+							</div>
+							{#each lines as line, i (i)}
+								{@const account = line.account === null ? undefined : byId.get(line.account)}
+								<div class="line">
+									{#if account}<span
+											class="dot"
+											style:background={categoryColor(account, snapshot.accounts)}
+										></span>{/if}
+									<div class="category">
+										<ChoiceField
+											value={line.account}
+											options={categories}
+											addLabel="New category…"
+											invalid={!!fieldError('lines') && line.account === null}
+											onchange={(v) => (lines[i].account = v)}
+											onadd={addCategory}
+										/>
+									</div>
+									{#if split}
+										<div class="line-amount">
+											<AmountField
+												value={line.amount}
+												{format}
+												oninput={(v) => (lines[i].amount = v)}
+												oncommit={(v) => (lines[i].amount = v)}
+											/>
+										</div>
+										<button
+											type="button"
+											class="icon"
+											aria-label="Remove line"
+											onclick={() => (lines = lines.filter((_, j) => j !== i))}
+										>
+											<Icon name="x" size={14} />
+										</button>
+									{/if}
+								</div>
+							{/each}
+							<button
+								type="button"
+								class="add-line"
+								onclick={() =>
+									(lines = [
+										...lines.map((l, j) => (j === 0 && !split ? { ...l, amount } : l)),
+										{ account: null, amount: null }
+									])}
+							>
+								<Icon name="plus" size={14} />Line
+							</button>
+							{#if fieldError('lines')}<span class="error">{fieldError('lines')}</span>{/if}
+						</div>
+					{/if}
+
+					<div class="pair">
+						<DateField
+							label="Date"
+							value={date}
+							{format}
+							required
+							oninput={(v) => v && (date = v)}
+							oncommit={(v) => (date = v)}
+						/>
+						{#if kind === 'expense' || kind === 'income'}
+							<TextField
+								label="Counterparty"
+								value={counterparty}
+								oninput={(t) => (counterparty = t.trim() || null)}
+								oncommit={(v) => (counterparty = v)}
+							/>
 						{/if}
 					</div>
-					{#each lines as line, i (i)}
-						{@const account = line.account === null ? undefined : byId.get(line.account)}
-						<div class="line">
-							{#if account}<span
-									class="dot"
-									style:background={categoryColor(account, snapshot.accounts)}
-								></span>{/if}
-							<div class="category">
-								<ChoiceField
-									value={line.account}
-									options={categories}
-									addLabel="New category…"
-									invalid={!!fieldError('lines') && line.account === null}
-									onchange={(v) => (lines[i].account = v)}
-									onadd={addCategory}
-								/>
-							</div>
-							{#if split}
-								<div class="line-amount">
-									<AmountField
-										value={line.amount}
-										{format}
-										oninput={(v) => (lines[i].amount = v)}
-										oncommit={(v) => (lines[i].amount = v)}
-									/>
-								</div>
-								<button
-									type="button"
-									class="icon"
-									aria-label="Remove line"
-									onclick={() => (lines = lines.filter((_, j) => j !== i))}
-								>
-									<Icon name="x" size={14} />
-								</button>
-							{/if}
-						</div>
-					{/each}
-					<button
-						type="button"
-						class="add-line"
-						onclick={() =>
-							(lines = [
-								...lines.map((l, j) => (j === 0 && !split ? { ...l, amount } : l)),
-								{ account: null, amount: null }
-							])}
-					>
-						<Icon name="plus" size={14} />Line
-					</button>
-					{#if fieldError('lines')}<span class="error">{fieldError('lines')}</span>{/if}
-				</div>
-			{/if}
-
-			<div class="pair">
-				<DateField
-					label="Date"
-					value={date}
-					{format}
-					required
-					oninput={(v) => v && (date = v)}
-					oncommit={(v) => (date = v)}
-				/>
-				{#if kind === 'expense' || kind === 'income'}
 					<TextField
-						label="Counterparty"
-						value={counterparty}
-						oninput={(t) => (counterparty = t.trim() || null)}
-						oncommit={(v) => (counterparty = v)}
+						label="Description"
+						value={description}
+						oninput={(t) => (description = t.trim() || null)}
+						oncommit={(v) => (description = v)}
 					/>
-				{/if}
-			</div>
-			<TextField
-				label="Description"
-				value={description}
-				oninput={(t) => (description = t.trim() || null)}
-				oncommit={(v) => (description = v)}
-			/>
-			<Receipts
-				{attachments}
-				{pending}
-				{previewing}
-				{onpreview}
-				onremove={(a) => (removed = [...removed, a.id])}
-				onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
-				onadd={(paths) => (pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
-			/>
-			{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
-				<p class="error">{error.message}</p>
-			{/if}
-		{/key}
+					<Receipts
+						{attachments}
+						{pending}
+						{previewing}
+						{onpreview}
+						onremove={(a) => (removed = [...removed, a.id])}
+						onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
+						onadd={(paths) =>
+							(pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
+					/>
+					{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
+						<p class="error">{error.message}</p>
+					{/if}
+				</div>
+			{/key}
+		</div>
 	</fieldset>
 
 	{#snippet footer()}
@@ -498,6 +510,18 @@
 </Panel>
 
 <style>
+	.stage {
+		display: grid;
+	}
+
+	.gen {
+		grid-area: 1 / 1;
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
+		min-width: 0;
+	}
+
 	.closed {
 		display: inline-flex;
 		align-items: center;

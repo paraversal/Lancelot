@@ -37,6 +37,10 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 - A list or table on the left. Editing and detail happen in a **right-hand panel** (380 px) separated by a rule. There are no modals for routine work.
 - Tables: 36–40 px rows, a hairline under each row, numbers right-aligned in fixed-width columns, and day headers in the ledger.
 
+## Motion
+
+Snappy, with motion that answers what a person did: presses, panels, amounts that move to their new value, a stamp when the event closes. The plan, its rules and the choice per idea are in [motion.md](motion.md); every strength can be tried at `/design/motion`.
+
 ## Components
 
 | Component | Notes |
