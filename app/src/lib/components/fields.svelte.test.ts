@@ -10,7 +10,10 @@ vi.mock('../api', async () => {
 	const amounts: Record<string, { cents: number; ambiguous: boolean }> = {
 		'1.234,5': { cents: 123450, ambiguous: false },
 		'1.234': { cents: 123400, ambiguous: true },
-		'1.234,50': { cents: 123450, ambiguous: false }
+		'1.234,50': { cents: 123450, ambiguous: false },
+		'1.2': { cents: 120, ambiguous: false },
+		'1.20': { cents: 120, ambiguous: false },
+		'1,20': { cents: 120, ambiguous: false }
 	};
 	const dates: Record<string, string> = { '6.12.26': '2026-12-06', '06.12.2026': '2026-12-06' };
 	const error = (code: string) => new ApiError({ code, message: code, field: null, report: null });
@@ -89,6 +92,45 @@ describe('AmountField with a live parent', () => {
 		expect(value).toBe(123450);
 		expect(input.value).toBe('1.234,5');
 		expect(screen.getByText(/^= 1\.234,50.€$/)).toBeTruthy();
+	});
+});
+
+describe('AmountField previews every reading', () => {
+	it('shows the preview for 1.2 and for 1.20 in De', async () => {
+		let value: number | null = null;
+		const { rerender } = render(AmountField, {
+			label: 'Amount',
+			value,
+			format: 'de',
+			oninput: (v: number | null) => (value = v)
+		});
+		const input = screen.getByLabelText('Amount') as HTMLInputElement;
+		await type(input, '1.2');
+		await rerender({ value });
+		expect(screen.getByText(/^= 1,20.€$/)).toBeTruthy();
+		await type(input, '1.20');
+		await rerender({ value });
+		expect(input.value).toBe('1.20');
+		expect(screen.getByText(/^= 1,20.€$/)).toBeTruthy();
+	});
+});
+
+describe('AmountField previews while typing', () => {
+	it('confirms input that already looks like the result (1.20 in En, 1,20 in De)', async () => {
+		for (const [format, text] of [
+			['en', '1.20'],
+			['de', '1,20']
+		] as const) {
+			const { unmount } = render(AmountField, { label: 'Amount', value: null, format });
+			const input = screen.getByLabelText('Amount');
+			await fireEvent.focus(input);
+			await type(input, text);
+			expect(screen.getByText(format === 'en' ? /^= €1\.20$/ : /^= 1,20.€$/)).toBeTruthy();
+			await fireEvent.blur(input);
+			await settle();
+			expect(screen.queryByText(/^=/)).toBeNull();
+			unmount();
+		}
 	});
 });
 

@@ -69,7 +69,11 @@
 	}
 
 	const shown = $derived(parsed ? formatDate(parsed, format) : null);
-	const preview = $derived(shown && shown !== text.trim() ? shown : null);
+	// As in AmountField: shown while typing, otherwise only when the text differs.
+	let focused = $state(false);
+	const preview = $derived(
+		shown && text.trim() && (focused || shown !== text.trim()) ? shown : null
+	);
 
 	async function commit() {
 		await parse();
@@ -90,7 +94,8 @@
 		inputmode="numeric"
 		bind:value={text}
 		oninput={parse}
-		onblur={commit}
+		onfocus={() => (focused = true)}
+		onblur={() => ((focused = false), commit())}
 		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
 		class:error
 		title={error ?? undefined}

@@ -82,8 +82,13 @@
 		}
 	}
 
+	// The preview confirms what was read while typing, even when the text already looks like
+	// the result (`1.20` in En); outside the field it shows only when the text differs.
+	let focused = $state(false);
 	const preview = $derived(
-		parsed && text.trim() !== canonical(parsed.cents) ? formatAmount(parsed.cents, format) : null
+		parsed && text.trim() && (focused || text.trim() !== canonical(parsed.cents))
+			? formatAmount(parsed.cents, format)
+			: null
 	);
 
 	async function commit() {
@@ -104,7 +109,8 @@
 		placeholder={canonical(0)}
 		bind:value={text}
 		oninput={parse}
-		onblur={commit}
+		onfocus={() => (focused = true)}
+		onblur={() => ((focused = false), commit())}
 		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
 		class:large
 		{autofocus}
