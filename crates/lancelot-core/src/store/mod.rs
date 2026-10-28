@@ -438,7 +438,8 @@ impl Store {
 
     /// Closes the event (R-SET-7). Closing and reopening are in the change log.
     pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.close(overrides))
+        let now = (self.options.clock)();
+        self.apply(&BTreeMap::new(), |b| b.close(overrides, now))
     }
 
     /// Reopens a closed event (R-EVT-2).

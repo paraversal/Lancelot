@@ -132,6 +132,12 @@ pub struct Txn {
     pub lines: Vec<Line>,
 }
 
+impl Event {
+    pub fn is_closed(&self) -> bool {
+        self.closed_at.is_some()
+    }
+}
+
 /// The editable details of an event (R-EVT-1, R-EVT-4).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -152,8 +158,10 @@ pub struct EventDetails {
 pub struct Event {
     #[serde(flatten)]
     pub details: EventDetails,
-    /// A closed event is read-only until it is reopened (R-EVT-2).
-    pub closed: bool,
+    /// When the event was closed. A closed event is read-only until it is reopened (R-EVT-2).
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[ts(type = "string | null")]
+    pub closed_at: Option<OffsetDateTime>,
     /// Where reimbursements come from by default. Initially the Verein account.
     pub default_reimbursement_account: AccountId,
     /// Open items that were explicitly accepted when the event was closed (R-SET-7).

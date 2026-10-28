@@ -78,3 +78,9 @@ export function formatSize(bytes: number, format: NumberFormat): string {
 	const text = unit === 0 ? String(value) : value.toFixed(1);
 	return `${format === 'de' ? text.replace('.', ',') : text} ${units[unit]}`;
 }
+
+/** A count against the books: `2,90 € less than recorded`, `7,50 € more than recorded`. */
+export function differenceText(cents: Cents, format: NumberFormat): string {
+	const amount = formatAmount(cents, format, 'magnitude');
+	return `${amount} ${cents < 0 ? 'less' : 'more'} than recorded`;
+}

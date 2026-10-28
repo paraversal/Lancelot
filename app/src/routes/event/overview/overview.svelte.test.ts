@@ -6,11 +6,15 @@ import example from '#lib/api/mock/example-event.json';
 import { session } from '#lib/state/session.svelte.ts';
 import Overview from './+page.svelte';
 
-const { goto, setCounts } = vi.hoisted(() => ({ goto: vi.fn(), setCounts: vi.fn() }));
+const { goto, setCounts, closeEvent } = vi.hoisted(() => ({
+	goto: vi.fn(),
+	setCounts: vi.fn(),
+	closeEvent: vi.fn()
+}));
 vi.mock('$app/navigation', () => ({ goto }));
 vi.mock('#lib/api/index.ts', async () => {
 	const actual = await vi.importActual<typeof import('#lib/api/index.ts')>('#lib/api/index.ts');
-	return { ...actual, api: { setCounts } };
+	return { ...actual, api: { setCounts, closeEvent } };
 });
 
 // jsdom does not lay out; the bars only need it to exist.
@@ -26,6 +30,7 @@ const text = (el: HTMLElement) => el.textContent?.replace(/\s+/g, ' ').trim();
 beforeEach(() => {
 	goto.mockClear();
 	setCounts.mockReset();
+	closeEvent.mockReset();
 	session.update({
 		revision: 1,
 		path: '/e.lancelot',
@@ -42,7 +47,7 @@ describe('Overview', () => {
 		expect(text(screen.getByTestId('result'))).toBe('+2.027,50 €');
 		const cash = screen.getByText('Cash box').closest('li')!;
 		expect(text(cash)).toContain('counted 410,00 €');
-		expect(text(cash)).toContain('−2,90 €');
+		expect(text(cash)).toContain('2,90 € less than recorded');
 		expect(text(cash)).toContain('412,90 €');
 		expect(screen.getByText('Anna is owed')).toBeTruthy();
 		expect(screen.getByText('Bob holds')).toBeTruthy();
@@ -63,10 +68,43 @@ describe('Overview', () => {
 		await fireEvent.click(within(cash).getByText('Count'));
 		const panel = document.querySelector('aside')!;
 		expect(text(panel)).toContain('In the books412,90 €');
-		expect(text(panel)).toContain('Difference −2,90 €');
+		expect(text(panel)).toContain('Less than recorded 2,90 €');
 
 		await fireEvent.click(within(panel).getByText('Save'));
 		const id = snapshot.accounts.find((a) => a.name === 'Cash box')!.id;
 		expect(setCounts).toHaveBeenCalledWith(id, null, { date: '2026-06-14', amount: 41000 });
+	});
+
+	it('closes only once every open item has a note', async () => {
+		closeEvent.mockImplementation(async () => {
+			const next = structuredClone($state.snapshot(session.event!));
+			next.revision += 1;
+			next.snapshot.event.closedAt = '2026-06-21T18:00:00Z';
+			next.snapshot.event.closingOverrides = snapshot.openItems.map((item) => ({
+				item,
+				note: 'ok'
+			}));
+			return next;
+		});
+		render(Overview);
+		await fireEvent.click(screen.getByText('Close event'));
+		const panel = document.querySelector('aside')!;
+		const close = within(panel).getByRole('button', { name: /Close event/ }) as HTMLButtonElement;
+		expect(close.disabled).toBe(true);
+		expect(text(panel)).toContain(`${snapshot.openItems.length} items without a note`);
+
+		for (const input of panel.querySelectorAll('input'))
+			await fireEvent.input(input, { target: { value: 'ok' } });
+		expect(close.disabled).toBe(false);
+		await fireEvent.click(close);
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(closeEvent).toHaveBeenCalledWith(
+			snapshot.openItems.map((item) => ({ item, note: 'ok' }))
+		);
+		expect(text(screen.getByText(/^Closed /))).toBe('Closed 21.06.2026');
+		expect(screen.queryByText('Count')).toBeNull();
+		expect(screen.queryByText('New entry')).toBeNull();
+		expect(screen.getByText('Accepted when closing')).toBeTruthy();
 	});
 });

@@ -22,7 +22,7 @@
 			}
 		],
 		"security": {
-			"csp": "default-src 'self' ipc: http://ipc.localhost; img-src 'self' data: lancelot: http://lancelot.localhost; frame-src lancelot: http://lancelot.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+			"csp": "default-src 'self' ipc: http://ipc.localhost; connect-src 'self' ipc: http://ipc.localhost lancelot: http://lancelot.localhost; worker-src 'self' blob:; img-src 'self' data: blob: lancelot: http://lancelot.localhost; frame-src lancelot: http://lancelot.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
 		}
 	},
 	"bundle": {

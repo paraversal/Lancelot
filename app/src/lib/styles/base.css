@@ -47,6 +47,11 @@ a {
 	outline-offset: 2px;
 }
 
+/* Disables a group of inputs (e.g. in a closed event) without changing the layout. */
+fieldset.plain {
+	display: contents;
+}
+
 /* Printing (e.g. the payout list as PDF): only what a page marks for print. */
 .print-only {
 	display: none;

@@ -12,6 +12,7 @@ import type { ApiError as ApiErrorData } from './generated/ApiError';
 import type { AppInfo } from './generated/AppInfo';
 import type { AppSettings } from './generated/AppSettings';
 import type { BackupInfo } from './generated/BackupInfo';
+import type { BlockerOverride } from './generated/BlockerOverride';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
@@ -80,7 +81,7 @@ export const api = {
 	createEvent: (path: string, details: EventDetails) =>
 		call<OpenEvent>('event_create', { path, details }),
 	openEvent: (path: string) => call<OpenEvent>('event_open', { path }),
-	/** Closes the file and releases its lock; closing the event itself is `close` (M5). */
+	/** Closes the file and releases its lock; closing the event itself is `closeEvent`. */
 	closeFile: () => call<void>('file_close'),
 	currentEvent: () => call<OpenEvent | null>('event_current'),
 	updateEvent: (details: EventDetails) => call<OpenEvent>('event_update', { details }),
@@ -118,6 +119,10 @@ export const api = {
 	checkIban: (input: string) => call<CheckedIban>('iban_check', { input }),
 
 	exportPayoutsCsv: (target: string) => call<void>('payouts_export_csv', { target }),
+	exportTransactionsCsv: (target: string) => call<void>('transactions_export_csv', { target }),
+	/** Closes the event (R-SET-7): every open item needs a note in `overrides`. */
+	closeEvent: (overrides: BlockerOverride[]) => call<OpenEvent>('event_close', { overrides }),
+	reopenEvent: () => call<OpenEvent>('event_reopen'),
 	markPayoutsPaid: (account: AccountId, date: string) =>
 		call<OpenEvent>('payouts_mark_paid', { account, date }),
 	/** The print dialog, e.g. to save the payout list as PDF. */

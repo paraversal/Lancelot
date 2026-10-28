@@ -7,9 +7,10 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, DomainError, EventDetails,
-    EventSnapshot, MAX_ATTACHMENT_SIZE, Parsed, Person, Report, Store, StoreOptions, TxnDraft,
-    TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date,
+    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride, DomainError,
+    EventDetails, EventSnapshot, MAX_ATTACHMENT_SIZE, Parsed, Person, Report, Store, StoreOptions,
+    TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount,
+    parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -377,6 +378,26 @@ impl Service {
         let csv = lancelot_core::payouts_csv(&list, self.file.settings.number_format);
         std::fs::write(target, format!("\u{feff}{csv}"))?;
         Ok(())
+    }
+
+    /// Every line of every transaction as CSV (R-SET-6), with a BOM so spreadsheets read the
+    /// umlauts.
+    pub fn export_transactions_csv(&self, target: &Path) -> Result<()> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let csv =
+            lancelot_core::transactions_csv(open.store.book(), self.file.settings.number_format);
+        std::fs::write(target, format!("\u{feff}{csv}"))?;
+        Ok(())
+    }
+
+    /// Closes the event (R-SET-7). Every open item must be resolved or come with a note.
+    pub fn close_event(&mut self, overrides: Vec<BlockerOverride>) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.close(overrides)?))
+    }
+
+    /// Makes a closed event editable again (R-EVT-2).
+    pub fn reopen_event(&mut self) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.reopen()?))
     }
 
     /// Records the payout list's reimbursements in one step (R-PER-5).
@@ -922,5 +943,43 @@ mod tests {
 
         let open = s.set_asset_type(bar.id, AssetType::Bank).unwrap();
         assert!(open.snapshot.cash.iter().all(|c| c.account != bar.id));
+    }
+
+    #[test]
+    fn closes_with_notes_reopens_and_exports_the_transactions() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let open = s
+            .create_event(&dir.path().join("e.lancelot"), details("Fest"))
+            .unwrap();
+        let cash = open
+            .snapshot
+            .accounts
+            .iter()
+            .find(|a| a.account.name == "Cash box")
+            .unwrap()
+            .account
+            .id;
+
+        let err = s.close_event(vec![]).unwrap_err();
+        assert_eq!(err.code, "closing_blocked");
+        let item = lancelot_core::OpenItem::ClosingCountMissing { account: cash };
+        let accepted = BlockerOverride {
+            item,
+            note: "Nobody used the box".into(),
+        };
+        let closed = s.close_event(vec![accepted.clone()]).unwrap();
+        assert!(closed.snapshot.event.closed_at.is_some());
+        assert_eq!(closed.snapshot.event.closing_overrides, [accepted]);
+        assert_eq!(s.add_person("Kim").unwrap_err().code, "event_closed");
+
+        let target = dir.path().join("entries.csv");
+        s.export_transactions_csv(&target).unwrap();
+        let csv = std::fs::read_to_string(&target).unwrap();
+        assert!(csv.starts_with("\u{feff}Date,Entry,Type,"), "{csv}");
+
+        let reopened = s.reopen_event().unwrap();
+        assert!(reopened.snapshot.event.closed_at.is_none());
+        s.add_person("Kim").unwrap();
     }
 }

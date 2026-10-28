@@ -119,7 +119,7 @@ fn deleting_a_transaction_deletes_its_attachments() {
             lines: vec![split(food, "20")],
         },
     );
-    store.attach(txn);
+    store.attach(txn, false);
     store.delete_txn(txn).unwrap();
     drop(store);
     let count: i64 = raw(&path)
@@ -385,7 +385,7 @@ fn a_tampered_attachment_is_reported_but_the_file_opens() {
             lines: vec![split(food, "20")],
         },
     );
-    store.attach(txn);
+    store.attach(txn, false);
     assert!(store.check_integrity().unwrap().is_clean());
     drop(store);
 
@@ -477,7 +477,11 @@ fn every_change_is_in_the_change_log() {
     assert_eq!(update.before.as_ref().unwrap()["description"], "Bakery");
     assert_eq!(update.after.as_ref().unwrap()["description"], "Cables");
     assert_eq!(log[3].after, None);
-    assert_eq!(log[0].after.as_ref().unwrap()["closed"], false);
+    assert_eq!(
+        log[0].after.as_ref().unwrap()["closedAt"],
+        serde_json::Value::Null
+    );
+    assert!(log[1].after.as_ref().unwrap()["closedAt"].is_string());
     // Creating the file logged the event and its default accounts.
     assert!(log.iter().any(|e| e.entity == "event" && e.op == "create"));
 }
@@ -739,4 +743,33 @@ fn the_database_refuses_an_asset_without_a_type() {
     ] {
         assert!(conn.execute(sql, []).is_err(), "{sql}");
     }
+}
+
+#[test]
+fn a_closed_event_reopens_closed_and_read_only() {
+    let (at, options, _backups) = clock();
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("e.lancelot");
+    let (mut store, _) = Store::create(&path, details(), options.clone()).unwrap();
+    let cash = role(store.book(), Role::CashBox);
+    store
+        .set_closing_count(cash, june(14), Cents::ZERO)
+        .unwrap();
+    store.close(vec![]).unwrap();
+    let closed_at = *at.lock().unwrap();
+    drop(store);
+
+    let (mut store, report) = Store::open(&path, options).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(store.book().event().closed_at, Some(closed_at));
+    assert_eq!(
+        store
+            .add_person("Kim", Person::default())
+            .unwrap_err()
+            .code(),
+        "event_closed"
+    );
+    store.reopen().unwrap();
+    assert!(!store.book().event().is_closed());
+    store.add_person("Kim", Person::default()).unwrap();
 }

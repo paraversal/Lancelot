@@ -10,7 +10,8 @@ pub trait Target {
     fn book(&self) -> &Book;
     fn person(&mut self, name: &str) -> AccountId;
     fn save(&mut self, description: &str, entry: Entry) -> TxnId;
-    fn attach(&mut self, txn: TxnId);
+    /// A made-up receipt: a photo, or a PDF for invoices.
+    fn attach(&mut self, txn: TxnId, pdf: bool);
     fn count(&mut self, account: AccountId, amount: Cents);
 }
 
@@ -24,8 +25,20 @@ impl Target for Book {
     fn save(&mut self, description: &str, entry: Entry) -> TxnId {
         self.save_txn(&draft(description, entry), None).unwrap().id
     }
-    fn attach(&mut self, txn: TxnId) {
-        super::attach(self, txn);
+    fn attach(&mut self, txn: TxnId, pdf: bool) {
+        if pdf {
+            self.add_attachment(
+                txn,
+                "invoice.pdf",
+                "application/pdf",
+                2048,
+                "00",
+                super::now(),
+            )
+            .unwrap();
+        } else {
+            super::attach(self, txn);
+        }
     }
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
@@ -42,9 +55,13 @@ impl Target for Store {
     fn save(&mut self, description: &str, entry: Entry) -> TxnId {
         self.save_txn(&draft(description, entry), None).unwrap().id
     }
-    fn attach(&mut self, txn: TxnId) {
-        self.add_attachment(txn, "receipt.jpg", b"\xFF\xD8\xFF\xE0 a receipt")
-            .unwrap();
+    fn attach(&mut self, txn: TxnId, pdf: bool) {
+        let (name, bytes): (&str, &[u8]) = if pdf {
+            ("invoice.pdf", b"%PDF-1.7\n an invoice")
+        } else {
+            ("receipt.jpg", b"\xFF\xD8\xFF\xE0 a receipt")
+        };
+        self.add_attachment(txn, name, bytes).unwrap();
     }
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
@@ -109,8 +126,9 @@ pub fn build(t: &mut impl Target) -> Mock {
         ("Snacks", bob, vec![split(food, "120")]),
         ("Decoration", clara, vec![split(other, "95")]),
     ] {
+        let invoice = matches!(description, "Hall rent" | "PA rental");
         let id = t.save(description, expense_by(payer, lines));
-        t.attach(id);
+        t.attach(id, invoice);
     }
     let cups = t.save("Cups and ice", expense_by(cash, vec![split(drinks, "32")]));
 

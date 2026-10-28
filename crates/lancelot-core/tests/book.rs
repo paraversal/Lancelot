@@ -25,7 +25,7 @@ fn new_event_has_default_accounts() {
             "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General"
         ]
     );
-    assert!(!book.event().closed);
+    assert!(!book.event().is_closed());
     assert_eq!(
         book.event().default_reimbursement_account,
         role(&book, Role::Verein)
@@ -256,7 +256,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
         net: eur("12"),
     };
     assert_eq!(
-        book.close(vec![]).unwrap_err(),
+        book.close(vec![], now()).unwrap_err(),
         DomainError::ClosingBlocked {
             blockers: vec![
                 item.clone(),
@@ -268,7 +268,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
     attach(&mut book, groceries);
     book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
     assert_eq!(
-        book.close(vec![]).unwrap_err(),
+        book.close(vec![], now()).unwrap_err(),
         DomainError::ClosingBlocked {
             blockers: vec![item.clone()]
         }
@@ -278,7 +278,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
         note: " ".into(),
     };
     assert_eq!(
-        book.close(vec![no_note]).unwrap_err(),
+        book.close(vec![no_note], now()).unwrap_err(),
         DomainError::MissingNote
     );
 
@@ -286,8 +286,8 @@ fn closing_needs_open_items_resolved_or_overridden() {
         item,
         note: "Anna donates it".into(),
     };
-    book.close(vec![accepted.clone()]).unwrap();
-    assert!(book.event().closed);
+    book.close(vec![accepted.clone()], now()).unwrap();
+    assert!(book.event().is_closed());
     assert_eq!(book.event().closing_overrides, vec![accepted]);
 }
 
@@ -296,9 +296,9 @@ fn a_closed_event_is_read_only_until_reopened() {
     let mut book = new_book();
     let cash = role(&book, Role::CashBox);
     book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
-    book.close(vec![]).unwrap();
+    book.close(vec![], now()).unwrap();
     // Closing twice does nothing.
-    book.close(vec![]).unwrap();
+    book.close(vec![], now()).unwrap();
     assert_eq!(
         book.save_txn(
             &draft(
@@ -319,7 +319,7 @@ fn a_closed_event_is_read_only_until_reopened() {
     );
 
     book.reopen();
-    assert!(!book.event().closed);
+    assert!(!book.event().is_closed());
     assert!(book.event().closing_overrides.is_empty());
     assert!(
         book.save_txn(

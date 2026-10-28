@@ -8,6 +8,7 @@
 import type { ApiError } from '../generated/ApiError';
 import type { AppSettings } from '../generated/AppSettings';
 import type { BackupInfo } from '../generated/BackupInfo';
+import type { BlockerOverride } from '../generated/BlockerOverride';
 import type { AccountKind } from '../generated/AccountKind';
 import type { AssetType } from '../generated/AssetType';
 import type { CountInput } from '../generated/CountInput';
@@ -95,8 +96,10 @@ function opened(path: string, snapshot: EventSnapshot): OpenEvent {
 	return structuredClone(open);
 }
 
-function changed(f: (s: EventSnapshot) => void): OpenEvent {
+function changed(f: (s: EventSnapshot) => void, whileClosed = false): OpenEvent {
 	if (!open) fail('no_event_open', 'no event is open');
+	if (open.snapshot.event.closedAt && !whileClosed)
+		fail('event_closed', 'the event is closed; reopen it to make changes');
 	f(open.snapshot);
 	open.revision += 1;
 	return structuredClone(open);
@@ -445,6 +448,25 @@ const commands: Record<string, (a: Args) => unknown> = {
 			}
 		}),
 	payouts_export_csv: () => null,
+	transactions_export_csv: () => null,
+	event_close: (a) =>
+		changed((s) => {
+			if (s.event.closedAt) return;
+			const overrides = a.overrides as BlockerOverride[];
+			const key = (x: unknown) => JSON.stringify(x);
+			const blockers = s.openItems.filter(
+				(i) => !overrides.some((o) => key(o.item) === key(i) && o.note.trim())
+			);
+			if (blockers.length)
+				fail('closing_blocked', 'open items need to be resolved or accepted with a note');
+			s.event.closedAt = new Date().toISOString();
+			s.event.closingOverrides = overrides;
+		}, true),
+	event_reopen: () =>
+		changed((s) => {
+			s.event.closedAt = null;
+			s.event.closingOverrides = [];
+		}, true),
 	payouts_mark_paid: () =>
 		changed((s) => {
 			const paid = new Set(s.payouts.payouts.filter((p) => p.iban).map((p) => p.person));
@@ -472,8 +494,27 @@ export async function invoke<T>(command: string, args: Args = {}): Promise<T> {
 }
 
 /** Stand-ins for the native dialogs: fixed paths, so flows can be clicked through. */
+/** A one-page invoice, so the report has a PDF to draw with pdf.js. */
+function invoicePdf(filename: string) {
+	const text = `BT /F1 20 Tf 48 520 Td (Invoice) Tj /F1 11 Tf 0 -36 Td (Kulturhof Leipzig) Tj 0 -18 Td (Hall rent 12.-14.06.2026) Tj 0 -36 Td (Total 1.800,00 EUR) Tj 0 -60 Td (${filename}) Tj ET`;
+	const pdf = [
+		'%PDF-1.4',
+		'1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj',
+		'2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj',
+		'3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 420 595]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj',
+		`4 0 obj<</Length ${text.length}>>stream`,
+		text,
+		'endstream endobj',
+		'5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj',
+		'trailer<</Root 1 0 R>>',
+		'%%EOF'
+	].join('\n');
+	return `data:application/pdf;base64,${btoa(pdf)}`;
+}
+
 /** A drawn receipt, so previews have something to show in the browser. */
-export function attachmentUrl(attachment: { filename: string }) {
+export function attachmentUrl(attachment: { filename: string; mime?: string }) {
+	if (attachment.mime === 'application/pdf') return invoicePdf(attachment.filename);
 	const lines = [
 		'METRO Leipzig',
 		'13.06.2026  10:42',

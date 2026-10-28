@@ -1,0 +1,132 @@
+<script lang="ts">
+	// Closing the event (R-SET-7): every open item is either fixed or accepted with a note.
+	// After closing the event is read-only until it is reopened in Settings (R-EVT-2).
+	import { api, ApiError } from '#lib/api/index.ts';
+	import Button from '#lib/components/Button.svelte';
+	import Field from '#lib/components/Field.svelte';
+	import Icon from '#lib/components/Icon.svelte';
+	import Panel from '#lib/components/Panel.svelte';
+	import { formatAmount } from '#lib/format.ts';
+	import { describe } from '#lib/openItems.ts';
+	import { session } from '#lib/state/session.svelte.ts';
+
+	let { onclose }: { onclose: () => void } = $props();
+
+	const snapshot = $derived(session.event!.snapshot);
+	const format = $derived(session.format);
+	const items = $derived(snapshot.openItems);
+	const id = $props.id();
+
+	// Notes by item, so a note survives the list changing underneath (e.g. a fix elsewhere).
+	let notes = $state<Record<string, string>>({});
+	let error = $state<string | null>(null);
+	const key = (i: unknown) => JSON.stringify(i);
+	const missing = $derived(items.filter((i) => !notes[key(i)]?.trim()).length);
+
+	async function confirm() {
+		if (missing) return;
+		try {
+			error = null;
+			const overrides = items.map((item) => ({
+				item: $state.snapshot(item),
+				note: notes[key(item)].trim()
+			}));
+			await session.change(() => api.closeEvent(overrides));
+			onclose();
+		} catch (e) {
+			error = e instanceof ApiError ? e.message : String(e);
+		}
+	}
+</script>
+
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			confirm();
+		}
+	}}
+/>
+
+<Panel title="Close event" {onclose}>
+	{#each items as item, n (key(item))}
+		{@const d = describe(item, snapshot, format)}
+		<div class="item">
+			<label class="line" for="{id}-{n}">
+				<span>{d.text}</span>
+				{#if d.amount !== null}<strong>{formatAmount(d.amount, format)}</strong>{/if}
+			</label>
+			<Field id="{id}-{n}">
+				<input
+					id="{id}-{n}"
+					type="text"
+					placeholder="Why it is fine"
+					value={notes[key(item)] ?? ''}
+					oninput={(e) => (notes[key(item)] = e.currentTarget.value)}
+				/>
+			</Field>
+		</div>
+	{:else}
+		<p class="done"><Icon name="check" size={16} />Nothing open</p>
+	{/each}
+	<span class="grow"></span>
+	{#if missing}
+		<span class="attention"
+			><Icon name="warn" size={14} />{missing === 1
+				? '1 item without a note'
+				: `${missing} items without a note`}</span
+		>
+	{/if}
+	{#if error}<p class="error">{error}</p>{/if}
+	{#snippet footer()}
+		<Button kind="primary" icon="lock" shortcut="⌘↵" disabled={!!missing} onclick={confirm}
+			>Close event</Button
+		>
+		<Button shortcut="esc" onclick={onclose}>Cancel</Button>
+	{/snippet}
+</Panel>
+
+<style>
+	.item {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	.line {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-3);
+	}
+
+	strong {
+		font-weight: 600;
+	}
+
+	.done {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		margin: 0;
+		color: var(--color-plus);
+	}
+
+	.attention {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: var(--color-attention);
+	}
+
+	.grow {
+		flex: 1;
+	}
+
+	.error {
+		margin: 0;
+		font-size: var(--type-xs);
+		color: var(--color-minus);
+	}
+</style>

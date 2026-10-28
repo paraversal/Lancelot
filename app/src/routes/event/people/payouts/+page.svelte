@@ -67,9 +67,11 @@
 			<div class="actions">
 				<Button onclick={() => api.print()}>PDF</Button>
 				<Button onclick={exportCsv}>CSV</Button>
-				<Button kind="primary" disabled={!list.payableTotal} onclick={() => (panel = 'mark')}
-					>Mark as paid</Button
-				>
+				{#if !session.closed}
+					<Button kind="primary" disabled={!list.payableTotal} onclick={() => (panel = 'mark')}
+						>Mark as paid</Button
+					>
+				{/if}
 			</div>
 		</header>
 
@@ -120,7 +122,9 @@
 						<span class="person"><strong>{r.name}</strong></span>
 						<span class="grow muted">to {accountName(r.account)}</span>
 						<strong class="amount attention">{formatAmount(r.amount, format)}</strong>
-						<Button size="sm" onclick={() => (panel = { repay: r.person })}>Repaid</Button>
+						{#if !session.closed}
+							<Button size="sm" onclick={() => (panel = { repay: r.person })}>Repaid</Button>
+						{/if}
 					</div>
 				{/each}
 			</section>

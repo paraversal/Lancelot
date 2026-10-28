@@ -103,11 +103,15 @@
 		{#if closing !== null}
 			<div class="line"><span>Counted</span><span>{formatAmount(closing, format)}</span></div>
 			<div class="line total">
-				<strong>Difference</strong>
 				<strong
-					class:minus={!!difference && difference < 0}
-					class:plus={!!difference && difference > 0}
-					>{formatAmount(difference ?? 0, format, 'always')}</strong
+					>{!difference
+						? 'Matches the books'
+						: difference < 0
+							? 'Less than recorded'
+							: 'More than recorded'}</strong
+				>
+				<strong class:minus={!!difference}
+					>{difference ? formatAmount(difference, format, 'magnitude') : ''}</strong
 				>
 			</div>
 		{/if}
@@ -156,10 +160,6 @@
 
 	strong {
 		font-weight: 600;
-	}
-
-	.plus {
-		color: var(--color-plus);
 	}
 
 	.minus {

@@ -36,11 +36,11 @@
 	// them (R-ATT-5).
 	$effect(() =>
 		onFileDrop({
-			over: (names) => (dragging = names),
+			over: (names) => (dragging = session.closed ? null : names),
 			leave: () => (dragging = null),
 			drop: (paths) => {
 				dragging = null;
-				if (!paths.length) return;
+				if (!paths.length || session.closed) return;
 				if (editing === undefined) {
 					open(null);
 					pending = paths;
@@ -66,7 +66,7 @@
 	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`, or
 	// "New entry" on the overview: `/event/ledger?new`.
 	onMount(() => {
-		if (page.url.searchParams.has('new')) return open(null);
+		if (page.url.searchParams.has('new') && !session.closed) return open(null);
 		const id = Number(page.url.searchParams.get('txn'));
 		const txn = snapshot.txns.find((t) => t.id === id);
 		if (txn) {
@@ -106,7 +106,7 @@
 		const target = e.target instanceof Element ? e.target : null;
 		const typing = target?.closest('input, textarea, select, [role="radiogroup"]');
 		if (typing || e.metaKey || e.ctrlKey) return;
-		if (e.key === 'n' || e.key === 'N') {
+		if ((e.key === 'n' || e.key === 'N') && !session.closed) {
 			e.preventDefault();
 			open(null);
 		} else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -150,7 +150,7 @@
 							{ value: 'category', label: 'Category' }
 						]}
 					/>
-				{:else if editing === undefined}
+				{:else if editing === undefined && !session.closed}
 					<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}
 						>New entry</Button
 					>
@@ -172,7 +172,7 @@
 						/>
 					{/each}
 					<span class="grow"></span>
-					{#if editing === undefined}
+					{#if editing === undefined && !session.closed}
 						<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}
 							>New entry</Button
 						>

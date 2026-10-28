@@ -145,7 +145,9 @@
 	{/if}
 
 	{#snippet footer()}
-		{#if editing}
+		{#if session.closed}
+			<span></span>
+		{:else if editing}
 			<Button kind="primary" shortcut="esc" onclick={() => (editing = false)}>Done</Button>
 		{:else}
 			{#if net !== 0}

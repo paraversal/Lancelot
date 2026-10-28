@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.7. M0 to M4 are done, and M5 is under way (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.8. M0 to M4 are done, and M5 is done except the release (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -156,9 +156,9 @@ Built in two steps.
 - [x] Asset accounts are bank or cash, managed in Settings (R-ACC-1).
 - [x] Opening and closing count with the difference for every cash account (R-ISO-3), from its row on the Overview.
 - [x] Overview screen, MVP version: result, in/out by category, "where the money is" and open items, each leading to its fix. The forecast and ticket blocks wait for Phase 2.
-- [ ] Settlement report: income and expenses by category, result, final balance per asset account, and open items. Covers R-SET-1, R-SET-4 and R-SET-5.
-- [ ] Exports: PDF, plus CSV/XLSX of the raw transactions (R-SET-6).
-- [ ] Closing is blocked while there are open items, and each blocker can be overridden with a note. After closing, the final balance stays visible (R-SET-7, R-SET-8).
+- [x] Settlement report: income and expenses by category, result, final balance per asset account with its counts, open or accepted items, every entry, and the receipts one per page (PDF receipts drawn with pdf.js). Printed to PDF from the print dialog. Covers R-SET-1, R-SET-4, R-SET-5 and R-SET-6.
+- [x] Transactions CSV, one row per line, in the user's number format (R-SET-6). XLSX is not planned.
+- [x] Closing is blocked while there are open items, and each blocker can be accepted with a note. A closed event is read-only and shows its final balance; Settings reopens it (R-EVT-2, R-SET-7, R-SET-8).
 - [ ] Unsigned macOS build from CI, attached to a GitHub release. Signing waits.
 - [ ] **Parallel run** with the Excel sheet at the next event.
 
@@ -216,6 +216,7 @@ Built in two steps.
 - **M12 · SEPA.** Export the payout list as pain.001 XML (R-PER-6).
 - **M13 · Polished reports.** A typeset settlement PDF that follows the design system.
 - **M14 · Receipt OCR** (optional): pre-fill amount, date and counterparty from an attached receipt. It must run locally.
+- **User manual.** How the event's money is modelled (accounts, people, counts) and how to run an event from opening count to closing, for treasurers who did not build it.
 
 ---
 

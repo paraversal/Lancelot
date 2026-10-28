@@ -21,7 +21,7 @@ CREATE TABLE event (                   -- exactly one row
   ends_on     TEXT,
   location    TEXT,
   notes       TEXT,
-  closed      INTEGER NOT NULL DEFAULT 0 CHECK (closed IN (0,1)),
+  closed_at   TEXT,                    -- RFC 3339 UTC; set while the event is closed
   default_reimbursement_account_id INTEGER NOT NULL REFERENCES account(id),
   closing_overrides TEXT NOT NULL DEFAULT '[]'   -- JSON
 ) STRICT;

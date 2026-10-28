@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import amountCases from '../../../fixtures/amount-format.json';
-import { formatAmount, formatDate, formatDateRange, formatSize, formatTimestamp } from './format';
+import {
+	differenceText,
+	formatAmount,
+	formatDate,
+	formatDateRange,
+	formatSize,
+	formatTimestamp
+} from './format';
 import type { NumberFormat } from './api/generated/NumberFormat';
 import type { SignStyle } from './api/generated/SignStyle';
 
@@ -59,5 +66,12 @@ describe('formatTimestamp and formatSize', () => {
 		expect(formatSize(2_412_000, 'de')).toBe('2,4 MB');
 		expect(formatSize(2_412_000, 'en')).toBe('2.4 MB');
 		expect(formatSize(512, 'en')).toBe('512 B');
+	});
+});
+
+describe('differenceText', () => {
+	it('says which way a count is off', () => {
+		expect(differenceText(-290, 'de')).toBe('2,90 € less than recorded');
+		expect(differenceText(750, 'en')).toBe('€7.50 more than recorded');
 	});
 });
