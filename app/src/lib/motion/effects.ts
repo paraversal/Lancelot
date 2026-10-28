@@ -21,7 +21,6 @@ function play(node: Element, keyframes: Keyframe[], options: KeyframeAnimationOp
 /** A1: a page arriving. */
 export function pageIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	const rise = isPlayful(level) ? 10 : 6;
 	return {
 		duration: isPlayful(level) ? 320 : 180,
@@ -32,7 +31,7 @@ export function pageIn(_node: Element, { level }: { level: Level }): TransitionC
 
 /** A1: the sidebar's highlight travels from the item it was on to the new one. */
 export function markerTravel(marker: HTMLElement, from: DOMRect, to: DOMRect, level: Level) {
-	if (level === 'off' || level === 'calm') return;
+	if (level === 'off') return;
 	const dy = from.top - to.top;
 	if (!dy) return;
 	const frames: Keyframe[] = isPlayful(level)
@@ -51,7 +50,6 @@ export function markerTravel(marker: HTMLElement, from: DOMRect, to: DOMRect, le
 /** A2: a panel sliding in from the right. */
 export function panelIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	const playful = isPlayful(level);
 	const from = playful ? 28 : 16;
 	return {
@@ -64,7 +62,7 @@ export function panelIn(_node: Element, { level }: { level: Level }): Transition
 export function panelOut(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
 	return {
-		duration: level === 'calm' ? 90 : 120,
+		duration: 120,
 		css: (t, u) => `opacity: ${t}; transform: translateX(${u * 10}px)`
 	};
 }
@@ -101,7 +99,7 @@ export function press(node: HTMLElement, getLevel: () => Level) {
 
 /** A4: the active option's pill moves from the old option to the new one. */
 export function pillTravel(pill: HTMLElement, from: DOMRect, to: DOMRect, level: Level) {
-	if (level === 'off' || level === 'calm') return;
+	if (level === 'off') return;
 	const dx = from.left - to.left;
 	const sx = from.width / Math.max(1, to.width);
 	if (!dx && sx === 1) return;
@@ -123,7 +121,6 @@ export function pillTravel(pill: HTMLElement, from: DOMRect, to: DOMRect, level:
 /** A6: the warning icon of a field that did not accept its input. */
 export function warnIn(node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	return {
 		duration: isPlayful(level) ? 360 : 160,
 		easing: isPlayful(level) ? (t) => springFn(t, 1.3) : cubicOut,
@@ -151,7 +148,6 @@ export function shake(node: Element, level: Level) {
 /** B1: a new row opens up; the highlighter (a `.sweep` child) runs across and fades. */
 export function rowIn(node: HTMLElement, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	const sweep = node.querySelector<HTMLElement>('.sweep');
 	if (sweep)
 		isPlayful(level)
@@ -179,7 +175,6 @@ export function rowIn(node: HTMLElement, { level }: { level: Level }): Transitio
 /** B2: a deleted row collapses; playful strikes it through first (a `.strike` child). */
 export function rowOut(node: HTMLElement, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade(90);
 	const h = node.offsetHeight;
 	const strike = isPlayful(level);
 	const line = node.querySelector<HTMLElement>('.strike');
@@ -201,7 +196,7 @@ export function rowOut(node: HTMLElement, { level }: { level: Level }): Transiti
 
 /** B3: rows moving to their new places (animate:flip takes these options). */
 export function flipOptions(level: Level) {
-	if (level === 'off' || level === 'calm') return { duration: 0 };
+	if (level === 'off') return { duration: 0 };
 	return isPlayful(level)
 		? { duration: 360, easing: (t: number) => springFn(t, 1.08) }
 		: { duration: 200, easing: cubicOut };
@@ -210,7 +205,6 @@ export function flipOptions(level: Level) {
 /** B4: the filled form leaves to the left, a fresh one arrives from the right. */
 export function formOut(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade(90);
 	const playful = isPlayful(level);
 	return {
 		duration: playful ? 220 : 140,
@@ -222,7 +216,6 @@ export function formOut(_node: Element, { level }: { level: Level }): Transition
 
 export function formIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	const playful = isPlayful(level);
 	return {
 		duration: playful ? 340 : 180,
@@ -236,7 +229,6 @@ export function formIn(_node: Element, { level }: { level: Level }): TransitionC
 /** B5: a receipt landing in the strip; playful drops it like paper on a desk. */
 export function receiptIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	if (isPlayful(level))
 		return {
 			duration: 520,
@@ -255,7 +247,7 @@ export function receiptIn(_node: Element, { level }: { level: Level }): Transiti
 /** B6: the preview grows out of the thumbnail it was opened from. */
 export function growFrom(node: HTMLElement, from: DOMRect | null, level: Level) {
 	if (level === 'off') return;
-	if (level === 'calm' || !from || !isPlayful(level)) {
+	if (!from || !isPlayful(level)) {
 		play(
 			node,
 			[
@@ -263,7 +255,7 @@ export function growFrom(node: HTMLElement, from: DOMRect | null, level: Level) 
 				{ opacity: 1, transform: 'none' }
 			],
 			{
-				duration: level === 'calm' ? 120 : 180,
+				duration: 180,
 				easing: easing('ease-out')
 			}
 		);
@@ -291,7 +283,7 @@ export function growFrom(node: HTMLElement, from: DOMRect | null, level: Level) 
 /** C1, E1: a stamp landing; regular just fades in. */
 export function stampIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm' || !isPlayful(level)) return fade(160);
+	if (!isPlayful(level)) return fade(160);
 	return {
 		duration: 420,
 		css: (t) => {
@@ -303,12 +295,12 @@ export function stampIn(_node: Element, { level }: { level: Level }): Transition
 
 /** C2: rows ticking off one after another. Returns the delay for row `i`. */
 export const wave = (level: Level, i: number) =>
-	level === 'off' || level === 'calm' ? 0 : i * (isPlayful(level) ? 70 : 35);
+	level === 'off' ? 0 : i * (isPlayful(level) ? 70 : 35);
 
 /** C3, D3, D4, F2: a check that draws itself (an SVG path with pathLength="1"). */
 export function drawCheck(path: SVGPathElement, level: Level, delay = 0) {
 	if (level === 'off') return;
-	if (level === 'calm' || !isPlayful(level)) {
+	if (!isPlayful(level)) {
 		play(path, [{ opacity: 0 }, { opacity: 1 }], { duration: 160, delay });
 		return;
 	}
@@ -324,7 +316,6 @@ export function drawCheck(path: SVGPathElement, level: Level, delay = 0) {
 /** D1: sections rising in one after another; `i` is the section's place. */
 export function riseIn(_node: Element, { level, i = 0 }: { level: Level; i?: number }) {
 	if (level === 'off') return NONE;
-	if (level === 'calm') return fade();
 	return {
 		duration: 260,
 		delay: i * (isPlayful(level) ? 70 : 45),
@@ -336,10 +327,6 @@ export function riseIn(_node: Element, { level, i = 0 }: { level: Level; i?: num
 /** D2: a bar growing from the left. */
 export function growBar(node: HTMLElement, level: Level, i = 0) {
 	if (level === 'off') return;
-	if (level === 'calm') {
-		play(node, [{ opacity: 0 }, { opacity: 1 }], { duration: 120 });
-		return;
-	}
 	const playful = isPlayful(level);
 	play(node, [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], {
 		duration: playful ? 520 : 360,
@@ -351,7 +338,7 @@ export function growBar(node: HTMLElement, level: Level, i = 0) {
 /** D4: "Matches the books" popping in. */
 export function popIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;
-	if (level === 'calm' || !isPlayful(level)) return fade(160);
+	if (!isPlayful(level)) return fade(160);
 	return {
 		duration: 380,
 		css: (t) => `opacity: ${Math.min(1, t * 3)}; transform: scale(${0.6 + 0.4 * springFn(t, 1.25)})`
@@ -359,6 +346,13 @@ export function popIn(_node: Element, { level }: { level: Level }): TransitionCo
 }
 
 // --- E, F · Big moments, files, report ---------------------------------------------------
+
+/** E2: a section that lingers just long enough for its lock to open, then fades. */
+export function lingerOut(_node: Element, { level }: { level: Level }): TransitionConfig {
+	if (level === 'off') return NONE;
+	const linger = isPlayful(level) ? 420 : 220;
+	return { delay: linger, duration: 140, css: (t) => `opacity: ${t}` };
+}
 
 /** E1, E2: the lock's shackle (an SVG group) closing or opening. */
 export function lockShackle(shackle: SVGGElement, closing: boolean, level: Level) {
@@ -368,7 +362,7 @@ export function lockShackle(shackle: SVGGElement, closing: boolean, level: Level
 		? [{ transform: open }, { transform: 'none' }]
 		: [{ transform: 'none' }, { transform: open }];
 	shackle.animate(frames, {
-		duration: level === 'calm' ? 120 : isPlayful(level) ? 420 : 220,
+		duration: isPlayful(level) ? 420 : 220,
 		easing: isPlayful(level) ? easing('spring-bouncy') : easing('ease-out'),
 		fill: 'forwards'
 	});
@@ -376,7 +370,7 @@ export function lockShackle(shackle: SVGGElement, closing: boolean, level: Level
 
 /** F1: the recent row growing into the window. */
 export function expandInto(row: HTMLElement, level: Level): Promise<void> {
-	if (level === 'off' || level === 'calm' || !isPlayful(level)) return Promise.resolve();
+	if (level === 'off' || !isPlayful(level)) return Promise.resolve();
 	const box = row.getBoundingClientRect();
 	const copy = row.cloneNode(true) as HTMLElement;
 	copy.style.cssText = `position:fixed;left:${box.left}px;top:${box.top}px;width:${box.width}px;height:${box.height}px;margin:0;z-index:1000;pointer-events:none;background:var(--color-paper);transform-origin:0 0`;
@@ -398,7 +392,7 @@ export function expandInto(row: HTMLElement, level: Level): Promise<void> {
 
 /** F2: the refresh arrow turning once. */
 export function spin(node: Element, level: Level) {
-	if (level === 'off' || level === 'calm') return;
+	if (level === 'off') return;
 	node.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(360deg)' }], {
 		duration: isPlayful(level) ? 620 : 420,
 		easing: isPlayful(level) ? easing('spring-soft') : easing('ease-out')

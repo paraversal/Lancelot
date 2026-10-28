@@ -69,6 +69,8 @@ export function confetti(from: { x: number; y: number }, count = 120, spread = 1
 		else canvas.remove();
 	};
 	requestAnimationFrame(frame);
+	// A window that is not drawing runs no frames; the canvas still goes away.
+	setTimeout(() => canvas.remove(), 2600);
 }
 
 /** A few small sparks around a point: the playful version of a celebration. */

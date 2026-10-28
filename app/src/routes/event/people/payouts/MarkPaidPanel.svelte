@@ -8,6 +8,10 @@
 	import Panel from '#lib/components/Panel.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import { formatAmount } from '#lib/format.ts';
+	import { wave } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
+	import Check from '#lib/motion/Check.svelte';
+	import MovingAmount from '#lib/motion/MovingAmount.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let { onclose }: { onclose: () => void } = $props();
@@ -25,11 +29,19 @@
 	let date = $state<string | null>(new Date().toISOString().slice(0, 10));
 	let error = $state<string | null>(null);
 
+	// C2: the rows tick off one after another. The change is saved first; the panel keeps the
+	// rows it showed and closes when the last tick is drawn.
+	let paid = $state<typeof payable | null>(null);
+	const rows = $derived(paid ?? payable);
+	const fx = $derived(level('C2'));
+
 	async function confirm() {
-		if (!date || !payable.length) return;
+		if (!date || !payable.length || paid) return;
+		const shown = payable.map((p) => ({ ...p }));
 		try {
 			await session.change(() => api.markPayoutsPaid(account, date!));
-			onclose();
+			paid = shown;
+			setTimeout(onclose, 300 + wave(fx, shown.length));
 		} catch (e) {
 			error = e instanceof ApiError ? e.message : String(e);
 		}
@@ -47,14 +59,26 @@
 
 <Panel title="Mark as paid" {onclose}>
 	<div class="list">
-		{#each payable as p (p.person)}
-			<div class="line"><span>{p.name}</span><span>{formatAmount(p.amount, format)}</span></div>
+		{#each rows as p, i (p.person)}
+			<div class="line" class:done={!!paid}>
+				<span>{p.name}</span>
+				<span class="pay">
+					{#if paid}<span class="ok"><Check level={fx} size={14} delay={wave(fx, i)} /></span>{/if}
+					{formatAmount(p.amount, format)}
+				</span>
+			</div>
 		{/each}
 		<div class="line total">
 			<span class="muted"
-				>{payable.length === 1 ? '1 reimbursement' : `${payable.length} reimbursements`}</span
+				>{rows.length === 1 ? '1 reimbursement' : `${rows.length} reimbursements`}</span
 			>
-			<strong>{formatAmount(list.payableTotal, format)}</strong>
+			<strong
+				><MovingAmount
+					value={paid ? 0 : rows.reduce((t, p) => t + p.amount, 0)}
+					{format}
+					level={level('A5')}
+				/></strong
+			>
 		</div>
 	</div>
 	{#each missing as p (p.person)}
@@ -93,6 +117,22 @@
 
 	.line.total {
 		border-top: 1px solid var(--color-rule);
+	}
+
+	.line.done {
+		color: var(--color-ink-muted);
+		transition: color var(--motion-normal);
+	}
+
+	.pay {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.ok {
+		display: inline-flex;
+		color: var(--color-plus);
 	}
 
 	.muted {

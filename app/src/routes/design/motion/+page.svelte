@@ -1,11 +1,15 @@
 <script lang="ts">
 	// The motion trial page (docs/design/motion.md): every idea at every strength, side by side,
-	// built from the effects the app uses. The strength the app uses is marked; choices.ts
-	// decides it. Replay remounts a demo; the Motion switch shows Calm and Off.
-	import type { Motion } from '#lib/api/generated/Motion.ts';
-	import Segmented from '#lib/components/Segmented.svelte';
-	import { CHOICES, IDEAS, STRENGTHS, type Idea, type Strength } from '#lib/motion/choices.ts';
-	import { motion } from '#lib/motion/mode.svelte.ts';
+	// built from the effects the app uses. The strengths the app uses with full and with reduced
+	// motion are marked; choices.ts decides them. Replay remounts a demo.
+	import {
+		FULL,
+		IDEAS,
+		REDUCED,
+		STRENGTHS,
+		type Idea,
+		type Strength
+	} from '#lib/motion/choices.ts';
 	import Demo from './Demo.svelte';
 
 	const GROUPS: { key: string; title: string }[] = [
@@ -32,16 +36,6 @@
 <div class="trial">
 	<header>
 		<h1>Motion</h1>
-		<Segmented
-			label="Motion"
-			value={motion.setting}
-			onchange={(v: Motion) => (motion.setting = v)}
-			options={[
-				{ value: 'full', label: 'Full' },
-				{ value: 'calm', label: 'Calm' },
-				{ value: 'off', label: 'Off' }
-			]}
-		/>
 	</header>
 
 	{#each GROUPS as g (g.key)}
@@ -57,13 +51,14 @@
 					<div class="cells">
 						{#each STRENGTHS[id] as s (s)}
 							{@const key = `${id}-${s}`}
-							<div class="cell" class:chosen={CHOICES[id] === s}>
+							<div class="cell" class:chosen={FULL[id] === s}>
 								<div class="cell-head">
 									<span>{LABEL[s]}</span>
-									{#if CHOICES[id] === s}<span class="badge">in the app</span>{/if}
+									{#if FULL[id] === s}<span class="badge">full</span>{/if}
+									{#if REDUCED[id] === s}<span class="badge reduced">reduced</span>{/if}
 									<button type="button" class="replay" onclick={() => replay(key)}>▶</button>
 								</div>
-								{#key `${plays[key] ?? 0}-${motion.setting}`}
+								{#key plays[key] ?? 0}
 									<Demo {id} strength={s} />
 								{/key}
 							</div>
@@ -155,6 +150,11 @@
 		border-radius: var(--radius-pill);
 		background: var(--color-marker);
 		color: var(--color-ink);
+	}
+
+	.badge.reduced {
+		background: var(--color-paper);
+		color: var(--color-ink-muted);
 	}
 
 	.cell-head .replay {

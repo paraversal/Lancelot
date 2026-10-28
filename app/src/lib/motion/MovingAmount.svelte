@@ -25,7 +25,7 @@
 	} = $props();
 
 	// Read once: whether this amount starts at zero and counts up.
-	let shown = $state(untrack(() => (countUp && isPlayful(level) ? 0 : value)));
+	let shown = $state(untrack(() => (countUp ? 0 : value)));
 	let counting = false;
 	const text = $derived(formatAmount(shown, format, sign));
 	let root: HTMLSpanElement;
@@ -60,10 +60,6 @@
 		const before = [...last.text];
 		last = { text: now, value: shown };
 		if (level === 'off') return;
-		if (level === 'calm') {
-			root.animate([{ opacity: 0.2 }, { opacity: 1 }], { duration: 120 });
-			return;
-		}
 		if (!isPlayful(level)) {
 			root.animate(
 				[{ transform: `translateY(${up ? 0.45 : -0.45}em)`, opacity: 0 }, { transform: 'none' }],

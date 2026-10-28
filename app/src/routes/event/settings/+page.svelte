@@ -8,7 +8,6 @@
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
 	import type { BackupInfo } from '#lib/api/generated/BackupInfo.ts';
 	import type { EventDetails } from '#lib/api/generated/EventDetails.ts';
-	import type { Motion } from '#lib/api/generated/Motion.ts';
 	import type { NumberFormat } from '#lib/api/generated/NumberFormat.ts';
 	import Button from '#lib/components/Button.svelte';
 	import DateField from '#lib/components/DateField.svelte';
@@ -18,6 +17,10 @@
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount, formatDate, formatSize, formatTimestamp } from '#lib/format.ts';
+	import { lingerOut, spin } from '#lib/motion/effects.ts';
+	import Check from '#lib/motion/Check.svelte';
+	import Lock from '#lib/motion/Lock.svelte';
+	import { level, reduced } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	// The layout only renders pages while an event is open.
@@ -57,10 +60,10 @@
 	const update = (patch: Partial<EventDetails>) =>
 		run(() => session.change(() => api.updateEvent(details(patch))));
 
-	const setMotion = (motion: Motion) =>
+	const setReducedMotion = (reducedMotion: boolean) =>
 		run(async () => {
 			if (!session.settings) return;
-			session.settings = await api.setSettings({ ...session.settings, motion });
+			session.settings = await api.setSettings({ ...session.settings, reducedMotion });
 		});
 
 	const setFormat = (numberFormat: NumberFormat) =>
@@ -81,7 +84,12 @@
 		}
 	}
 
-	const check = () => run(() => session.change(() => api.checkIntegrity(), true));
+	// F2: the arrow turns once, and a clean result draws its check again.
+	const check = (e: MouseEvent) => {
+		const arrow = (e.currentTarget as HTMLElement).querySelector('svg');
+		if (arrow) spin(arrow, level('F2'));
+		return run(() => session.change(() => api.checkIntegrity(), true));
+	};
 
 	const restore = (b: BackupInfo) =>
 		run(async () => {
@@ -96,10 +104,17 @@
 		event.closedAt ? formatDate(event.closedAt.slice(0, 10), format) : null
 	);
 	let reopening = $state(false);
+	// E2: the lock opens while the status lingers; the event is already reopened underneath.
+	let unlocking = $state(false);
 	const reopen = () =>
 		run(async () => {
-			await session.change(() => api.reopenEvent());
-			reopening = false;
+			unlocking = true;
+			try {
+				await session.change(() => api.reopenEvent());
+			} finally {
+				unlocking = false;
+				reopening = false;
+			}
 		});
 
 	const accounts = $derived(open.snapshot.accounts.filter((a) => a.kind === 'asset'));
@@ -233,10 +248,10 @@
 
 		<div class="stack">
 			{#if closedOn}
-				<section>
+				<section out:lingerOut={{ level: level('E2') }}>
 					<h2>Status</h2>
 					<div class="line">
-						<span class="muted"><Icon name="lock" /></span>
+						<span class="muted"><Lock closed={!unlocking} level={level('E2')} size={16} /></span>
 						<strong>Closed {closedOn}</strong>
 						<span class="grow"></span>
 						{#if reopening}
@@ -263,19 +278,14 @@
 						]}
 					/>
 				</div>
-				<div class="labelled">
-					<span class="label">Motion</span>
-					<Segmented
-						label="Motion"
-						value={session.settings?.motion ?? 'full'}
-						onchange={setMotion}
-						options={[
-							{ value: 'full', label: 'Full' },
-							{ value: 'calm', label: 'Calm' },
-							{ value: 'off', label: 'Off' }
-						]}
+				<label class="toggle">
+					<input
+						type="checkbox"
+						checked={reduced()}
+						onchange={(e) => setReducedMotion(e.currentTarget.checked)}
 					/>
-				</div>
+					Reduced motion
+				</label>
 			</section>
 
 			<section>
@@ -290,7 +300,9 @@
 						<span class="warn"><Icon name="warn" /></span>
 						<strong class="warn">{issues === 1 ? '1 issue' : `${issues} issues`}</strong>
 					{:else}
-						<span class="ok"><Icon name="check" /></span>
+						{#key session.checkedAt}
+							<span class="ok"><Check level={level('F2')} size={16} delay={220} /></span>
+						{/key}
 						<strong>No issues</strong>
 					{/if}
 					{#if checked}<span class="muted">Checked {checked}</span>{/if}
@@ -388,6 +400,19 @@
 	.label {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		align-self: flex-start;
+		font-size: 13px;
+		cursor: pointer;
+	}
+
+	.toggle input {
+		accent-color: var(--color-ink);
 	}
 
 	.line {

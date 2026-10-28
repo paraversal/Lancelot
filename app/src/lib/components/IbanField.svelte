@@ -3,6 +3,8 @@
 	// mod-97 checksum. While the text differs from the grouped form, the hint previews it.
 	import { untrack } from 'svelte';
 	import { api, ApiError } from '../api';
+	import Check from '../motion/Check.svelte';
+	import { level } from '../motion/mode.svelte';
 	import Field from './Field.svelte';
 
 	let {
@@ -85,7 +87,18 @@
 		aria-invalid={!!error}
 		aria-describedby={error ? `${id}-error` : undefined}
 	/>
+	{#if checked && !error && text.trim()}
+		<span class="ok" aria-label="Valid IBAN"><Check level={level('C3')} size={14} /></span>
+	{/if}
 	{#snippet hint()}
 		{#if preview}= {preview}{/if}
 	{/snippet}
 </Field>
+
+<style>
+	.ok {
+		display: flex;
+		flex: none;
+		color: var(--color-plus);
+	}
+</style>

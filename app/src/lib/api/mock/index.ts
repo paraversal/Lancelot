@@ -26,7 +26,7 @@ const EXAMPLE = `${DIR}/sommerfest-2026.lancelot`;
 const DAMAGED = `${DIR}/winterfest-2025.lancelot`;
 const LOCKED = `${DIR}/sommerfest-2025.lancelot`;
 
-let settings: AppSettings = { numberFormat: 'de', backupCount: 20, motion: 'full' };
+let settings: AppSettings = { numberFormat: 'de', backupCount: 20, reducedMotion: null };
 let recent: RecentEvent[] = [
 	{
 		path: EXAMPLE,

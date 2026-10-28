@@ -40,15 +40,15 @@ export const STRENGTHS: Record<Idea, Strength[]> = Object.fromEntries(
 	])
 ) as Record<Idea, Strength[]>;
 
-/** What the app uses. Proposed: playful where it answers a person, regular for the rest. */
-export const CHOICES: Record<Idea, Strength> = {
+/** What the app uses with full motion. */
+export const FULL: Record<Idea, Strength> = {
 	A1: 'regular',
 	A2: 'regular',
-	A3: 'playful',
+	A3: 'regular',
 	A4: 'playful',
-	A5: 'regular',
+	A5: 'playful',
 	A6: 'playful',
-	B1: 'playful',
+	B1: 'regular',
 	B2: 'regular',
 	B3: 'regular',
 	B4: 'regular',
@@ -58,13 +58,21 @@ export const CHOICES: Record<Idea, Strength> = {
 	C2: 'playful',
 	C3: 'playful',
 	D1: 'regular',
-	D2: 'regular',
+	D2: 'playful',
 	D3: 'regular',
 	D4: 'playful',
-	E1: 'playful',
+	E1: 'big',
 	E2: 'regular',
 	E3: 'playful',
 	F1: 'regular',
-	F2: 'regular',
+	F2: 'playful',
 	F3: 'playful'
 };
+
+/**
+ * What the app uses with reduced motion: small and short. Everything that travels far,
+ * overshoots, shakes or throws confetti is regular; the moments that need it keep a fade.
+ */
+export const REDUCED: Record<Idea, Strength> = Object.fromEntries(
+	Object.keys(IDEAS).map((id) => [id, 'regular'])
+) as Record<Idea, Strength>;

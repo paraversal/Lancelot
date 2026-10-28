@@ -1,7 +1,10 @@
 <script lang="ts">
 	// The event's sidebar: name and dates, the pages with their counts, and the file name, which
 	// opens Settings. Budget, Tickets and Drinks join in phase 2.
+	import { tick } from 'svelte';
 	import { page } from '$app/state';
+	import { markerTravel } from '../motion/effects';
+	import { level } from '../motion/mode.svelte';
 	import type { OpenEvent } from '../api/generated/OpenEvent';
 	import { formatDateRange } from '../format';
 	import { session } from '../state/session.svelte';
@@ -19,6 +22,26 @@
 		formatDateRange(snapshot.event.startsOn, snapshot.event.endsOn, session.format)
 	);
 	const current = $derived(page.url.pathname);
+	const active = $derived(items.findIndex((i) => current.startsWith(i.href)));
+
+	// The yellow highlight is one element under the list that travels to the page (A1).
+	let list: HTMLUListElement;
+	let marker: HTMLLIElement;
+	let box = $state<{ top: number; height: number } | null>(null);
+	let placed = false;
+	$effect(() => {
+		const link = list?.querySelectorAll('a')[active];
+		// A link's list item is what the marker covers.
+		const item = link?.parentElement;
+		const from = placed && marker ? marker.getBoundingClientRect() : null;
+		const next = item ? { top: item.offsetTop, height: item.offsetHeight } : null;
+		box = next;
+		placed = !!next;
+		if (from && next)
+			tick().then(() => {
+				if (marker) markerTravel(marker, from, marker.getBoundingClientRect(), level('A1'));
+			});
+	});
 </script>
 
 <nav class="sidebar">
@@ -31,7 +54,15 @@
 		{/if}
 	</div>
 
-	<ul>
+	<ul bind:this={list}>
+		<li
+			class="marker"
+			aria-hidden="true"
+			bind:this={marker}
+			style:top="{box?.top ?? 0}px"
+			style:height="{box?.height ?? 0}px"
+			style:opacity={box ? 1 : 0}
+		></li>
 		{#each items as item (item.href)}
 			<li>
 				<a href={item.href} aria-current={current.startsWith(item.href) ? 'page' : undefined}>
@@ -107,9 +138,33 @@
 		background: color-mix(in srgb, var(--color-rule) 60%, transparent);
 	}
 
-	a[aria-current='page'] {
+	ul {
+		position: relative;
+	}
+
+	.marker {
+		position: absolute;
+		left: 0;
+		right: 0;
+		border-radius: var(--radius-field);
 		background: var(--color-marker);
+		pointer-events: none;
+	}
+
+	li {
+		position: relative;
+	}
+
+	a[aria-current='page'] {
 		font-weight: 600;
+	}
+
+	a[aria-current='page']:hover {
+		background: none;
+	}
+
+	.file[aria-current='page'] {
+		background: var(--color-marker);
 	}
 
 	.count {

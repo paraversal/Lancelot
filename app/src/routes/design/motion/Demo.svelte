@@ -396,7 +396,7 @@
 		<div class="head">
 			<strong>Overview</strong>
 			{#if closed}
-				<span class="chip" in:fx.stampIn={{ level: id === 'E1' ? level : 'calm' }}
+				<span class="chip" in:fx.stampIn={{ level: id === 'E1' ? level : 'regular' }}
 					><Lock closed {level} size={14} />Closed 21.06.2026</span
 				>
 			{/if}

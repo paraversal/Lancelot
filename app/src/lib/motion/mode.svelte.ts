@@ -1,24 +1,22 @@
-// How much the app moves right now: the Motion setting, made calm when macOS asks for less
-// motion. The root element carries it as `data-motion`, so CSS can read it too.
-import type { Motion } from '../api/generated/Motion';
-import { CHOICES, type Idea, type Strength } from './choices';
+// How much the app moves right now: full, or reduced when macOS asks for less motion or the
+// person says so in Settings (`reducedMotion` overrides the system). The root element carries
+// it as `data-motion`, so CSS can read it too.
+import { FULL, REDUCED, type Idea, type Strength } from './choices';
 
-/** What an effect does: one of the strengths, a short fade, or nothing. */
-export type Level = Exclude<Strength, 'skip'> | 'calm' | 'off';
+/** What an effect does: one of the strengths, or nothing for an idea that is skipped. */
+export type Level = Exclude<Strength, 'skip'> | 'off';
 
-export const motion = $state<{ setting: Motion; reduced: boolean }>({
-	setting: 'full',
-	reduced: false
+export const motion = $state<{ system: boolean; setting: boolean | null }>({
+	system: false,
+	setting: null
 });
 
-export function effectiveMotion(): Motion {
-	return motion.setting === 'full' && motion.reduced ? 'calm' : motion.setting;
-}
+export const reduced = () => motion.setting ?? motion.system;
 
 /** Follows the system's reduced-motion wish; returns a function that stops following. */
 export function watchReducedMotion(): () => void {
 	const query = matchMedia('(prefers-reduced-motion: reduce)');
-	const apply = () => (motion.reduced = query.matches);
+	const apply = () => (motion.system = query.matches);
 	apply();
 	query.addEventListener('change', apply);
 	return () => query.removeEventListener('change', apply);
@@ -26,12 +24,8 @@ export function watchReducedMotion(): () => void {
 
 /** How idea `id` moves. `strength` overrides the choice, as the trial page does. */
 export function level(id: Idea, strength?: Strength): Level {
-	const mode = effectiveMotion();
-	if (mode === 'off') return 'off';
-	if (mode === 'calm') return 'calm';
-	const s = strength ?? CHOICES[id];
+	const s = strength ?? (reduced() ? REDUCED : FULL)[id];
 	return s === 'skip' ? 'off' : s;
 }
 
-export const moves = (l: Level) => l !== 'off';
 export const isPlayful = (l: Level) => l === 'playful' || l === 'big';

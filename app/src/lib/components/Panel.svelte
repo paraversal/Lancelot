@@ -1,6 +1,8 @@
 <script lang="ts">
 	// The right-hand panel where editing happens (no modals for routine work). Esc closes it.
 	import type { Snippet } from 'svelte';
+	import { panelIn } from '../motion/effects';
+	import { level } from '../motion/mode.svelte';
 	import Icon from './Icon.svelte';
 
 	let {
@@ -30,7 +32,8 @@
 	}}
 />
 
-<aside class="panel">
+<!-- Panels slide in (A2); closing is immediate, so nothing waits on it. -->
+<aside class="panel" in:panelIn|global={{ level: level('A2') }}>
 	<header>
 		{#if header}{@render header()}{:else}<h2>{title}</h2>{/if}
 		<button type="button" class="close" aria-label="Close" onclick={onclose}>

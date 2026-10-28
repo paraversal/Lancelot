@@ -7,6 +7,9 @@
 	import DateField from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import { formatAmount } from '#lib/format.ts';
+	import { popIn } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
+	import Check from '#lib/motion/Check.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let { account, onclose }: { account: number; onclose: () => void } = $props();
@@ -103,16 +106,14 @@
 		{#if closing !== null}
 			<div class="line"><span>Counted</span><span>{formatAmount(closing, format)}</span></div>
 			<div class="line total">
-				<strong
-					>{!difference
-						? 'Matches the books'
-						: difference < 0
-							? 'Less than recorded'
-							: 'More than recorded'}</strong
-				>
-				<strong class:minus={!!difference}
-					>{difference ? formatAmount(difference, format, 'magnitude') : ''}</strong
-				>
+				{#if !difference}
+					<span class="match" in:popIn={{ level: level('D4') }}
+						><Check level={level('D4')} size={16} delay={120} />Matches the books</span
+					>
+				{:else}
+					<strong>{difference < 0 ? 'Less than recorded' : 'More than recorded'}</strong>
+					<strong class="minus">{formatAmount(difference, format, 'magnitude')}</strong>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -160,6 +161,14 @@
 
 	strong {
 		font-weight: 600;
+	}
+
+	.match {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-weight: 600;
+		color: var(--color-plus);
 	}
 
 	.minus {

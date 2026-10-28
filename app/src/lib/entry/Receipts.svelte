@@ -6,6 +6,8 @@
 	import { chooseReceipts } from '#lib/api/dialogs.ts';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatSize } from '#lib/format.ts';
+	import { receiptIn } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -34,9 +36,9 @@
 <div class="receipts">
 	<span class="label">Receipt</span>
 	{#each attachments as a (a.id)}
-		<div class="item" class:selected={previewing === a.id}>
+		<div class="item" class:selected={previewing === a.id} in:receiptIn={{ level: level('B5') }}>
 			<button type="button" class="open" onclick={() => onpreview(a)}>
-				<span class="thumb">
+				<span class="thumb" data-attachment={a.id}>
 					{#if isImage(a)}
 						{#await attachmentUrl(a) then url}<img src={url} alt="" />{/await}
 					{:else}
@@ -59,7 +61,7 @@
 		</div>
 	{/each}
 	{#each pending as path, i (path)}
-		<div class="item">
+		<div class="item" in:receiptIn={{ level: level('B5') }}>
 			<span class="open">
 				<span class="thumb"><Icon name="file" size={18} /></span>
 				<span class="text"><strong>{name(path)}</strong></span>

@@ -3,7 +3,7 @@
 	import '#lib/styles/base.css';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api/index.ts';
-	import { effectiveMotion, motion, watchReducedMotion } from '#lib/motion/mode.svelte.ts';
+	import { motion, reduced, watchReducedMotion } from '#lib/motion/mode.svelte.ts';
 	import { installShortcuts } from '#lib/shortcuts.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import type { LayoutProps } from './$types';
@@ -22,13 +22,13 @@
 		};
 	});
 
-	// How much the app moves: the setting, calmed by macOS's "reduce motion". CSS reads it from
-	// `data-motion` on the root element.
+	// How much the app moves: macOS's "reduce motion", unless Settings overrides it. CSS reads
+	// it from `data-motion` on the root element.
 	$effect(() => {
-		motion.setting = session.settings?.motion ?? 'full';
+		motion.setting = session.settings?.reducedMotion ?? null;
 	});
 	$effect(() => {
-		document.documentElement.dataset.motion = effectiveMotion();
+		document.documentElement.dataset.motion = reduced() ? 'reduced' : 'full';
 	});
 </script>
 
