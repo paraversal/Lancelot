@@ -176,3 +176,27 @@ fn running_balances_end_at_the_net_and_the_totals_add_up() {
     assert_eq!(t.net, eur("142,40"));
     assert_eq!(l.person(m.clara).unwrap().settled, eur("95"));
 }
+
+#[test]
+fn the_payout_list_and_the_repayment_list() {
+    let (book, m) = mock_event();
+    let list = payouts(&book).unwrap();
+    let rows: Vec<(String, Cents)> = list
+        .payouts
+        .iter()
+        .map(|p| (p.name.clone(), p.amount))
+        .collect();
+    assert_eq!(
+        rows,
+        [("Anna".into(), eur("212,40")), ("Malte".into(), eur("110"))]
+    );
+    assert_eq!(list.payout_total, eur("322,40"));
+    // Nobody in the example has an IBAN yet, so nothing is payable.
+    assert_eq!(list.payable_total, Cents::ZERO);
+    assert_eq!(list.repayments.len(), 1);
+    assert_eq!(
+        (list.repayments[0].person, list.repayments[0].amount),
+        (m.bob, eur("180"))
+    );
+    assert_eq!(list.payouts[0].reference, "Auslagen Sommerfest 2026 Anna");
+}

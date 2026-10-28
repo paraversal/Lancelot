@@ -132,6 +132,9 @@ pub fn run() {
             commands::person_add,
             commands::person_update,
             commands::iban_check,
+            commands::payouts_export_csv,
+            commands::payouts_mark_paid,
+            commands::print_window,
             commands::attachment_open,
             commands::attachment_export,
         ])

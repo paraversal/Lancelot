@@ -329,6 +329,25 @@ impl Service {
         })
     }
 
+    /// Writes the payout list as CSV in the user's number format (R-PER-4). Starts with a byte
+    /// order mark, so spreadsheet apps read umlauts correctly.
+    pub fn export_payouts_csv(&self, target: &Path) -> Result<()> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let list = lancelot_core::payouts(open.store.book()).map_err(DomainError::from)?;
+        let csv = lancelot_core::payouts_csv(&list, self.file.settings.number_format);
+        std::fs::write(target, format!("\u{feff}{csv}"))?;
+        Ok(())
+    }
+
+    /// Records the payout list's reimbursements in one step (R-PER-5).
+    pub fn mark_payouts_paid(&mut self, account: AccountId, date: time::Date) -> Result<OpenEvent> {
+        self.change(|s| {
+            s.mark_payouts_paid(account, date)
+                .map(|_| ())
+                .map_err(ApiError::from)
+        })
+    }
+
     pub fn check_integrity(&mut self) -> Result<OpenEvent> {
         let open = self.open.as_mut().ok_or_else(ApiError::no_event)?;
         open.integrity = open.store.check_integrity()?;
@@ -747,5 +766,66 @@ mod tests {
             (p.name.as_str(), p.details.iban.as_ref().map(|i| i.as_str())),
             ("Anna Krüger", Some("DE89370400440532013000"))
         );
+    }
+
+    #[test]
+    fn exports_the_payout_list_and_marks_it_paid() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let mut settings = s.settings();
+        settings.number_format = lancelot_core::NumberFormat::De;
+        s.update_settings(settings).unwrap();
+        let open = s
+            .create_event(&dir.path().join("e.lancelot"), details("Fest"))
+            .unwrap();
+        let id_of = |name: &str| {
+            open.snapshot
+                .accounts
+                .iter()
+                .find(|a| a.account.name == name)
+                .unwrap()
+                .account
+                .id
+        };
+        let (verein, kitchen) = (id_of("Verein account"), id_of("Kitchen"));
+        let anna = s.add_person("Anna Krüger").unwrap().id;
+        let person = Person {
+            iban: Some(lancelot_core::validate_iban("DE89370400440532013000").unwrap()),
+            ..Person::default()
+        };
+        s.update_person(anna, "Anna Krüger", person).unwrap();
+        let draft = TxnDraft {
+            date: time::macros::date!(2026 - 06 - 13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: lancelot_core::Entry::Expense {
+                payer: anna,
+                lines: vec![lancelot_core::SplitLine {
+                    account: kitchen,
+                    amount: lancelot_core::Cents::new(21_240).unwrap(),
+                    memo: None,
+                }],
+            },
+            total: None,
+        };
+        s.save_txn(&draft, None, &[], &[]).unwrap();
+
+        let target = dir.path().join("payouts.csv");
+        s.export_payouts_csv(&target).unwrap();
+        let csv = std::fs::read_to_string(&target).unwrap();
+        assert!(csv.starts_with('\u{feff}'));
+        assert!(
+            csv.contains(
+                "Anna Krüger;Anna Krüger;DE89370400440532013000;;212,40;Auslagen Fest Anna Krueger"
+            ),
+            "{csv}"
+        );
+
+        let paid = s
+            .mark_payouts_paid(verein, time::macros::date!(2026 - 06 - 20))
+            .unwrap();
+        assert!(paid.snapshot.payouts.payouts.is_empty());
+        assert_eq!(paid.snapshot.persons[0].summary.net.get(), 0);
     }
 }

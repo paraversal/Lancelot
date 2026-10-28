@@ -13,6 +13,7 @@ use crate::ledger::{
 };
 use crate::model::{Account, AccountId, Attachment, ClosingCount, Event, Person, Txn};
 use crate::money::Cents;
+use crate::payout::{Payouts, payouts};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -30,6 +31,8 @@ pub struct EventSnapshot {
     pub cash: Vec<CashStatus>,
     pub closing_counts: Vec<ClosingCount>,
     pub open_items: Vec<OpenItem>,
+    /// The payout and repayment lists (R-PER-4, R-PER-7).
+    pub payouts: Payouts,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -115,6 +118,8 @@ impl EventSnapshot {
             cash: ledger.cash().to_vec(),
             closing_counts: book.closing_counts().cloned().collect(),
             open_items: ledger.open_items(),
+            // Sums of person balances that the ledger already checked: cannot overflow.
+            payouts: payouts(book).unwrap_or_default(),
         }
     }
 }

@@ -55,3 +55,15 @@ export async function chooseExportPath(filename: string): Promise<string | null>
 	const { save } = await import('@tauri-apps/plugin-dialog');
 	return (await save({ defaultPath: filename })) ?? null;
 }
+
+/** Asks where to save a CSV file. `null` when cancelled. */
+export async function chooseCsvPath(filename: string): Promise<string | null> {
+	if (!isTauri()) return (await import('./mock')).dialogs.save(filename);
+	const { save } = await import('@tauri-apps/plugin-dialog');
+	const path = await save({
+		defaultPath: filename,
+		filters: [{ name: 'CSV', extensions: ['csv'] }]
+	});
+	if (!path) return null;
+	return path.endsWith('.csv') ? path : `${path}.csv`;
+}

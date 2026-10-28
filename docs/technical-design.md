@@ -326,7 +326,9 @@ addAccount(kind, name) / addPerson(name): Added / renameAccount(id, name)
 // saveTxn also takes `files` (paths) and `remove` (attachment ids), saved in one change
 openAttachment(id) / exportAttachment(id, target)
 updatePerson(id, name, person): OpenEvent / checkIban(input): { iban, formatted }
-// M4b: payout and repayment lists; M5: closing counts
+exportPayoutsCsv(target) / markPayoutsPaid(account, date): OpenEvent / print()
+// the payout and repayment lists come in the snapshot (`payouts`)
+// M5: closing counts, closing the event
 ```
 
 `backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.
@@ -411,7 +413,7 @@ Event settings (name, dates, default reimbursement account) live inside the even
 
 | Topic | Decision | Reason |
 |---|---|---|
-| PDF export | **Typst as a library** (`typst` + `typst-pdf`, with a minimal `World` and the bundled font), from M4 | Deterministic, offline, typographically good, and it can follow the design system. Tauri has no portable silent print-to-PDF. The cost is ≈10–15 MB more binary, which is acceptable. |
+| PDF export | **The print dialog for now** (M4): a print layout of the page, saved as PDF from macOS's dialog. Typst stays the plan for the polished settlement report (M13). | No new dependency and little code; the print layout uses the app's own type and tokens. The cost is one click in the dialog. Typst gives deterministic files without the dialog, at ≈10–15 MB more binary. |
 | Charts | **No library. Hand-written SVG components** for bars and stacked bars | The design needs only simple bars, and the data is tiny. Revisit in M8 if the time-series chart gets complex. |
 | HEIC preview | **Native WebKit rendering** on macOS (WKWebView shows HEIC and PDF directly). On other platforms, a fallback to "open externally". | No conversion code, and the primary platform is macOS (R-NF-1). |
 | Amount parser | **Rust only**, a synchronous IPC command, with shared fixtures | One implementation in the money path (R-COR-1). |

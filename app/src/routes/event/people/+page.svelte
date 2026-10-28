@@ -1,6 +1,7 @@
 <script lang="ts">
 	// People (R-PER-3): advanced, held, settled and the net balance per person, with totals.
 	// A person opens in the panel; "Settle" there opens the settle entry.
+	import { goto } from '$app/navigation';
 	import { api } from '#lib/api/index.ts';
 	import BalanceCell from '#lib/components/BalanceCell.svelte';
 	import Button from '#lib/components/Button.svelte';
@@ -56,7 +57,20 @@
 	<section class="table">
 		<header>
 			<h1>People</h1>
-			<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+			<div class="actions">
+				{#if snapshot.payouts.payouts.length || snapshot.payouts.repayments.length}
+					<button type="button" class="payout-link" onclick={() => goto('/event/people/payouts')}>
+						<strong>Payout list</strong>
+						<span>
+							{snapshot.payouts.payouts.length === 1
+								? '1 person'
+								: `${snapshot.payouts.payouts.length} people`}
+							· {formatAmount(snapshot.payouts.payoutTotal, format)}
+						</span>
+					</button>
+				{/if}
+				<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+			</div>
 		</header>
 
 		{#if people.length}
@@ -147,6 +161,32 @@
 		align-items: center;
 		justify-content: space-between;
 		min-height: 40px;
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 20px;
+	}
+
+	.payout-link {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: pointer;
+	}
+
+	.payout-link strong {
+		font-weight: 600;
+	}
+
+	.payout-link span {
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
 	}
 
 	h1 {

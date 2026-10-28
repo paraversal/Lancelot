@@ -107,7 +107,13 @@ export const api = {
 	addPerson: (name: string) => call<Added>('person_add', { name }),
 	updatePerson: (id: AccountId, name: string, person: Person) =>
 		call<OpenEvent>('person_update', { id, name, person }),
-	checkIban: (input: string) => call<CheckedIban>('iban_check', { input })
+	checkIban: (input: string) => call<CheckedIban>('iban_check', { input }),
+
+	exportPayoutsCsv: (target: string) => call<void>('payouts_export_csv', { target }),
+	markPayoutsPaid: (account: AccountId, date: string) =>
+		call<OpenEvent>('payouts_mark_paid', { account, date }),
+	/** The print dialog, e.g. to save the payout list as PDF. */
+	print: async () => (isTauri() ? call<void>('print_window') : window.print())
 };
 
 /** Where the webview loads an attachment from, for previews (`lancelot://` in the app). */

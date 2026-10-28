@@ -345,6 +345,28 @@ const commands: Record<string, (a: Args) => unknown> = {
 			if (!person || !account) fail('unknown_person', 'unknown person');
 			Object.assign(person, a.person as object, { name });
 			account.name = name;
+			// Keep the payout list in step with the new details.
+			const row = s.payouts.payouts.find((r) => r.person === id);
+			if (row) {
+				row.name = name;
+				row.iban = person.iban;
+				row.holder = person.holder ?? name;
+				s.payouts.payableTotal = s.payouts.payouts
+					.filter((r) => r.iban)
+					.reduce((t, r) => t + r.amount, 0);
+			}
+		}),
+	payouts_export_csv: () => null,
+	payouts_mark_paid: () =>
+		changed((s) => {
+			const paid = new Set(s.payouts.payouts.filter((p) => p.iban).map((p) => p.person));
+			for (const p of s.persons)
+				if (paid.has(p.account)) p.summary = { ...p.summary, net: 0, status: 'settled' };
+			s.payouts = {
+				...s.payouts,
+				payouts: s.payouts.payouts.filter((p) => !paid.has(p.person)),
+				payableTotal: 0
+			};
 		}),
 	iban_check: (a) => {
 		const iban = (a.input as string).replace(/\s+/g, '').toUpperCase();

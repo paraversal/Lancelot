@@ -46,3 +46,24 @@ a {
 	outline: 2px solid var(--color-ink);
 	outline-offset: 2px;
 }
+
+/* Printing (e.g. the payout list as PDF): only what a page marks for print. */
+.print-only {
+	display: none;
+}
+
+@media print {
+	body {
+		background: white;
+		user-select: auto;
+	}
+
+	.no-print,
+	nav.sidebar {
+		display: none !important;
+	}
+
+	.print-only {
+		display: block;
+	}
+}
