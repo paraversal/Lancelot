@@ -8,15 +8,18 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use time::Date;
+use ts_rs::TS;
 
 use crate::error::DomainError;
 use crate::model::{Account, AccountId, AccountKind, Line, Role, TxnKind};
 use crate::money::{Cents, try_sum};
 
 /// Everything a transaction form produces.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct TxnDraft {
+    #[ts(type = "string")]
     pub date: Date,
     pub description: String,
     pub counterparty: Option<String>,
@@ -24,7 +27,8 @@ pub struct TxnDraft {
     pub entry: Entry,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Entry {
     /// Paid by an asset account or a person, for one or more expense categories.
@@ -57,14 +61,16 @@ pub enum Entry {
 }
 
 /// One category line of a split expense or income (R-TX-2). The amount is positive.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 pub struct SplitLine {
     pub account: AccountId,
     pub amount: Cents,
     pub memo: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum SettleDirection {
     /// The event pays the person: asset → person.

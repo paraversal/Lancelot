@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use rusqlite::Connection;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use ts_rs::TS;
 
 use crate::book::Book;
 use crate::entry::lines_follow_rules;
@@ -21,7 +22,8 @@ pub enum Depth {
     Full,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// The figures cannot be trusted until this is fixed.
@@ -30,15 +32,18 @@ pub enum Severity {
     Warning,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 pub struct Issue {
     pub severity: Severity,
     /// Stable identifier, e.g. `unbalanced` or `attachment_hash`.
+    #[ts(type = "string")]
     pub code: &'static str,
     pub detail: String,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 pub struct Report {
     pub issues: Vec<Issue>,
 }

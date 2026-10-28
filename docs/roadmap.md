@@ -86,21 +86,28 @@ This is the heart of the app. It gets the most tests. It is built in three steps
 
 ### M2 · App shell and design system in code
 
-- [ ] Svelte components from `docs/design/README.md`:
-  - [ ] Button
-  - [ ] Filter chip
-  - [ ] Segmented control
+Built in two steps, each in its own pull request.
+
+**M2a · Connecting the app to the event file**
+- [x] Dates in both formats, display and input (R-NF-6), with `fixtures/date-input.json`.
+- [x] `EventSnapshot`: every figure the UI shows, in one value.
+- [x] TypeScript types generated from Rust (`ts-rs`), checked in CI.
+- [x] Shell commands for settings, recent events, create/open/close, event details, the default reimbursement account, the integrity check, backups and restore, amount and date parsing. Logic in `service.rs`, tested without Tauri.
+- [x] App settings in `settings.json`: number format (default from the OS locale), backup count, recent events.
+- [x] UI: typed command wrappers, the session state, and `formatAmount`/`formatDate` tested against the shared fixture.
+
+**M2b · Screens and components**
+- [ ] **Design the start screen, the new-event panel and the Settings screen** in `UI.fig`, plus the integrity banner and the "already open" and "damaged" states.
+- [ ] Svelte components from `docs/design/README.md`, on a development-only `/design` page that mirrors the System frame:
+  - [ ] Button, filter chip, segmented control, text field, select, date field
   - [ ] **Amount input with live preview** (calls the core parser)
-  - [ ] Balance cell
-  - [ ] Receipt indicator
-  - [ ] Table with day groups
-  - [ ] Right-hand panel
-  - [ ] Stacked bar
+  - [ ] Balance cell, receipt indicator, table with day groups, right-hand panel, stacked bar
 - [ ] A start screen with recent events, plus New and Open, using native file dialogs.
-- [ ] The event window: sidebar navigation with counts and attention badges.
-- [ ] **Design the Settings screen** in `UI.fig` first, then build it: number/date format (R-NF-6), backup count, and event settings (name, dates, default reimbursement account).
-- [ ] A keyboard model: `N` new, `⌘↵` save, Esc closes the panel, and arrow keys move through tables (R-NF-7).
-- [ ] An integrity-failure banner (R-COR-5).
+- [ ] The event window: sidebar with the event, its state and dates, navigation with counts and attention badges, and the file name.
+- [ ] Settings: number/date format (R-NF-6), backup count and the backup list with restore, event details and the default reimbursement account, the file and its integrity check.
+- [ ] A keyboard model: ⌘O, ⇧⌘N, ⌘, , ⌘W, ⌘1–3 and Esc (R-NF-7).
+- [ ] An integrity banner with "Check again" (R-COR-5).
+- [ ] A development-only mock backend, so the screens can be checked in a browser.
 
 **Exit:** you can create, open and rename an event and switch the number format. The amount input behaves as it does in the System frame.
 
@@ -206,4 +213,4 @@ The first slice the treasurer can use: entering the stack of receipts.
 
 ## Next step
 
-M2: the app shell, the design system in Svelte, Settings, and connecting the app to the store.
+M2b: the screens and components, starting with the designs in `UI.fig`.

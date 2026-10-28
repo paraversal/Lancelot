@@ -91,3 +91,47 @@ pub fn list(dir: &Path, uuid: &str) -> Result<Vec<PathBuf>, StoreError> {
     paths.reverse();
     Ok(paths)
 }
+
+/// When a backup was taken, read from its file name. `None` for files Lancelot did not name.
+pub fn taken_at(path: &Path) -> Option<OffsetDateTime> {
+    let stem = path.file_stem()?.to_str()?;
+    let stamp = stem.split('-').next()?;
+    let digits = |r: std::ops::Range<usize>| stamp.get(r)?.parse::<u32>().ok();
+    if stamp.len() != 19 || stamp.as_bytes()[8] != b'T' || !stamp.ends_with('Z') {
+        return None;
+    }
+    let month = time::Month::try_from(u8::try_from(digits(4..6)?).ok()?).ok()?;
+    let date = time::Date::from_calendar_date(
+        i32::try_from(digits(0..4)?).ok()?,
+        month,
+        u8::try_from(digits(6..8)?).ok()?,
+    )
+    .ok()?;
+    let time = time::Time::from_hms_milli(
+        u8::try_from(digits(9..11)?).ok()?,
+        u8::try_from(digits(11..13)?).ok()?,
+        u8::try_from(digits(13..15)?).ok()?,
+        u16::try_from(digits(15..18)?).ok()?,
+    )
+    .ok()?;
+    Some(date.with_time(time).assume_utc())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::macros::datetime;
+
+    #[test]
+    fn file_names_carry_the_time() {
+        let at = datetime!(2026-06-14 18:05:09.123 UTC);
+        let name = format!("{}.lancelot", stamp(at));
+        assert_eq!(name, "20260614T180509123Z.lancelot");
+        assert_eq!(taken_at(Path::new(&name)), Some(at));
+        assert_eq!(
+            taken_at(Path::new("20260614T180509123Z-1.lancelot")),
+            Some(at)
+        );
+        assert_eq!(taken_at(Path::new("notes.lancelot")), None);
+    }
+}

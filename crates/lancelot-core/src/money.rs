@@ -5,16 +5,18 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use ts_rs::TS;
 
 /// An amount in euro cents. Negative values are allowed; the meaning of the sign depends on
 /// where the amount is used (see `docs/technical-design.md`, §3.1).
 ///
 /// The absolute value never exceeds [`MAX_AMOUNT`].
 #[derive(
-    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize,
 )]
+#[ts(export)]
 #[serde(try_from = "i64", into = "i64")]
-pub struct Cents(i64);
+pub struct Cents(#[ts(type = "number")] i64);
 
 /// The largest absolute amount Lancelot accepts: 10 billion euros.
 ///

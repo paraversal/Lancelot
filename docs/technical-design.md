@@ -303,37 +303,27 @@ Settling more than the open balance is not an error, because partial and late co
 
 ## 5. IPC contract
 
-- **Commands** are Tauri `#[command]`s in `app/src-tauri/src/commands.rs`. Each returns `Result<T, ApiError>`, where `ApiError = { code, message, field? }` and is generated from `DomainError`.
-- **Every mutation returns a fresh `EventSnapshot`.** At ≈100 transactions the snapshot is a few tens of kilobytes. In return, the UI never has to patch state or derive anything about money.
-- **Types** for the snapshot and drafts are generated from Rust with `ts-rs` into `app/src/lib/api/types.ts`; the generated file is checked in and CI checks that it is up to date. `Cents` is mapped to `number`.
+- **Commands** are Tauri `#[command]`s in `app/src-tauri/src/commands.rs`. They only lock the app state and call `service.rs`, which does the work and is tested without Tauri. Each returns `Result<T, ApiError>`, where `ApiError = { code, message, field?, report? }`: `field` names the input for domain errors, and `report` carries the integrity report of a damaged file.
+- **Every event command returns a fresh `OpenEvent`**: `{ revision, path, fileName, snapshot, integrity, backupError }`. The `snapshot` (`EventSnapshot` in the core) holds every figure the UI shows. At ≈100 transactions it is a few tens of kilobytes. In return, the UI never has to patch state or derive anything about money. `revision` grows with every change, so a late response cannot overwrite a newer one.
+- **Types** for everything that crosses the boundary are generated from Rust with `ts-rs` into `app/src/lib/api/generated/`, one file per type, whenever `cargo test` runs. The files are checked in; CI fails if they differ from what the Rust types produce. `Cents`, ids and counts are mapped to `number`, dates and timestamps to `string`.
+- **One window holds one open event.** Opening or creating another closes the current one first, which releases its lock.
 
 ```ts
 // app/src/lib/api/index.ts — thin typed wrappers around invoke()
-eventCreate(path, init): Promise<EventSnapshot>
-eventOpen(path): Promise<{ snapshot: EventSnapshot; integrity: IntegrityReport }>
-eventUpdate(patch): Promise<EventSnapshot>
-eventSetState(to, overrides): Promise<EventSnapshot>
-txnSave(draft, id?): Promise<EventSnapshot>
-txnDelete(id): Promise<EventSnapshot>
-accountSave(draft, id?) / personSave(draft, id?): Promise<EventSnapshot>
-attachmentAdd(txnId, filePath) / attachmentRemove(id): Promise<EventSnapshot>
-closingCountSet(account, date, amount) / closingCountClear(account): Promise<EventSnapshot>
-amountParse(input, allowNegative): Promise<ParseResult>        // uses the app's number format
-ibanCheck(input): Promise<IbanResult>
-integrityCheck(): Promise<IntegrityReport>
-exportPayoutList(format: 'csv' | 'pdf', path): Promise<void>
-settingsGet() / settingsSet(patch): Promise<AppSettings>
-recentEvents(): Promise<RecentEvent[]>
+appInfo(): AppInfo
+settings() / setSettings(settings): AppSettings          // number format, backup count
+recentEvents() / forgetRecent(path): RecentEvent[]        // with `exists` for moved files
+createEvent(path, details) / openEvent(path): OpenEvent
+closeEvent() / currentEvent(): OpenEvent | null
+updateEvent(details) / setDefaultReimbursementAccount(account): OpenEvent
+checkIntegrity(): OpenEvent
+backups(): BackupInfo[] / restoreBackup(backup, target): OpenEvent
+parseAmount(input, allowNegative): Parsed                 // uses the app's number format
+parseDate(input): { date }                                // ISO
+// M3 onwards: txnSave, txnDelete, personSave, attachmentAdd, closingCountSet, …
 ```
 
-`EventSnapshot` holds:
-- `revision`
-- `event` (header and state)
-- `accounts`, each with its displayed balance
-- `persons`, each with its summary
-- `txns`, with lines and attachment metadata (no bytes)
-- `totals`, `result`, `whereTheMoneyIs` and `openItems`
-- `cash` (closing counts against computed balances)
+`restoreBackup` only accepts a backup of the open event. It copies it to `target`, never over an existing file, and opens the copy.
 
 **Attachments** are served through a custom URI scheme, `lancelot://attachment/<id>`, which is registered in Tauri. `<img>` and `<iframe>` load them directly, without base64 over IPC.
 
@@ -369,26 +359,27 @@ Migrations are forward-only, numbered SQL files in `crates/lancelot-core/migrati
 
 ### 6.4 App settings
 
-The settings are stored as JSON in `<app data>/settings.json`:
+The settings are stored as JSON in `<app data>/settings.json`, written atomically. A missing or damaged file gives the defaults, so it can never keep the app from starting:
 
 | Setting | Default |
 |---|---|
-| `numberFormat` | follows the OS locale |
-| `backupCount` | 20 |
-| `recentEvents` | path, name, last opened |
+| `numberFormat` | from the OS locale: `de` for languages with a decimal comma, `en` otherwise |
+| `backupCount` | 20 (1–100) |
+| `recent` | path, name and last opened time of the last 10 events |
 
 Event settings (name, dates, default reimbursement account) live inside the event file.
 
 ## 7. UI
 
 - **Stack:** Svelte 5 (runes), SvelteKit 3 with `adapter-static` in SPA mode (`ssr = false`, fallback `index.html`), TypeScript and Vite. The package manager is **pnpm**, pinned through `packageManager` in `app/package.json`. The Tauri CLI comes from `@tauri-apps/cli` as a dev dependency, so nothing else needs a global install.
-- **State:** one `snapshot` `$state` per window, replaced wholesale after every command. Each screen derives its view from it, for example sorting and filtering, but never sums of money. UI-only state, such as the open panel, filters and the draft form, stays local to each screen.
+- **State:** `session` in `lib/state/session.svelte.ts` holds the `OpenEvent` and the settings as `$state`, replaced wholesale after every command. Each screen derives its view from it, for example sorting and filtering, but never sums of money. UI-only state, such as the open panel, filters and the draft form, stays local to each screen.
 - **Styling:**
   - `docs/design/tokens.css` is copied to `app/src/lib/styles/tokens.css` by `pnpm tokens`, so the design file stays the source. CI fails if the copy is out of date (`pnpm tokens:check`).
   - Component styles live in the components, as plain CSS using the tokens.
   - There is no CSS framework.
 - **Font:** Familjen Grotesk (OFL), in weights 400 and 600, from `@fontsource/familjen-grotesk` (latin and latin-ext). Vite bundles the `woff2` files into the build, so the app works fully offline.
-- **Display formatting:** `format.ts` mirrors the core's `format_amount` and is covered by the shared fixture. It is the one piece of money code in TypeScript, and it only turns cents into strings, never strings into cents.
+- **Display formatting:** `format.ts` mirrors the core's `format_amount` and `format_date`. `formatAmount` is tested against `fixtures/amount-format.json`, the same cases the Rust formatter is tested against. It is the one piece of money code in TypeScript, and it only turns cents into strings, never strings into cents.
+- **Dates** are text fields that follow the number-format setting (`31.12.2026` or `2026-12-31`). Input accepts both and is parsed in Rust (`fixtures/date-input.json`). The native date picker is not used, because it follows the OS locale rather than the setting.
 - **Routes:**
 
   | Route | Screen |

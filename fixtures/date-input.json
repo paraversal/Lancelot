@@ -1,0 +1,110 @@
+[
+ {
+  "input": "31.12.2026",
+  "date": "2026-12-31"
+ },
+ {
+  "input": "1.6.2026",
+  "date": "2026-06-01"
+ },
+ {
+  "input": "01.06.2026",
+  "date": "2026-06-01"
+ },
+ {
+  "input": "13.6.26",
+  "date": "2026-06-13"
+ },
+ {
+  "input": "2026-12-31",
+  "date": "2026-12-31"
+ },
+ {
+  "input": "2026-6-1",
+  "date": "2026-06-01"
+ },
+ {
+  "input": "  12.06.2026  ",
+  "date": "2026-06-12"
+ },
+ {
+  "input": "29.02.2028",
+  "date": "2028-02-29"
+ },
+ {
+  "input": "",
+  "error": "empty"
+ },
+ {
+  "input": "   ",
+  "error": "empty"
+ },
+ {
+  "input": "12/06/2026",
+  "error": "format"
+ },
+ {
+  "input": "12.06",
+  "error": "format"
+ },
+ {
+  "input": "12.06.2026.1",
+  "error": "format"
+ },
+ {
+  "input": "12-06-2026",
+  "error": "format"
+ },
+ {
+  "input": "26-06-12",
+  "error": "format"
+ },
+ {
+  "input": "12.6.026",
+  "error": "format"
+ },
+ {
+  "input": "123.6.2026",
+  "error": "format"
+ },
+ {
+  "input": "2026-006-01",
+  "error": "format"
+ },
+ {
+  "input": "12.06.2026 10:00",
+  "error": "format"
+ },
+ {
+  "input": "today",
+  "error": "format"
+ },
+ {
+  "input": "12..2026",
+  "error": "format"
+ },
+ {
+  "input": "2026.06.12",
+  "error": "format"
+ },
+ {
+  "input": "31.06.2026",
+  "error": "no_such_day"
+ },
+ {
+  "input": "29.02.2026",
+  "error": "no_such_day"
+ },
+ {
+  "input": "0.6.2026",
+  "error": "no_such_day"
+ },
+ {
+  "input": "12.13.2026",
+  "error": "no_such_day"
+ },
+ {
+  "input": "2026-02-30",
+  "error": "no_such_day"
+ }
+]

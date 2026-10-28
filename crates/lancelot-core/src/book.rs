@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 use time::{Date, OffsetDateTime};
+use ts_rs::TS;
 
 use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, lines_follow_rules};
 use crate::error::DomainError;
@@ -59,14 +60,16 @@ pub struct BookParts {
 }
 
 /// The outcome of saving a transaction.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 pub struct Saved {
     pub id: TxnId,
     pub warnings: Vec<Warning>,
 }
 
 /// Accepted, but worth pointing out.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Warning {
     /// The settle pays out more than the person is owed, or takes back more than they owe.

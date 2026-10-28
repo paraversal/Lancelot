@@ -12,21 +12,27 @@ else
 	pnpm() { npx --yes "pnpm@$version" "$@"; }
 fi
 
-step "UI: install, tokens, lint, types, tests, build"
+step "UI: install, tokens, lint, build"
 (
 	cd app
 	pnpm install --frozen-lockfile
 	pnpm tokens:check
 	pnpm lint
-	pnpm check
-	pnpm test
 	# The Tauri crate embeds the built UI, so build it before the Rust checks.
 	pnpm build
 )
 
+# cargo test also regenerates the TypeScript types in app/src/lib/api/generated.
 step "Rust: fmt, clippy, tests"
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+
+step "UI: types, tests"
+(
+	cd app
+	pnpm check
+	pnpm test
+)
 
 step "All checks passed"

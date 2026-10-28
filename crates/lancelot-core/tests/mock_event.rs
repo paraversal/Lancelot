@@ -100,3 +100,36 @@ fn open_items_are_the_unsettled_people_a_receipt_and_the_cash_box() {
         ]
     );
 }
+
+#[test]
+fn the_snapshot_carries_every_figure_in_ui_form() {
+    let (book, m) = mock_event();
+    let snapshot = EventSnapshot::new(&book);
+    assert_eq!(snapshot.totals.result, eur("2.027,50"));
+    assert_eq!(snapshot.persons.len(), 4);
+    assert_eq!(snapshot.open_items, book.ledger().open_items());
+    assert!(
+        snapshot
+            .txns
+            .windows(2)
+            .all(|w| (w[0].txn.date, w[0].txn.id) <= (w[1].txn.date, w[1].txn.id))
+    );
+
+    // The JSON the UI receives: camelCase, amounts as integer cents, dates as ISO text.
+    let json = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(json["totals"]["result"], 202_750);
+    assert_eq!(json["whereTheMoneyIs"]["owedToPeople"], 32_240);
+    assert_eq!(json["event"]["name"], "Sommerfest 2026");
+    assert_eq!(json["event"]["startsOn"], "2026-06-12");
+    assert_eq!(json["txns"][0]["date"], "2026-06-13");
+    let anna = json["persons"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["account"] == m.anna.0)
+        .unwrap();
+    assert_eq!(anna["name"], "Anna");
+    assert_eq!(anna["summary"]["net"], 21_240);
+    assert_eq!(anna["summary"]["status"], "owed");
+    assert_eq!(json["openItems"][3]["type"], "missingReceipt");
+}

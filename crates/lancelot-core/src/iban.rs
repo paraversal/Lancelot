@@ -5,9 +5,11 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use ts_rs::TS;
 
 /// A validated, normalised IBAN, e.g. `DE89370400440532013000`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
 #[serde(try_from = "String", into = "String")]
 pub struct Iban(String);
 
