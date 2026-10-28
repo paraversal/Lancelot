@@ -64,9 +64,9 @@ pub fn build(t: &mut impl Target) -> Mock {
     let b = t.book();
     let (verein, cash) = (role(b, Role::Verein), role(b, Role::CashBox));
     let [tickets, donations, other_in] =
-        ["Tickets", "Drink donations", "Other"].map(|n| income(b, n));
+        ["Tickets", "Drink donations", "General"].map(|n| income(b, n));
     let [food, venue, drinks, pfand, tech, other] =
-        ["Food", "Venue", "Drinks", "Pfand", "Tech", "Other"].map(|n| expense(b, n));
+        ["Kitchen", "Venue", "Drinks", "Pfand", "Tech", "General"].map(|n| expense(b, n));
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
     let income_to = |destination, account, amount: &str| Entry::Income {

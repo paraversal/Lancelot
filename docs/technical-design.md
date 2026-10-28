@@ -86,7 +86,7 @@ The parser works in these steps:
 ### 3.1 Sign convention
 
 Every line stores a **signed** amount: money leaving an account is negative, money arriving is positive. The arrows in requirements §4.1 map directly onto this:
-- `Person: Anna → Expense: Food, 50 €` becomes the lines `Anna −50,00` and `Food +50,00`.
+- `Person: Anna → Expense: Kitchen, 50 €` becomes the lines `Anna −50,00` and `Kitchen +50,00`.
 
 The **raw balance** of an account is the sum of its lines. The sum over all accounts is always 0.
 
@@ -112,14 +112,14 @@ The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lan
 | Table | Holds |
 |---|---|
 | `meta` | Key/value pairs: `event_uuid`, `created_at`, `created_by`, and `next_account_id`, `next_txn_id`, `next_attachment_id`. Ids are never reused, so the change log stays unambiguous. |
-| `event` | Exactly one row: details, state, default reimbursement account, and the closing overrides as JSON. |
+| `event` | Exactly one row: details, the `closed` flag, default reimbursement account, and the closing overrides as JSON. |
 | `account` | `id`, `kind`, `name`, and an optional unique `role` (`verein`, `cash_box`, `opening`). |
 | `person` | Bank and contact details, 1:1 with an account of kind `person`. |
 | `txn` | Kind, date, description, counterparty, notes, `origin` (`manual`; later `ticket_import`) and the `sealed` flag. |
 | `line` | `txn_id`, `position`, `account_id`, a signed `amount` that is never 0, and a memo. |
 | `closing_count` | One per asset account at most: date and counted amount (R-ISO-3). Opening counts are `opening` transactions. |
 | `attachment` | File name, type, size, SHA-256, `added_at`, and the bytes as a BLOB. |
-| `change_log` | `at`, `entity`, `entity_id`, `op` (`create`, `update`, `delete`, `state`) and the before and after values as JSON (R-TX-6). |
+| `change_log` | `at`, `entity`, `entity_id`, `op` (`create`, `update`, `delete`, `close`, `reopen`) and the before and after values as JSON (R-TX-6). |
 
 Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents.
 
@@ -132,8 +132,8 @@ Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case
 | asset | `Verein account` | `verein` |
 | asset | `Cash box` | `cash_box` |
 | opening | `Opening balance` | `opening` |
-| income | Tickets, Drink donations, Other | |
-| expense | Food, Venue, Drinks, Pfand, Tech, Other | |
+| income | Tickets, Drink donations, General | |
+| expense | Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General | |
 
 The default reimbursement account is the Verein account.
 
@@ -196,7 +196,7 @@ crates/lancelot-core/src/
   money.rs       Cents, allocate, percent_bp
   amount.rs      parse_amount, format_amount, NumberFormat
   iban.rs        normalise, validate (mod 97), format in groups of four
-  model.rs       AccountKind, Account, Person, Txn, Line, TxnKind, EventState, ids
+  model.rs       AccountKind, Account, Person, Txn, Line, TxnKind, Event, ids
   entry.rs       TxnDraft / Entry → balanced lines (expense, income, transfer, settle, opening)
   book.rs        Book: the event in memory; every change is checked on a copy, then kept
   ledger.rs      Ledger: balances, person summaries, totals, where the money is, open items
@@ -234,7 +234,8 @@ impl Book {
     pub fn delete_txn(&mut self, id: TxnId) -> Result<Txn>;
     pub fn update_event(&mut self, details: EventDetails) -> Result<()>;
     pub fn set_default_reimbursement_account(&mut self, id: AccountId) -> Result<()>;
-    pub fn set_state(&mut self, to: EventState, overrides: Vec<BlockerOverride>) -> Result<()>;
+    pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<()>;  // R-SET-7
+    pub fn reopen(&mut self);
     pub fn ledger(&self) -> &Ledger;                         // always up to date
 }
 ```
@@ -252,7 +253,7 @@ impl Store {
     pub fn set_closing_count(&mut self, account: AccountId, date: Date, amount: Cents) -> Result<()>;
     pub fn clear_closing_count(&mut self, account: AccountId) -> Result<()>;
     // … add_account, rename_account, add_person, update_person, update_event,
-    //   set_default_reimbursement_account, set_state
+    //   set_default_reimbursement_account, close, reopen
 
     // queries
     pub fn book(&self) -> &Book;                      // with its always-current Ledger
@@ -314,7 +315,7 @@ appInfo(): AppInfo
 settings() / setSettings(settings): AppSettings          // number format, backup count
 recentEvents() / forgetRecent(path): RecentEvent[]        // with `exists` for moved files
 createEvent(path, details) / openEvent(path): OpenEvent
-closeEvent() / currentEvent(): OpenEvent | null
+closeFile() / currentEvent(): OpenEvent | null
 updateEvent(details) / setDefaultReimbursementAccount(account): OpenEvent
 checkIntegrity(): OpenEvent
 backups(): BackupInfo[] / restoreBackup(backup, target): OpenEvent

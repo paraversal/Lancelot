@@ -23,11 +23,11 @@ fn result_and_totals_match_the_mockups() {
     let total = |kind, name| l.balance(category(&book, kind, name));
     assert_eq!(total(AccountKind::Income, "Tickets"), eur("6.527,50"));
     assert_eq!(total(AccountKind::Income, "Drink donations"), eur("812,50"));
-    assert_eq!(total(AccountKind::Income, "Other"), eur("50"));
-    assert_eq!(total(AccountKind::Expense, "Food"), eur("2.100"));
+    assert_eq!(total(AccountKind::Income, "General"), eur("50"));
+    assert_eq!(total(AccountKind::Expense, "Kitchen"), eur("2.100"));
     assert_eq!(total(AccountKind::Expense, "Venue"), eur("1.800"));
     assert_eq!(total(AccountKind::Expense, "Tech"), eur("610"));
-    assert_eq!(total(AccountKind::Expense, "Other"), eur("368,50"));
+    assert_eq!(total(AccountKind::Expense, "General"), eur("368,50"));
     // The Drinks figure in the mockups is drinks plus Pfand.
     let drinks = total(AccountKind::Expense, "Drinks")
         .checked_add(total(AccountKind::Expense, "Pfand"))

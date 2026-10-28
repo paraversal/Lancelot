@@ -19,7 +19,7 @@ CREATE TABLE event (                   -- exactly one row
   ends_on     TEXT,
   location    TEXT,
   notes       TEXT,
-  state       TEXT NOT NULL CHECK (state IN ('planning','running','settling','closed')),
+  closed      INTEGER NOT NULL DEFAULT 0 CHECK (closed IN (0,1)),
   default_reimbursement_account_id INTEGER NOT NULL REFERENCES account(id),
   closing_overrides TEXT NOT NULL DEFAULT '[]'   -- JSON
 ) STRICT;
@@ -78,7 +78,7 @@ CREATE TABLE change_log (              -- R-TX-6
   at         TEXT NOT NULL,            -- RFC 3339 UTC
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count'
   entity_id  INTEGER NOT NULL,
-  op         TEXT NOT NULL CHECK (op IN ('create','update','delete','state')),
+  op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON
   after      TEXT                      -- JSON
 ) STRICT;

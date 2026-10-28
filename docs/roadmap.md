@@ -65,7 +65,7 @@ This is the heart of the app. It gets the most tests. It is built in three steps
 - [x] Derived balances: per account, per person net balance and status, and totals per category. Covers R-ACC-3, R-TX-4, R-TX-5 and R-COR-4.
 - [x] The example event from `UI.fig`, built in memory: result **+2.027,50 €**, with matching category totals, account balances and person balances (`tests/mock_event.rs`).
 - [x] Property tests: balances sum to 0, net balance equals the person's account balance, where the money is equals the result, editing equals deleting and adding.
-- [x] Event lifecycle Planning → Running → Settling → Closed. Closed is read-only, and closing needs open items resolved or overridden with a note. Covers R-EVT-1, R-EVT-2, R-EVT-4 and R-SET-7. Logging the reopening follows with the change log in M1c.
+- [x] Closing and reopening the event. Closed is read-only, and closing needs open items resolved or overridden with a note. Covers R-EVT-1, R-EVT-2, R-EVT-4 and R-SET-7. (The earlier Planning/Running/Settling states were removed: nothing used them.)
 
 **M1c · Storage and integrity**
 - [x] Change log with before and after values for every create, edit and delete. Covers R-TX-6.
@@ -115,7 +115,7 @@ Built in two steps, each in its own pull request.
 
 The first slice the treasurer can use: entering the stack of receipts.
 
-- [ ] Ledger table: grouped by day, filter chips (type, account, person, category, missing receipt), and search.
+- [ ] Ledger table: grouped by day or by category with totals (R-TX-7), filter chips (type, account, person, category, missing receipt), and search.
 - [ ] Entry panel with the Expense / Income / Transfer / Settle switch, split lines with a running remainder, and the payer's live balance.
 - [ ] Editing and deleting, with every change in the change log.
 - [ ] Attachments: add, preview (image and PDF), open the original, and export. Drag a file onto the window to start a new transaction with the file attached. Covers R-ATT-3 and R-ATT-5.

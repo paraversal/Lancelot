@@ -111,7 +111,7 @@ impl Service {
     }
 
     pub fn create_event(&mut self, path: &Path, details: EventDetails) -> Result<OpenEvent> {
-        self.close_event();
+        self.close_file();
         let (store, integrity) = Store::create(path, details, self.options())?;
         self.adopt(store, integrity)
     }
@@ -120,7 +120,7 @@ impl Service {
         if self.open.as_ref().is_some_and(|o| o.store.path() == path) {
             return self.current().ok_or_else(ApiError::no_event);
         }
-        self.close_event();
+        self.close_file();
         let (store, integrity) = Store::open(path, self.options())?;
         self.adopt(store, integrity)
     }
@@ -137,7 +137,7 @@ impl Service {
         self.current().ok_or_else(ApiError::no_event)
     }
 
-    pub fn close_event(&mut self) {
+    pub fn close_file(&mut self) {
         self.open = None;
     }
 
@@ -292,7 +292,7 @@ mod tests {
 
         let renamed = s.update_event(details("Sommerfest 2026")).unwrap();
         assert_eq!(renamed.revision, 2);
-        s.close_event();
+        s.close_file();
         assert_eq!(
             s.update_event(details("x")).unwrap_err().code,
             "no_event_open"
@@ -315,7 +315,7 @@ mod tests {
         let path = dir.path().join("old.lancelot");
         let mut s = service(&dir);
         s.create_event(&path, details("Old")).unwrap();
-        s.close_event();
+        s.close_file();
         std::fs::remove_file(&path).unwrap();
         assert!(!s.recent_events()[0].exists);
         assert!(s.forget_recent(&path).unwrap().is_empty());
@@ -397,7 +397,7 @@ mod tests {
         assert_eq!(restored.snapshot.event.details.name, "Before");
         assert_eq!(restored.file_name, "restored.lancelot");
         // The original is untouched and free again.
-        s.close_event();
+        s.close_file();
         assert_eq!(
             s.open_event(&path).unwrap().snapshot.event.details.name,
             "After"

@@ -22,8 +22,6 @@ pub enum DomainError {
     EventClosed,
     #[error("the event still has open items")]
     ClosingBlocked { blockers: Vec<OpenItem> },
-    #[error("a closed event can only be reopened to Settling")]
-    InvalidStateChange,
     #[error("an override needs a note")]
     MissingNote,
     #[error("unknown transaction")]
@@ -61,7 +59,6 @@ impl DomainError {
             DomainError::SameAccount => "same_account",
             DomainError::EventClosed => "event_closed",
             DomainError::ClosingBlocked { .. } => "closing_blocked",
-            DomainError::InvalidStateChange => "invalid_state_change",
             DomainError::MissingNote => "missing_note",
             DomainError::UnknownTxn => "unknown_txn",
             DomainError::UnknownPerson => "unknown_person",

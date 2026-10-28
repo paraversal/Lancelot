@@ -53,7 +53,8 @@ export const api = {
 	createEvent: (path: string, details: EventDetails) =>
 		call<OpenEvent>('event_create', { path, details }),
 	openEvent: (path: string) => call<OpenEvent>('event_open', { path }),
-	closeEvent: () => call<void>('event_close'),
+	/** Closes the file and releases its lock; closing the event itself is `close` (M5). */
+	closeFile: () => call<void>('file_close'),
 	currentEvent: () => call<OpenEvent | null>('event_current'),
 	updateEvent: (details: EventDetails) => call<OpenEvent>('event_update', { details }),
 	setDefaultReimbursementAccount: (account: AccountId) =>

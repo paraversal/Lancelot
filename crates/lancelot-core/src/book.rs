@@ -14,7 +14,7 @@ use crate::iban::validate_bic;
 use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
 use crate::model::{
     Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
-    EventState, Person, Role, Txn, TxnId,
+    Person, Role, Txn, TxnId,
 };
 use crate::money::Cents;
 
@@ -23,8 +23,10 @@ use crate::money::Cents;
 pub const MAX_ATTACHMENT_SIZE: u64 = 50 * 1024 * 1024;
 
 /// Default categories of a new event (R-ACC-2).
-const DEFAULT_INCOME: &[&str] = &["Tickets", "Drink donations", "Other"];
-const DEFAULT_EXPENSE: &[&str] = &["Food", "Venue", "Drinks", "Pfand", "Tech", "Other"];
+const DEFAULT_INCOME: &[&str] = &["Tickets", "Drink donations", "General"];
+const DEFAULT_EXPENSE: &[&str] = &[
+    "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General",
+];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Book {
@@ -83,7 +85,7 @@ impl Book {
         let mut book = Book {
             event: Event {
                 details,
-                state: EventState::Planning,
+                closed: false,
                 default_reimbursement_account: AccountId(1),
                 closing_overrides: Vec::new(),
             },
@@ -535,44 +537,36 @@ impl Book {
         })
     }
 
-    /// Moves the event to another state (R-EVT-2).
-    ///
-    /// Any move is allowed, except: closing needs every open item resolved or overridden
-    /// with a note (R-SET-7), and a closed event can only be reopened to Settling.
-    pub fn set_state(
-        &mut self,
-        to: EventState,
-        overrides: Vec<BlockerOverride>,
-    ) -> Result<(), DomainError> {
-        let from = self.event.state;
-        if from == to {
+    /// Closes the event (R-EVT-2, R-SET-7): from then on it is read-only. Every open item must
+    /// be resolved or explicitly overridden with a note. Closing a closed event does nothing.
+    pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), DomainError> {
+        if self.event.closed {
             return Ok(());
         }
-        if from == EventState::Closed && to != EventState::Settling {
-            return Err(DomainError::InvalidStateChange);
+        if overrides.iter().any(|o| o.note.trim().is_empty()) {
+            return Err(DomainError::MissingNote);
         }
-        if to == EventState::Closed {
-            if overrides.iter().any(|o| o.note.trim().is_empty()) {
-                return Err(DomainError::MissingNote);
-            }
-            let open = self.ledger.open_items();
-            let blockers: Vec<_> = open
-                .iter()
-                .filter(|item| !overrides.iter().any(|o| &o.item == *item))
-                .cloned()
-                .collect();
-            if !blockers.is_empty() {
-                return Err(DomainError::ClosingBlocked { blockers });
-            }
-            self.event.closing_overrides = overrides
-                .into_iter()
-                .filter(|o| open.contains(&o.item))
-                .collect();
-        } else {
-            self.event.closing_overrides.clear();
+        let open = self.ledger.open_items();
+        let blockers: Vec<_> = open
+            .iter()
+            .filter(|item| !overrides.iter().any(|o| &o.item == *item))
+            .cloned()
+            .collect();
+        if !blockers.is_empty() {
+            return Err(DomainError::ClosingBlocked { blockers });
         }
-        self.event.state = to;
+        self.event.closing_overrides = overrides
+            .into_iter()
+            .filter(|o| open.contains(&o.item))
+            .collect();
+        self.event.closed = true;
         Ok(())
+    }
+
+    /// Makes a closed event editable again. The store records it in the change log.
+    pub fn reopen(&mut self) {
+        self.event.closed = false;
+        self.event.closing_overrides.clear();
     }
 
     // --- internals -----------------------------------------------------------------------
@@ -583,7 +577,7 @@ impl Book {
         &mut self,
         f: impl FnOnce(&mut Book) -> Result<T, DomainError>,
     ) -> Result<T, DomainError> {
-        if self.event.state == EventState::Closed {
+        if self.event.closed {
             return Err(DomainError::EventClosed);
         }
         let mut candidate = self.clone();

@@ -126,7 +126,7 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
 
 pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let event = conn.query_row(
-        "SELECT name, starts_on, ends_on, location, notes, state, default_reimbursement_account_id, closing_overrides
+        "SELECT name, starts_on, ends_on, location, notes, closed, default_reimbursement_account_id, closing_overrides
          FROM event WHERE id = 1",
         [],
         |r| {
@@ -136,13 +136,13 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, Option<String>>(3)?,
                 r.get::<_, Option<String>>(4)?,
-                r.get::<_, String>(5)?,
+                r.get::<_, bool>(5)?,
                 r.get::<_, i64>(6)?,
                 r.get::<_, String>(7)?,
             ))
         },
     )?;
-    let (name, starts_on, ends_on, location, notes, state, default_account, overrides) = event;
+    let (name, starts_on, ends_on, location, notes, closed, default_account, overrides) = event;
     let event = Event {
         details: EventDetails {
             name,
@@ -151,7 +151,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             location,
             notes,
         },
-        state: text_enum(&state)?,
+        closed,
         default_reimbursement_account: AccountId(default_account),
         closing_overrides: serde_json::from_str(&overrides)?,
     };

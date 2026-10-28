@@ -121,7 +121,7 @@ fn person_puts_own_money_into_the_cash_box() {
 #[test]
 fn person_pays_for_food_with_own_card() {
     let mut book = new_book();
-    let food = expense(&book, "Food");
+    let food = expense(&book, "Kitchen");
     let anna = person(&mut book, "Anna");
     save(
         &mut book,
@@ -139,7 +139,7 @@ fn person_pays_for_food_with_own_card() {
 #[test]
 fn food_bought_from_the_cash_box() {
     let mut book = new_book();
-    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Food"));
+    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Kitchen"));
     save(
         &mut book,
         "Bakery",
@@ -170,7 +170,7 @@ fn venue_invoice_paid_by_the_verein() {
 #[test]
 fn person_reimbursed() {
     let mut book = new_book();
-    let (verein, food) = (role(&book, Role::Verein), expense(&book, "Food"));
+    let (verein, food) = (role(&book, Role::Verein), expense(&book, "Kitchen"));
     let anna = person(&mut book, "Anna");
     save(
         &mut book,
@@ -226,7 +226,7 @@ fn netting_example_bob() {
     let (verein, tickets, food) = (
         role(&book, Role::Verein),
         income(&book, "Tickets"),
-        expense(&book, "Food"),
+        expense(&book, "Kitchen"),
     );
     let bob = person(&mut book, "Bob");
     save(
@@ -239,7 +239,7 @@ fn netting_example_bob() {
     );
     save(
         &mut book,
-        "Food",
+        "Kitchen",
         Entry::Expense {
             payer: bob,
             lines: vec![split(food, "120")],

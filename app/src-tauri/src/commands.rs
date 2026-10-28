@@ -68,9 +68,9 @@ pub async fn event_open(state: State<'_, AppState>, path: PathBuf) -> Result<Ope
 }
 
 #[tauri::command]
-pub async fn event_close(state: State<'_, AppState>) -> Result<()> {
+pub async fn file_close(state: State<'_, AppState>) -> Result<()> {
     with(&state, |s| {
-        s.close_event();
+        s.close_file();
         Ok(())
     })
 }

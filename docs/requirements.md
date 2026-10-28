@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.7 · 2026-10-27
+Status: draft v0.8 · 2026-10-28
 
 ## 1. Purpose
 
@@ -42,7 +42,7 @@ Mathematical correctness is **not** a non-goal. It is the top priority.
 | **Import conflict** | A change in the ticket sheet that needs a decision from the treasurer, e.g. fewer tickets of a tier than in the previous import. |
 | **Advance (Auslage)** | A payment from a person's private funds on behalf of the event. Creates a liability: the event owes the person. |
 | **Reimbursement** | Paying an advance back to the person. Default source: the Verein account. |
-| **Category** | The kind of income or expense (Tickets, Food, Venue, Tech, Drinks, …). |
+| **Category** | The kind of income or expense. Every transaction line has one (Tickets, Kitchen, Mobility, Drinks, General, …). |
 | **Budget line** | A planned income or expense with an estimated amount. |
 | **Cost centre** | A sub-area of an event with its own profit and loss. Drinks is the first one. |
 | **Commission goods (Kommissionsware)** | Goods taken from a supplier with the right to return unsold units. Only what is kept is paid for. |
@@ -60,8 +60,8 @@ Account kinds:
 |---|---|---|
 | **Asset** | Verein account, cash box | Event money sitting there |
 | **Person** | One per person involved | Net balance. Positive: the event owes the person (advances exceed money held). Negative: the person holds event money and owes it to the event. Advances and held money cancel out automatically. |
-| **Income** | Tickets, Drink donations, Other | Total earned per category |
-| **Expense** | Food, Venue, Drinks, Pfand, … | Total spent per category |
+| **Income** | Tickets, Drink donations, General | Total earned per category |
+| **Expense** | Kitchen, Drinks, Pfand, Mobility, Venue, … | Total spent per category |
 | **Opening balance** | One per event | The counterpart for opening counts (e.g. cash box at start) |
 
 How the real flows map onto this:
@@ -73,8 +73,8 @@ How the real flows map onto this:
 | Bob forwards that money to the Verein account | Person: Bob → Verein account |
 | Cash box opening count €80 | Opening balance → Cash box |
 | Anna puts €200 of her own money into the cash box | Person: Anna → Cash box |
-| Anna pays for food with her own card | Person: Anna → Expense: Food |
-| Food bought from the cash box | Cash box → Expense: Food |
+| Anna pays for food with her own card | Person: Anna → Expense: Kitchen |
+| Food bought from the cash box | Cash box → Expense: Kitchen |
 | Venue invoice paid by the Verein | Verein account → Expense: Venue |
 | Anna reimbursed | Verein account → Person: Anna |
 | Drink donations collected in cash | Income: Drink donations → Cash box |
@@ -95,14 +95,14 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 ### 5.1 Event
 
 - **R-EVT-1** Create an event: name, date range, location, notes.
-- **R-EVT-2** Lifecycle: **Planning → Running → Settling → Closed**. A closed event is read-only. Reopening it is an explicit action and is recorded in the change log.
+- **R-EVT-2** An event is either **open** or **closed**. A closed event is read-only. Closing (R-SET-7) and reopening are explicit actions and are recorded in the change log. There are no other states: the dates show where an event stands.
 - **R-EVT-3** Create a new event from an existing one as a template. This copies accounts, categories, cost centres, budget lines and persons, but no transactions.
 - **R-EVT-4** Event settings include the **default reimbursement account** (initially the Verein account).
 
 ### 5.2 Accounts
 
 - **R-ACC-1** Configurable asset accounts per event. Defaults: Verein account, Cash box. Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
-- **R-ACC-2** Configurable income and expense categories, with sensible defaults.
+- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, Drink donations, General; expenses Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General.
 - **R-ACC-3** Every account shows its derived balance and its transaction history.
 - **R-ACC-4** **Reconciliation checkpoints**: the user enters "statement shows X on date D" for an asset account. Lancelot flags any mismatch with the computed balance at D. For the Verein account this compares the net movement for the event, not the absolute balance.
 
@@ -118,6 +118,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 - **R-TX-4** Reimbursements and repayments settle a person's **net balance**, not individual advances. Partial payments are possible.
 - **R-TX-5** Each person shows a status: **owed by event / owes event / settled**, derived from the net balance.
 - **R-TX-6** Transactions are editable until the event is Closed. Every create, edit and delete is written to a per-event change log (timestamp, before and after values).
+- **R-TX-7** The ledger can be grouped **by day** or **by category**. Grouped by category, each category is a header with its total, and a split transaction appears under each of its categories with that line's amount.
 
 ### 5.4 Attachments
 
@@ -285,3 +286,4 @@ These do not block the start. They can be settled during design:
 Settled in v0.4: ticket sheet format (`.ods`, `Ticket` column), fees (per-tier percentage, default 0), sheet as source of truth, manual entry of Verein-paid invoices, and the number format as a user setting with lenient input.
 Settled in v0.5: import-date snapshots for the sales chart, and cancellations with flexible refund percentages resolved from import conflicts.
 Settled in v0.6: change detection by order ID, data minimisation for the ticket sheet, fees not refunded, and refunds paid by whoever received the money (Verein or person), overridable.
+Settled in v0.8: no Planning/Running/Settling states, only open and closed; new default categories; the ledger grouped by day or by category.
