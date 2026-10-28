@@ -103,6 +103,12 @@
     }
   ],
   "persons": [],
+  "personTotals": {
+    "advanced": 0,
+    "held": 0,
+    "settled": 0,
+    "net": 0
+  },
   "txns": [],
   "totals": {
     "income": 0,

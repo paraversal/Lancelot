@@ -325,7 +325,8 @@ saveTxn(draft, id?): SavedTxn / deleteTxn(id): OpenEvent         // draft.total 
 addAccount(kind, name) / addPerson(name): Added / renameAccount(id, name)
 // saveTxn also takes `files` (paths) and `remove` (attachment ids), saved in one change
 openAttachment(id) / exportAttachment(id, target)
-// M4: person details; M5: closing counts
+updatePerson(id, name, person): OpenEvent / checkIban(input): { iban, formatted }
+// M4b: payout and repayment lists; M5: closing counts
 ```
 
 `backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.

@@ -11,9 +11,11 @@ import type { ApiError as ApiErrorData } from './generated/ApiError';
 import type { AppInfo } from './generated/AppInfo';
 import type { AppSettings } from './generated/AppSettings';
 import type { BackupInfo } from './generated/BackupInfo';
+import type { CheckedIban } from './generated/CheckedIban';
 import type { EventDetails } from './generated/EventDetails';
 import type { OpenEvent } from './generated/OpenEvent';
 import type { Parsed } from './generated/Parsed';
+import type { Person } from './generated/Person';
 import type { ParsedDate } from './generated/ParsedDate';
 import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
@@ -102,7 +104,10 @@ export const api = {
 	deleteTxn: (id: TxnId) => call<OpenEvent>('txn_delete', { id }),
 	addAccount: (kind: AccountKind, name: string) => call<Added>('account_add', { kind, name }),
 	renameAccount: (id: AccountId, name: string) => call<OpenEvent>('account_rename', { id, name }),
-	addPerson: (name: string) => call<Added>('person_add', { name })
+	addPerson: (name: string) => call<Added>('person_add', { name }),
+	updatePerson: (id: AccountId, name: string, person: Person) =>
+		call<OpenEvent>('person_update', { id, name, person }),
+	checkIban: (input: string) => call<CheckedIban>('iban_check', { input })
 };
 
 /** Where the webview loads an attachment from, for previews (`lancelot://` in the app). */

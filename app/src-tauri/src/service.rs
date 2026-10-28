@@ -14,7 +14,9 @@ use lancelot_core::{
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::api::{Added, ApiError, BackupInfo, OpenEvent, ParsedDate, RecentEvent, SavedTxn};
+use crate::api::{
+    Added, ApiError, BackupInfo, CheckedIban, OpenEvent, ParsedDate, RecentEvent, SavedTxn,
+};
 use crate::settings::{AppSettings, RecentEntry, SettingsFile};
 
 pub struct Service {
@@ -305,6 +307,25 @@ impl Service {
         Ok(Added {
             event,
             id: id.ok_or_else(ApiError::no_event)?,
+        })
+    }
+
+    /// Renames a person and replaces their details (R-PER-1). The IBAN arrives validated.
+    pub fn update_person(
+        &mut self,
+        id: AccountId,
+        name: &str,
+        person: Person,
+    ) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.update_person(id, name, person)?))
+    }
+
+    /// Checks an IBAN as it is typed (R-PER-2).
+    pub fn check_iban(&self, input: &str) -> Result<CheckedIban> {
+        let iban = lancelot_core::validate_iban(input)?;
+        Ok(CheckedIban {
+            formatted: iban.formatted(),
+            iban: iban.as_str().to_owned(),
         })
     }
 
@@ -698,5 +719,33 @@ mod tests {
             .save_txn(&draft, Some(saved.id), &[], &[attachment.id])
             .unwrap();
         assert!(cleared.event.snapshot.txns[0].attachments.is_empty());
+    }
+
+    #[test]
+    fn updates_people_and_checks_ibans() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        let anna = s.add_person("Anna").unwrap().id;
+
+        let checked = s.check_iban("de89 3704 0044 0532 0130 00").unwrap();
+        assert_eq!(checked.formatted, "DE89 3704 0044 0532 0130 00");
+        assert_eq!(
+            s.check_iban("DE88370400440532013000").unwrap_err().code,
+            "bad_checksum"
+        );
+
+        let person = Person {
+            holder: Some("Anna Krüger".into()),
+            iban: Some(lancelot_core::validate_iban(&checked.iban).unwrap()),
+            ..Person::default()
+        };
+        let open = s.update_person(anna, "Anna Krüger", person).unwrap();
+        let p = &open.snapshot.persons[0];
+        assert_eq!(
+            (p.name.as_str(), p.details.iban.as_ref().map(|i| i.as_str())),
+            ("Anna Krüger", Some("DE89370400440532013000"))
+        );
     }
 }

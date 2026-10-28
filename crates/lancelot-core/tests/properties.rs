@@ -33,6 +33,12 @@ fn check_invariants(book: &Book) -> Result<(), TestCaseError> {
             "net balance is the displayed person balance"
         );
         prop_assert_eq!(p.net, -ledger.raw_balance(id));
+        let last = ledger
+            .person_entries(id)
+            .last()
+            .map(|e| e.balance)
+            .unwrap_or_default();
+        prop_assert_eq!(last, p.net, "the running balance ends at the net balance");
     }
     prop_assert_eq!(
         ledger.result(),

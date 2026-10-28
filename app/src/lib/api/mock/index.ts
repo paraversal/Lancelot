@@ -262,7 +262,16 @@ function addAccount(kind: AccountKind, name: string) {
 				bic: null,
 				contact: null,
 				notes: null,
-				summary: { advanced: 0, held: 0, reimbursed: 0, repaid: 0, net: 0, status: 'settled' }
+				summary: {
+					advanced: 0,
+					held: 0,
+					reimbursed: 0,
+					repaid: 0,
+					settled: 0,
+					net: 0,
+					status: 'settled'
+				},
+				entries: []
 			});
 	});
 	return { event, id };
@@ -326,7 +335,23 @@ const commands: Record<string, (a: Args) => unknown> = {
 			const account = s.accounts.find((x) => x.id === a.id);
 			if (account) account.name = a.name as string;
 		}),
-	person_add: (a) => addAccount('person', a.name as string)
+	person_add: (a) => addAccount('person', a.name as string),
+	person_update: (a) =>
+		changed((s) => {
+			const id = a.id as number;
+			const name = (a.name as string).trim();
+			const person = s.persons.find((p) => p.account === id);
+			const account = s.accounts.find((x) => x.id === id);
+			if (!person || !account) fail('unknown_person', 'unknown person');
+			Object.assign(person, a.person as object, { name });
+			account.name = name;
+		}),
+	iban_check: (a) => {
+		const iban = (a.input as string).replace(/\s+/g, '').toUpperCase();
+		if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(iban))
+			fail('wrong_length', 'an IBAN for this country has 22 characters');
+		return { iban, formatted: iban.replace(/(.{4})/g, '$1 ').trim() };
+	}
 };
 
 export async function invoke<T>(command: string, args: Args = {}): Promise<T> {

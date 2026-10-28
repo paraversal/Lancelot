@@ -144,9 +144,27 @@
         "held": 0,
         "reimbursed": 30000,
         "repaid": 0,
+        "settled": 30000,
         "net": 21240,
         "status": "owed"
-      }
+      },
+      "entries": [
+        {
+          "txn": 12,
+          "effect": 31240,
+          "balance": 31240
+        },
+        {
+          "txn": 17,
+          "effect": 20000,
+          "balance": 51240
+        },
+        {
+          "txn": 18,
+          "effect": -30000,
+          "balance": 21240
+        }
+      ]
     },
     {
       "account": 15,
@@ -161,9 +179,17 @@
         "held": 0,
         "reimbursed": 0,
         "repaid": 0,
+        "settled": 0,
         "net": 11000,
         "status": "owed"
-      }
+      },
+      "entries": [
+        {
+          "txn": 13,
+          "effect": 11000,
+          "balance": 11000
+        }
+      ]
     },
     {
       "account": 16,
@@ -178,9 +204,22 @@
         "held": 30000,
         "reimbursed": 0,
         "repaid": 0,
+        "settled": 0,
         "net": -18000,
         "status": "owes"
-      }
+      },
+      "entries": [
+        {
+          "txn": 2,
+          "effect": -30000,
+          "balance": -30000
+        },
+        {
+          "txn": 14,
+          "effect": 12000,
+          "balance": -18000
+        }
+      ]
     },
     {
       "account": 17,
@@ -195,11 +234,30 @@
         "held": 0,
         "reimbursed": 9500,
         "repaid": 0,
+        "settled": 9500,
         "net": 0,
         "status": "settled"
-      }
+      },
+      "entries": [
+        {
+          "txn": 15,
+          "effect": 9500,
+          "balance": 9500
+        },
+        {
+          "txn": 19,
+          "effect": -9500,
+          "balance": 0
+        }
+      ]
     }
   ],
+  "personTotals": {
+    "advanced": 83740,
+    "held": 30000,
+    "settled": 39500,
+    "net": 14240
+  },
   "txns": [
     {
       "id": 1,

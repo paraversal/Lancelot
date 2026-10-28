@@ -1,6 +1,8 @@
 <script lang="ts">
 	// The ledger: every transaction, grouped by day or by category (R-TX-7), with type filters
 	// and search. Entering and editing happens in the panel on the right.
+	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
 	import { categoryColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
@@ -13,7 +15,7 @@
 	import { session } from '#lib/state/session.svelte.ts';
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import { onFileDrop } from '#lib/dragdrop.ts';
-	import EntryPanel from './EntryPanel.svelte';
+	import EntryPanel from '#lib/entry/EntryPanel.svelte';
 	import Preview from './Preview.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
@@ -60,6 +62,18 @@
 		{ value: 'transfer', label: 'Transfers' },
 		{ value: 'missing', label: 'No receipt' }
 	];
+
+	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`.
+	onMount(() => {
+		const id = Number(page.url.searchParams.get('txn'));
+		const txn = snapshot.txns.find((t) => t.id === id);
+		if (txn) {
+			open(txn);
+			queueMicrotask(() =>
+				document.getElementById(`txn-${id}`)?.scrollIntoView({ block: 'center' })
+			);
+		}
+	});
 
 	function open(txn: TxnView | null) {
 		selected = txn?.id ?? null;

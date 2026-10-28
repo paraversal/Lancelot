@@ -24,7 +24,8 @@ pub use error::DomainError;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};
 pub use ledger::{
-    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, PersonStatus, PersonSummary,
+    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, PersonEntry, PersonStatus,
+    PersonSummary, PersonTotals,
 };
 pub use model::{
     Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,

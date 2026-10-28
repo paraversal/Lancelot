@@ -23,6 +23,10 @@ reimbursed: Cents,
  */
 repaid: Cents, 
 /**
+ * Settled in either direction: `reimbursed + repaid`.
+ */
+settled: Cents, 
+/**
  * `advanced − held − reimbursed + repaid`. Positive: the event owes the person.
  */
 net: Cents, status: PersonStatus, };

@@ -130,6 +130,8 @@ pub fn run() {
             commands::account_add,
             commands::account_rename,
             commands::person_add,
+            commands::person_update,
+            commands::iban_check,
             commands::attachment_open,
             commands::attachment_export,
         ])
