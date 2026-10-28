@@ -5,6 +5,7 @@ import type { ClosingCount } from "./ClosingCount";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
 import type { OpenItem } from "./OpenItem";
+import type { Payouts } from "./Payouts";
 import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
 import type { Totals } from "./Totals";
@@ -18,4 +19,8 @@ accounts: Array<AccountView>, persons: Array<PersonView>, personTotals: PersonTo
 /**
  * Transactions by date, then by id.
  */
-txns: Array<TxnView>, totals: Totals, whereTheMoneyIs: MoneyLocation, cash: Array<CashStatus>, closingCounts: Array<ClosingCount>, openItems: Array<OpenItem>, };
+txns: Array<TxnView>, totals: Totals, whereTheMoneyIs: MoneyLocation, cash: Array<CashStatus>, closingCounts: Array<ClosingCount>, openItems: Array<OpenItem>, 
+/**
+ * The payout and repayment lists (R-PER-4, R-PER-7).
+ */
+payouts: Payouts, };

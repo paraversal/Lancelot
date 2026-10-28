@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.5. M0 to M3 are done (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.6. M0 to M4 are done (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.7](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -144,9 +144,10 @@ Built in two steps.
 - [x] Settle from the person panel, filled in from the balance (R-TX-4).
 
 **M4b · Payout and repayment lists**
-- [ ] Payout list export as CSV (in the number format) and PDF (print layout, saved from the print dialog), with the optional itemised appendix (R-PER-4).
-- [ ] Repayment list, with "Repaid" per person when the money arrives (R-PER-7).
-- [ ] "Mark as paid": record all of the payout list's reimbursements in one action (R-PER-5).
+- [x] Designs: the Payouts page and "Mark as paid".
+- [x] Payout list with account holder, IBAN, a SEPA-safe reference and the amount; export as CSV (in the number format) and PDF (print layout, saved from the print dialog), with the optional itemised advances (R-PER-4).
+- [x] Repayment list, with "Repaid" per person when the money arrives (R-PER-7).
+- [x] "Mark as paid": record all of the payout list's reimbursements that have an IBAN in one action (R-PER-5).
 
 **Exit:** for the fixture event, the payout list says Anna 212,40 € and Malte 110,00 €, and the repayment list says Bob 180,00 €. One click settles both payouts.
 
@@ -228,4 +229,4 @@ Built in two steps.
 
 ## Next step
 
-M4b: the payout and repayment lists, exports and "Mark as paid".
+M5: settlement and closing — the Overview, the settlement report, cash counts, closing the event.

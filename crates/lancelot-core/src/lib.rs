@@ -13,6 +13,7 @@ pub mod integrity;
 pub mod ledger;
 pub mod model;
 pub mod money;
+pub mod payout;
 pub mod snapshot;
 pub mod store;
 
@@ -32,6 +33,7 @@ pub use model::{
     Line, Person, Role, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
+pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
     BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,

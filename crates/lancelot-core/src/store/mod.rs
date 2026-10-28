@@ -389,6 +389,37 @@ impl Store {
         })
     }
 
+    /// Records every reimbursement on the payout list that has an IBAN, from `account` on
+    /// `date`, in one SQL transaction (R-PER-5). Returns how many were recorded.
+    pub fn mark_payouts_paid(
+        &mut self,
+        account: AccountId,
+        date: Date,
+    ) -> Result<usize, StoreError> {
+        let list = crate::payout::payouts(&self.book).map_err(DomainError::from)?;
+        self.apply(&BTreeMap::new(), |b| {
+            let mut n = 0;
+            for p in list.payouts.iter().filter(|p| p.iban.is_some()) {
+                let draft = TxnDraft {
+                    date,
+                    description: "Reimbursement".into(),
+                    counterparty: None,
+                    notes: Some(p.reference.clone()),
+                    entry: crate::entry::Entry::Settle {
+                        person: p.person,
+                        account,
+                        amount: p.amount,
+                        direction: crate::entry::SettleDirection::Reimburse,
+                    },
+                    total: None,
+                };
+                b.save_txn(&draft, None)?;
+                n += 1;
+            }
+            Ok(n)
+        })
+    }
+
     /// Closes the event (R-SET-7). Closing and reopening are in the change log.
     pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.close(overrides))

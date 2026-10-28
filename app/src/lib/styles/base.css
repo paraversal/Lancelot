@@ -46,3 +46,43 @@ a {
 	outline: 2px solid var(--color-ink);
 	outline-offset: 2px;
 }
+
+/* Printing (e.g. the payout list as PDF): only what a page marks for print. */
+.print-only {
+	display: none;
+}
+
+@page {
+	size: A4;
+	margin: 20mm 18mm 18mm;
+}
+
+@media print {
+	html,
+	body {
+		height: auto;
+	}
+
+	body {
+		background: white;
+		user-select: auto;
+	}
+
+	/* The app's window layout scrolls inside fixed heights; on paper it must flow. */
+	.window,
+	.content,
+	main {
+		display: block !important;
+		height: auto !important;
+		overflow: visible !important;
+	}
+
+	.no-print,
+	nav.sidebar {
+		display: none !important;
+	}
+
+	.print-only {
+		display: block;
+	}
+}

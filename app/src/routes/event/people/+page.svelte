@@ -1,6 +1,7 @@
 <script lang="ts">
 	// People (R-PER-3): advanced, held, settled and the net balance per person, with totals.
 	// A person opens in the panel; "Settle" there opens the settle entry.
+	import { goto } from '$app/navigation';
 	import { api } from '#lib/api/index.ts';
 	import BalanceCell from '#lib/components/BalanceCell.svelte';
 	import Button from '#lib/components/Button.svelte';
@@ -56,7 +57,18 @@
 	<section class="table">
 		<header>
 			<h1>People</h1>
-			<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+			<div class="actions">
+				{#if snapshot.payouts.payouts.length || snapshot.payouts.repayments.length}
+					<Button
+						icon="file"
+						shortcut={formatAmount(snapshot.payouts.payoutTotal, format)}
+						onclick={() => goto('/event/people/payouts')}
+					>
+						Payouts
+					</Button>
+				{/if}
+				<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+			</div>
 		</header>
 
 		{#if people.length}
@@ -147,6 +159,12 @@
 		align-items: center;
 		justify-content: space-between;
 		min-height: 40px;
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
 	}
 
 	h1 {

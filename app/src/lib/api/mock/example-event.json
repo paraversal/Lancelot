@@ -859,5 +859,38 @@
       "account": 2,
       "difference": -290
     }
-  ]
+  ],
+  "payouts": {
+    "payouts": [
+      {
+        "person": 14,
+        "name": "Anna",
+        "holder": "Anna",
+        "iban": null,
+        "bic": null,
+        "amount": 21240,
+        "reference": "Auslagen Sommerfest 2026 Anna"
+      },
+      {
+        "person": 15,
+        "name": "Malte",
+        "holder": "Malte",
+        "iban": null,
+        "bic": null,
+        "amount": 11000,
+        "reference": "Auslagen Sommerfest 2026 Malte"
+      }
+    ],
+    "payoutTotal": 32240,
+    "payableTotal": 0,
+    "repayments": [
+      {
+        "person": 16,
+        "name": "Bob",
+        "amount": 18000,
+        "account": 1
+      }
+    ],
+    "repaymentTotal": 18000
+  }
 }

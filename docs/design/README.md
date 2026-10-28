@@ -63,6 +63,8 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 | Ledger / Drop | Dragging a file over the window: a new expense, or attach to the open entry |
 | Ledger / By category | The same list grouped by category with a total per category; a split transaction appears under each of its categories, tagged `SPLIT` |
 | People | Advanced / holds / settled / net balance per person, payout list export, person panel with a running balance and the settle action |
+| People / Payouts | The payout list (IBAN, reference, amount, total) and the repayment list with Repaid; PDF, CSV, Mark as paid |
+| People / Mark as paid | The reimbursements to record, people without an IBAN, the account and the date |
 | People / Edit person | The person's details in the panel; the IBAN previews its grouped form while typing |
 | Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |
 | Drinks | Drinks result, per-product commission records, Strichliste with tallies and unpaid amounts |

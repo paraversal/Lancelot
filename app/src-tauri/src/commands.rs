@@ -214,3 +214,26 @@ pub async fn person_update(
 pub async fn iban_check(state: State<'_, AppState>, input: String) -> Result<CheckedIban> {
     with(&state, |s| s.check_iban(&input))
 }
+
+#[tauri::command]
+pub async fn payouts_export_csv(state: State<'_, AppState>, target: PathBuf) -> Result<()> {
+    with(&state, |s| s.export_payouts_csv(&target))
+}
+
+#[tauri::command]
+pub async fn payouts_mark_paid(
+    state: State<'_, AppState>,
+    account: AccountId,
+    date: String,
+) -> Result<OpenEvent> {
+    let date = lancelot_core::parse_date(&date)?;
+    with(&state, |s| s.mark_payouts_paid(account, date))
+}
+
+/// Opens the print dialog for the window, e.g. to save the payout list as PDF.
+#[tauri::command]
+pub async fn print_window(window: tauri::WebviewWindow) -> Result<()> {
+    window
+        .print()
+        .map_err(|e| ApiError::new("print_failed", e.to_string()))
+}

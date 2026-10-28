@@ -672,3 +672,39 @@ fn a_transaction_and_its_files_are_saved_together() {
     assert!(store.check_integrity().unwrap().is_clean() && report.is_clean());
     assert_eq!(store.book().attachments().count(), 2);
 }
+
+#[test]
+fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let m = mock::build(&mut store);
+    let iban = |s: &str| Person {
+        iban: Some(validate_iban(s).unwrap()),
+        ..Person::default()
+    };
+    store
+        .update_person(m.anna, "Anna", iban("DE89370400440532013000"))
+        .unwrap();
+    store
+        .update_person(m.malte, "Malte", iban("DE02120300000000202051"))
+        .unwrap();
+    let verein = role(store.book(), Role::Verein);
+
+    let n = store.mark_payouts_paid(verein, june(20)).unwrap();
+    assert_eq!(n, 2);
+    let l = store.book().ledger();
+    assert_eq!(l.person(m.anna).unwrap().net, Cents::ZERO);
+    assert_eq!(l.person(m.malte).unwrap().net, Cents::ZERO);
+    assert_eq!(
+        l.person(m.bob).unwrap().net,
+        eur("-180"),
+        "repayments are not touched"
+    );
+    assert_eq!(
+        l.balance(verein),
+        eur("1.757").checked_sub(eur("322,40")).unwrap()
+    );
+    assert!(payouts(store.book()).unwrap().payouts.is_empty());
+    drop(store);
+    assert!(open(&path).1.is_clean());
+}

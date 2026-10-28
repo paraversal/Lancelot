@@ -34,7 +34,7 @@
 	<ul>
 		{#each items as item (item.href)}
 			<li>
-				<a href={item.href} aria-current={current === item.href ? 'page' : undefined}>
+				<a href={item.href} aria-current={current.startsWith(item.href) ? 'page' : undefined}>
 					{item.label}
 					{#if item.count}<span class="count">{item.count}</span>{/if}
 				</a>

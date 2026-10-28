@@ -145,5 +145,12 @@
       "type": "closingCountMissing",
       "account": 2
     }
-  ]
+  ],
+  "payouts": {
+    "payouts": [],
+    "payoutTotal": 0,
+    "payableTotal": 0,
+    "repayments": [],
+    "repaymentTotal": 0
+  }
 }
