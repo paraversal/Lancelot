@@ -112,7 +112,7 @@ The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lan
 | Table | Holds |
 |---|---|
 | `meta` | Key/value pairs: `event_uuid`, `created_at`, `created_by`, and `next_account_id`, `next_txn_id`, `next_attachment_id`. Ids are never reused, so the change log stays unambiguous. |
-| `event` | Exactly one row: details, the `closed` flag, default reimbursement account, and the closing overrides as JSON. |
+| `event` | Exactly one row: details, `closed_at` (set while the event is closed), default reimbursement account, and the closing overrides as JSON. |
 | `account` | `id`, `kind`, `name`, an optional unique `role` (`verein`, `cash_box`, `opening`), and `asset_type` (`bank`, `cash`), set exactly for assets. Every cash account needs a closing count before the event can close. |
 | `person` | Bank and contact details, 1:1 with an account of kind `person`. |
 | `txn` | Kind, date, description, counterparty, notes, `origin` (`manual`; later `ticket_import`) and the `sealed` flag. |

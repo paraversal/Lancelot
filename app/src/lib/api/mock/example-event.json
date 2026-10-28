@@ -5,7 +5,7 @@
     "endsOn": "2026-06-14",
     "location": null,
     "notes": null,
-    "closed": false,
+    "closedAt": null,
     "defaultReimbursementAccount": 1,
     "closingOverrides": []
   },
@@ -388,9 +388,9 @@
         {
           "id": 1,
           "txn": 5,
-          "filename": "receipt.jpg",
-          "mime": "image/jpeg",
-          "size": 1024,
+          "filename": "invoice.pdf",
+          "mime": "application/pdf",
+          "size": 2048,
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
@@ -457,9 +457,9 @@
         {
           "id": 3,
           "txn": 7,
-          "filename": "receipt.jpg",
-          "mime": "image/jpeg",
-          "size": 1024,
+          "filename": "invoice.pdf",
+          "mime": "application/pdf",
+          "size": 2048,
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }

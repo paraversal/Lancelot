@@ -9,6 +9,7 @@ use ts_rs::TS;
 
 use crate::amount::NumberFormat;
 use crate::book::Book;
+use crate::csv::Csv;
 use crate::model::AccountId;
 use crate::money::{Cents, MoneyError, try_sum};
 
@@ -125,54 +126,30 @@ pub fn payouts(book: &Book) -> Result<Payouts, MoneyError> {
     })
 }
 
-/// The payout list as CSV, in the user's number format: `;` and `212,40` (De, what German
-/// spreadsheets expect) or `,` and `212.40` (En). Amounts have no thousands separators and
-/// IBANs no spaces, so banking tools can import them.
+/// The payout list as CSV in the user's number format (see [`crate::csv`]). IBANs have no
+/// spaces, so banking tools can import them.
 pub fn payouts_csv(list: &Payouts, format: NumberFormat) -> String {
-    let (sep, decimal) = match format {
-        NumberFormat::De => (';', ','),
-        NumberFormat::En => (',', '.'),
-    };
-    let field = |s: &str| {
-        if s.contains([sep, '"', '\n', '\r']) {
-            format!("\"{}\"", s.replace('"', "\"\""))
-        } else {
-            s.to_owned()
-        }
-    };
-    let amount = |c: Cents| {
-        let v = c.get();
-        format!(
-            "{}{}{decimal}{:02}",
-            if v < 0 { "-" } else { "" },
-            v.unsigned_abs() / 100,
-            v.unsigned_abs() % 100
-        )
-    };
-    let mut out = [
+    let mut csv = Csv::new(format);
+    csv.header(&[
         "Name",
         "Account holder",
         "IBAN",
         "BIC",
         "Amount",
         "Reference",
-    ]
-    .map(field)
-    .join(&sep.to_string());
-    out.push_str("\r\n");
+    ]);
     for p in &list.payouts {
         let row = [
-            field(&p.name),
-            field(&p.holder),
-            field(p.iban.as_deref().unwrap_or("")),
-            field(p.bic.as_deref().unwrap_or("")),
-            amount(p.amount),
-            field(&p.reference),
+            csv.text(&p.name),
+            csv.text(&p.holder),
+            csv.text(p.iban.as_deref().unwrap_or("")),
+            csv.text(p.bic.as_deref().unwrap_or("")),
+            csv.amount(p.amount),
+            csv.text(&p.reference),
         ];
-        out.push_str(&row.join(&sep.to_string()));
-        out.push_str("\r\n");
+        csv.row(&row);
     }
-    out
+    csv.finish()
 }
 
 #[cfg(test)]

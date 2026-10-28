@@ -88,7 +88,7 @@ impl Book {
         let mut book = Book {
             event: Event {
                 details,
-                closed: false,
+                closed_at: None,
                 default_reimbursement_account: AccountId(1),
                 closing_overrides: Vec::new(),
             },
@@ -628,8 +628,12 @@ impl Book {
 
     /// Closes the event (R-EVT-2, R-SET-7): from then on it is read-only. Every open item must
     /// be resolved or explicitly overridden with a note. Closing a closed event does nothing.
-    pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), DomainError> {
-        if self.event.closed {
+    pub fn close(
+        &mut self,
+        overrides: Vec<BlockerOverride>,
+        at: OffsetDateTime,
+    ) -> Result<(), DomainError> {
+        if self.event.is_closed() {
             return Ok(());
         }
         if overrides.iter().any(|o| o.note.trim().is_empty()) {
@@ -648,13 +652,13 @@ impl Book {
             .into_iter()
             .filter(|o| open.contains(&o.item))
             .collect();
-        self.event.closed = true;
+        self.event.closed_at = Some(at);
         Ok(())
     }
 
     /// Makes a closed event editable again. The store records it in the change log.
     pub fn reopen(&mut self) {
-        self.event.closed = false;
+        self.event.closed_at = None;
         self.event.closing_overrides.clear();
     }
 
@@ -666,7 +670,7 @@ impl Book {
         &mut self,
         f: impl FnOnce(&mut Book) -> Result<T, DomainError>,
     ) -> Result<T, DomainError> {
-        if self.event.closed {
+        if self.event.is_closed() {
             return Err(DomainError::EventClosed);
         }
         let mut candidate = self.clone();

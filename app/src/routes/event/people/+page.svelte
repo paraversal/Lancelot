@@ -75,7 +75,9 @@
 						Payouts
 					</Button>
 				{/if}
-				<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+				{#if !session.closed}
+					<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+				{/if}
 			</div>
 		</header>
 

@@ -4,9 +4,9 @@ import type { BlockerOverride } from "./BlockerOverride";
 
 export type Event = { 
 /**
- * A closed event is read-only until it is reopened (R-EVT-2).
+ * When the event was closed. A closed event is read-only until it is reopened (R-EVT-2).
  */
-closed: boolean, 
+closedAt: string | null, 
 /**
  * Where reimbursements come from by default. Initially the Verein account.
  */

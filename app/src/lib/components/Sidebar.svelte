@@ -24,7 +24,7 @@
 <nav class="sidebar">
 	<div class="event">
 		<strong>{snapshot.event.name}</strong>
-		{#if snapshot.event.closed}
+		{#if snapshot.event.closedAt}
 			<span class="meta"><Icon name="lock" size={12} />Closed{dates ? ` · ${dates}` : ''}</span>
 		{:else if dates}
 			<span class="meta">{dates}</span>

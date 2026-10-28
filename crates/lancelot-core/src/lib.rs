@@ -5,9 +5,11 @@
 
 pub mod amount;
 pub mod book;
+mod csv;
 pub mod date;
 pub mod entry;
 pub mod error;
+pub mod export;
 pub mod iban;
 pub mod integrity;
 pub mod ledger;
@@ -22,6 +24,7 @@ pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
 pub use date::{DateError, format_date, parse_date};
 pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, txn_amount};
 pub use error::DomainError;
+pub use export::transactions_csv;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};
 pub use ledger::{

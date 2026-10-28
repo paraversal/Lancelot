@@ -5,7 +5,7 @@
     "endsOn": "2026-06-14",
     "location": null,
     "notes": null,
-    "closed": false,
+    "closedAt": null,
     "defaultReimbursementAccount": 1,
     "closingOverrides": []
   },

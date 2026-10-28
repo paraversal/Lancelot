@@ -1,14 +1,19 @@
 <script lang="ts">
 	// Overview (R-SET-1, R-SET-5): the result, where the money came from and went, where it is
 	// now, and what is still open. Cash accounts are counted here; open items lead to their fix.
+	// Closing happens here too; a closed event shows its final balance and what was accepted.
 	import { goto } from '$app/navigation';
+	import { api, ApiError } from '#lib/api/index.ts';
+	import { chooseCsvPath } from '#lib/api/dialogs.ts';
 	import type { OpenItem } from '#lib/api/generated/OpenItem.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import StackedBar from '#lib/components/StackedBar.svelte';
 	import { categoryColor } from '#lib/colors.ts';
-	import { formatAmount } from '#lib/format.ts';
+	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { describe } from '#lib/openItems.ts';
 	import { session } from '#lib/state/session.svelte.ts';
+	import ClosePanel from './ClosePanel.svelte';
 	import CountPanel from './CountPanel.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
@@ -17,9 +22,27 @@
 	const where = $derived(snapshot.whereTheMoneyIs);
 
 	let counting = $state<number | null>(null);
+	let closing = $state(false);
+	let error = $state<string | null>(null);
+	const closed = $derived(session.closed);
+	const closedOn = $derived(
+		snapshot.event.closedAt ? formatDate(snapshot.event.closedAt.slice(0, 10), format) : null
+	);
+	const accepted = $derived(
+		snapshot.event.closingOverrides.map((o) => ({ ...describe(o.item, snapshot), note: o.note }))
+	);
+
+	async function exportCsv() {
+		error = null;
+		try {
+			const target = await chooseCsvPath(`${snapshot.event.name} entries.csv`);
+			if (target) await api.exportTransactionsCsv(target);
+		} catch (e) {
+			error = e instanceof ApiError ? e.message : String(e);
+		}
+	}
 	let width = $state(0);
 
-	const name = (id: number) => snapshot.accounts.find((a) => a.id === id)?.name ?? '';
 	const flows = (kind: 'income' | 'expense') =>
 		snapshot.accounts
 			.filter((a) => a.kind === kind && a.balance > 0)
@@ -38,35 +61,14 @@
 			.map((a) => ({ account: a, cash: snapshot.cash.find((c) => c.account === a.id) ?? null }))
 	);
 
-	function item(i: OpenItem): { text: string; amount: number | null; go: () => void } {
-		switch (i.type) {
-			case 'personBalance':
-				return {
-					text: `${name(i.person)} ${i.net > 0 ? 'is owed' : 'holds'}`,
-					amount: Math.abs(i.net),
-					go: () => goto(`/event/people?person=${i.person}`)
-				};
-			case 'missingReceipt': {
-				const txn = snapshot.txns.find((t) => t.id === i.txn);
-				return {
-					text: `No receipt: ${txn?.description || 'entry'}`,
-					amount: txn?.amount ?? null,
-					go: () => goto(`/event/ledger?txn=${i.txn}`)
-				};
-			}
-			case 'closingCountMissing':
-				return {
-					text: `${name(i.account)} not counted`,
-					amount: null,
-					go: () => (counting = i.account)
-				};
-			case 'cashDifference':
-				return {
-					text: `${name(i.account)} count differs`,
-					amount: i.difference,
-					go: () => (counting = i.account)
-				};
-		}
+	function item(i: OpenItem) {
+		const go =
+			i.type === 'personBalance'
+				? () => goto(`/event/people?person=${i.person}`)
+				: i.type === 'missingReceipt'
+					? () => goto(`/event/ledger?txn=${i.txn}`)
+					: () => (counting = i.account);
+		return { ...describe(i, snapshot), go };
 	}
 	const open = $derived(snapshot.openItems.map(item));
 </script>
@@ -74,7 +76,14 @@
 <svelte:window
 	onkeydown={(e) => {
 		const target = e.target instanceof Element ? e.target : null;
-		if (target?.closest('input, textarea, select') || e.metaKey || e.ctrlKey || counting !== null)
+		if (
+			target?.closest('input, textarea, select') ||
+			e.metaKey ||
+			e.ctrlKey ||
+			counting !== null ||
+			closing ||
+			closed
+		)
 			return;
 		if (e.key === 'n' || e.key === 'N') {
 			e.preventDefault();
@@ -86,15 +95,29 @@
 <div class="overview">
 	<div class="main">
 		<header>
-			<h1>Overview</h1>
-			<Button kind="primary" icon="plus" shortcut="N" onclick={() => goto('/event/ledger?new')}
-				>New entry</Button
-			>
+			<div class="title">
+				<h1>Overview</h1>
+				{#if closedOn}<span class="closed"><Icon name="lock" size={14} />Closed {closedOn}</span
+					>{/if}
+			</div>
+			<div class="actions">
+				<Button icon="file" onclick={() => goto('/event/overview/report')}>Report</Button>
+				<Button onclick={exportCsv}>CSV</Button>
+				{#if !closed}
+					<Button icon="lock" onclick={() => ((closing = true), (counting = null))}
+						>Close event</Button
+					>
+					<Button kind="primary" icon="plus" shortcut="N" onclick={() => goto('/event/ledger?new')}
+						>New entry</Button
+					>
+				{/if}
+			</div>
 		</header>
+		{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 		<div class="hero">
 			<div class="figure">
-				<span class="label">Result so far</span>
+				<span class="label">{closed ? 'Result' : 'Result so far'}</span>
 				<span
 					class="result"
 					class:plus={totals.result > 0}
@@ -126,7 +149,7 @@
 
 		<div class="columns">
 			<section>
-				<h2>Where the money is</h2>
+				<h2>{closed ? 'Final balance' : 'Where the money is'}</h2>
 				<ul>
 					{#each assets as { account, cash } (account.id)}
 						<li>
@@ -145,8 +168,10 @@
 									<span class="note attention">not counted</span>
 								{/if}
 							</span>
-							{#if account.assetType === 'cash' || cash}
-								<Button size="sm" onclick={() => (counting = account.id)}>Count</Button>
+							{#if !closed && (account.assetType === 'cash' || cash)}
+								<Button size="sm" onclick={() => ((counting = account.id), (closing = false))}
+									>Count</Button
+								>
 							{/if}
 							<span class="amount">{formatAmount(account.balance, format)}</span>
 						</li>
@@ -179,30 +204,46 @@
 			</section>
 
 			<section>
-				<h2>Open</h2>
-				{#if open.length}
+				{#if closed}
+					<h2>Accepted when closing</h2>
 					<ul>
-						{#each open as o, i (i)}
-							<li>
-								<button type="button" class="item" onclick={o.go}>
-									<span class="dot"></span>
-									<span class="name">{o.text}</span>
-									{#if o.amount !== null}
-										<strong>{formatAmount(o.amount, format)}</strong>
-									{/if}
-									<span class="chevron"><Icon name="chev" size={16} /></span>
-								</button>
+						{#each accepted as a, i (i)}
+							<li class="accepted">
+								<span class="name">{a.text}<small>{a.note}</small></span>
+								{#if a.amount !== null}<strong>{formatAmount(a.amount, format)}</strong>{/if}
 							</li>
+						{:else}
+							<p class="done"><Icon name="check" size={16} />Everything was settled</p>
 						{/each}
 					</ul>
 				{:else}
-					<p class="done"><Icon name="check" size={16} />Nothing open</p>
+					<h2>Open</h2>
+					{#if open.length}
+						<ul>
+							{#each open as o, i (i)}
+								<li>
+									<button type="button" class="item" onclick={o.go}>
+										<span class="dot"></span>
+										<span class="name">{o.text}</span>
+										{#if o.amount !== null}
+											<strong>{formatAmount(o.amount, format)}</strong>
+										{/if}
+										<span class="chevron"><Icon name="chev" size={16} /></span>
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{:else}
+						<p class="done"><Icon name="check" size={16} />Nothing open</p>
+					{/if}
 				{/if}
 			</section>
 		</div>
 	</div>
 
-	{#if counting !== null}
+	{#if closing && !closed}
+		<ClosePanel onclose={() => (closing = false)} />
+	{:else if counting !== null && !closed}
 		{#key counting}
 			<CountPanel account={counting} onclose={() => (counting = null)} />
 		{/key}
@@ -230,6 +271,54 @@
 		align-items: center;
 		justify-content: space-between;
 		min-height: 40px;
+	}
+
+	.title,
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-3);
+	}
+
+	.actions {
+		gap: var(--spacing-2);
+	}
+
+	.closed {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 28px;
+		padding: 0 10px;
+		border-radius: var(--radius-sm);
+		background: var(--color-paper-sunk);
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--color-ink-muted);
+	}
+
+	li.accepted {
+		align-items: flex-start;
+		padding: 10px 0;
+	}
+
+	li.accepted .name {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+	}
+
+	li.accepted small {
+		display: block;
+		margin-top: 2px;
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+	}
+
+	.error {
+		margin: 0;
+		font-size: var(--type-xs);
+		color: var(--color-minus);
 	}
 
 	h1 {

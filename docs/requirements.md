@@ -216,7 +216,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 - **R-SET-3** P&L per cost centre (Drinks).
 - **R-SET-4** **Final balance:** the balance per asset account (Verein account net movement, and the cash box with its closing count and any discrepancy). This is the event's final state.
 - **R-SET-5** **Open items:** persons with a non-zero net balance (in either direction), missing receipts, unresolved reconciliation mismatches, and unresolved ticket import conflicts.
-- **R-SET-6** Export as PDF (human-readable) and CSV/XLSX (raw transactions).
+- **R-SET-6** Export as PDF (human-readable, with the receipts) and CSV (raw transactions, one row per line).
 - **R-SET-7** An event can only move to **Closed** when there are no open items. Each blocker can be overridden explicitly with a note.
 - **R-SET-8** Once an event is closed, Lancelot shows its final balance indefinitely. What happens to the money afterwards (e.g. moving cash or surplus elsewhere) is outside Lancelot's scope and is not modelled.
 

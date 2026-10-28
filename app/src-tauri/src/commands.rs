@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, EventDetails, Parsed, Person, TxnDraft, TxnId,
+    AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, EventDetails, Parsed, Person,
+    TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -242,6 +243,24 @@ pub async fn person_update(
 #[tauri::command]
 pub async fn iban_check(state: State<'_, AppState>, input: String) -> Result<CheckedIban> {
     with(&state, |s| s.check_iban(&input))
+}
+
+#[tauri::command]
+pub async fn transactions_export_csv(state: State<'_, AppState>, target: PathBuf) -> Result<()> {
+    with(&state, |s| s.export_transactions_csv(&target))
+}
+
+#[tauri::command]
+pub async fn event_close(
+    state: State<'_, AppState>,
+    overrides: Vec<BlockerOverride>,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.close_event(overrides))
+}
+
+#[tauri::command]
+pub async fn event_reopen(state: State<'_, AppState>) -> Result<OpenEvent> {
+    with(&state, |s| s.reopen_event())
 }
 
 #[tauri::command]

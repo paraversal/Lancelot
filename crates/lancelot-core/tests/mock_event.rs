@@ -200,3 +200,52 @@ fn the_payout_list_and_the_repayment_list() {
     );
     assert_eq!(list.payouts[0].reference, "Auslagen Sommerfest 2026 Anna");
 }
+
+#[test]
+fn the_transactions_csv_has_one_row_per_line() {
+    let (book, _) = mock_event();
+    let csv = transactions_csv(&book, NumberFormat::De);
+    let rows: Vec<Vec<&str>> = csv
+        .split_terminator("\r\n")
+        .map(|r| r.split(';').collect())
+        .collect();
+    assert_eq!(
+        rows[0],
+        [
+            "Date",
+            "Entry",
+            "Type",
+            "Description",
+            "Counterparty",
+            "Account",
+            "Account type",
+            "Amount",
+            "Memo",
+            "Receipt",
+            "Notes"
+        ]
+    );
+    let lines: usize = book.txns().map(|t| t.lines.len()).sum();
+    assert_eq!(rows.len() - 1, lines);
+
+    let groceries: Vec<_> = rows.iter().filter(|r| r[3] == "Groceries").collect();
+    assert_eq!(groceries.len(), 2);
+    assert_eq!(
+        groceries
+            .iter()
+            .map(|r| (r[5], r[6], r[7], r[9]))
+            .collect::<Vec<_>>(),
+        [
+            ("Anna", "Person", "-312,40", "yes"),
+            ("Kitchen", "Expense", "312,40", "yes")
+        ]
+    );
+    let cups = rows.iter().find(|r| r[3] == "Cups and ice").unwrap();
+    assert_eq!(cups[9], "no");
+    let reimbursed = rows.iter().find(|r| r[3] == "Reimbursement Anna").unwrap();
+    assert_eq!((reimbursed[2], reimbursed[9]), ("Reimbursement", ""));
+
+    let en = transactions_csv(&book, NumberFormat::En);
+    assert!(en.contains(",Kitchen,Expense,312.40,"), "{en}");
+    assert!(en.contains("2026-06-13,"));
+}

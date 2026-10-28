@@ -16,7 +16,7 @@
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatAmount, formatSize, formatTimestamp } from '#lib/format.ts';
+	import { formatAmount, formatDate, formatSize, formatTimestamp } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	// The layout only renders pages while an event is open.
@@ -84,6 +84,17 @@
 			await goto('/event/overview');
 		});
 
+	const closed = $derived(session.closed);
+	const closedOn = $derived(
+		event.closedAt ? formatDate(event.closedAt.slice(0, 10), format) : null
+	);
+	let reopening = $state(false);
+	const reopen = () =>
+		run(async () => {
+			await session.change(() => api.reopenEvent());
+			reopening = false;
+		});
+
 	const accounts = $derived(open.snapshot.accounts.filter((a) => a.kind === 'asset'));
 	const assets = $derived(accounts.map((a) => ({ value: a.id, label: a.name })));
 	const TYPES: { value: AssetType; label: string }[] = [
@@ -132,84 +143,105 @@
 	<h1>Settings</h1>
 
 	<div class="columns">
-		<div class="stack">
-			<section>
-				<h2>Event</h2>
-				<TextField
-					label="Name"
-					value={event.name}
-					required
-					oncommit={(v) => v && update({ name: v })}
-				/>
-				<div class="pair">
-					<DateField
-						label="From"
-						value={event.startsOn}
-						{format}
-						oncommit={(v) => update({ startsOn: v })}
+		<fieldset class="plain" disabled={closed}>
+			<div class="stack">
+				<section>
+					<h2>Event</h2>
+					<TextField
+						label="Name"
+						value={event.name}
+						required
+						oncommit={(v) => v && update({ name: v })}
 					/>
-					<DateField
-						label="To"
-						value={event.endsOn}
-						{format}
-						oncommit={(v) => update({ endsOn: v })}
+					<div class="pair">
+						<DateField
+							label="From"
+							value={event.startsOn}
+							{format}
+							oncommit={(v) => update({ startsOn: v })}
+						/>
+						<DateField
+							label="To"
+							value={event.endsOn}
+							{format}
+							oncommit={(v) => update({ endsOn: v })}
+						/>
+					</div>
+					<TextField
+						label="Location"
+						value={event.location}
+						oncommit={(v) => update({ location: v })}
 					/>
-				</div>
-				<TextField
-					label="Location"
-					value={event.location}
-					oncommit={(v) => update({ location: v })}
-				/>
-				<TextField
-					label="Notes"
-					value={event.notes}
-					multiline
-					oncommit={(v) => update({ notes: v })}
-				/>
-				<Select
-					label="Reimburse from"
-					value={event.defaultReimbursementAccount}
-					options={assets}
-					onchange={(account) =>
-						run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
-				/>
-			</section>
+					<TextField
+						label="Notes"
+						value={event.notes}
+						multiline
+						oncommit={(v) => update({ notes: v })}
+					/>
+					<Select
+						label="Reimburse from"
+						value={event.defaultReimbursementAccount}
+						options={assets}
+						onchange={(account) =>
+							run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
+					/>
+				</section>
 
-			<section>
-				<h2>Accounts</h2>
-				<ul class="accounts">
-					{#each accounts as a (a.id)}
-						<li>
-							<input
-								id="account-{a.id}"
-								class="name"
-								type="text"
-								aria-label="Account name"
-								value={a.name}
-								onblur={(e) => rename(a.id, e.currentTarget)}
-								onkeydown={(e) => {
-									if (e.key === 'Enter') e.currentTarget.blur();
-									if (e.key === 'Escape') {
-										e.currentTarget.value = a.name;
-										e.currentTarget.blur();
-									}
-								}}
-							/>
-							<Segmented
-								label="{a.name} holds"
-								value={a.assetType ?? 'bank'}
-								options={TYPES}
-								onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
-							/>
-							<span class="balance">{formatAmount(a.balance, format)}</span>
-						</li>
-					{/each}
-				</ul>
-				<div><Button size="sm" icon="plus" onclick={addAccount}>Account</Button></div>
-			</section>
-		</div>
+				<section>
+					<h2>Accounts</h2>
+					<ul class="accounts">
+						{#each accounts as a (a.id)}
+							<li>
+								<input
+									id="account-{a.id}"
+									class="name"
+									type="text"
+									aria-label="Account name"
+									value={a.name}
+									onblur={(e) => rename(a.id, e.currentTarget)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') e.currentTarget.blur();
+										if (e.key === 'Escape') {
+											e.currentTarget.value = a.name;
+											e.currentTarget.blur();
+										}
+									}}
+								/>
+								<Segmented
+									label="{a.name} holds"
+									value={a.assetType ?? 'bank'}
+									options={TYPES}
+									onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
+								/>
+								<span class="balance">{formatAmount(a.balance, format)}</span>
+							</li>
+						{/each}
+					</ul>
+					{#if !closed}
+						<div><Button size="sm" icon="plus" onclick={addAccount}>Account</Button></div>
+					{/if}
+				</section>
+			</div>
+		</fieldset>
 
 		<div class="stack">
+			{#if closedOn}
+				<section>
+					<h2>Status</h2>
+					<div class="line">
+						<span class="muted"><Icon name="lock" /></span>
+						<strong>Closed {closedOn}</strong>
+						<span class="grow"></span>
+						{#if reopening}
+							<span>Reopen for changes?</span>
+							<Button size="sm" kind="primary" onclick={reopen}>Reopen</Button>
+							<Button size="sm" onclick={() => (reopening = false)}>Keep closed</Button>
+						{:else}
+							<Button size="sm" onclick={() => (reopening = true)}>Reopen</Button>
+						{/if}
+					</div>
+				</section>
+			{/if}
 			<section>
 				<h2>Display</h2>
 				<div class="labelled">

@@ -11,6 +11,11 @@ class Session {
 	/** When the integrity report in `event` was made: on opening or on "Check again". */
 	checkedAt = $state<Date | null>(null);
 
+	/** A closed event is read-only until it is reopened (R-EVT-2). */
+	get closed(): boolean {
+		return !!this.event?.snapshot.event.closedAt;
+	}
+
 	get format(): NumberFormat {
 		return this.settings?.numberFormat ?? 'de';
 	}
