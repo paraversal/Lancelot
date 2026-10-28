@@ -25,14 +25,14 @@ The app should feel like a well-kept paper ledger at a community event. It is ca
 | `marker` | **The one thing that is selected or active.** Nothing else. |
 | `plus` / `minus` | Gains and losses only (results, income) |
 | `attention` | Anything that needs doing (owes, missing receipt, conflicts) |
-| `tier-1…5` | Data series: categories and ticket tiers. Fills only, never text. |
+| `tier-1…5` | Data series: expense categories and ticket tiers. Fills only, never text. Income categories use `plus` for their dot. |
 | `field` | Input fill |
 
 Expenses are shown in ink with a leading `−`, income in `plus` with a leading `+`, and transfers in `ink-muted` without a sign.
 
 ## Layout
 
-- Window 1280 × 800. Sidebar 220 px with event name, state and navigation (counts on the right, a badge in `attention` when something needs doing).
+- Window 1280 × 800. Sidebar 220 px with event name and dates, navigation (counts on the right, a badge in `attention` when something needs doing), and the file name at the bottom, which opens Settings.
 - Content padding 40. Spacing scale 4 · 8 · 12 · 16 · 24 · 32 · 40 · 48. Radius 4 / 6 / 8, plus pills for filter chips.
 - A list or table on the left. Editing and detail happen in a **right-hand panel** (380 px) separated by a rule. There are no modals for routine work.
 - Tables: 36–40 px rows, a hairline under each row, numbers right-aligned in fixed-width columns, and day headers in the ledger.
@@ -56,9 +56,15 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 |---|---|
 | System | Tokens, type scale, controls, input states, value styles, rules |
 | Overview | Result, forecast and tickets; in/out composition; where the money is (reconciles to the result); open items |
-| Ledger | Day-grouped transactions with filters, plus the entry panel (type switch, amount, payer with live balance, split lines, receipt) |
+| Ledger | Transactions grouped by day, with filters, plus the entry panel (type switch, amount, payer with live balance, split lines, receipt) |
+| Ledger / By category | The same list grouped by category with a total per category; a split transaction appears under each of its categories, tagged `SPLIT` |
 | People | Advanced / holds / settled / net balance per person, payout list export, person panel with a running balance and the settle action |
 | Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |
 | Drinks | Drinks result, per-product commission records, Strichliste with tallies and unpaid amounts |
+| Start | Recent events (name, dates, path, last opened; `Not found` for moved files), New event and Open |
+| Start / New event | Name, dates (with the `= 06.12.2026` preview) and location in the right-hand panel |
+| Start / States | An event open in another window, and a damaged file with its issues and backups to restore |
+| Settings | Event details and the reimbursement account; number and date format; file path and integrity check; backups with Restore |
+| Event / Integrity banner | One line per issue above the page, with Check again |
 
-Budget and Settings are not designed yet.
+Budget is not designed yet.

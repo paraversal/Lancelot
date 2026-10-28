@@ -30,7 +30,7 @@ pub fn run() {
             commands::recent_forget,
             commands::event_create,
             commands::event_open,
-            commands::event_close,
+            commands::file_close,
             commands::event_current,
             commands::event_update,
             commands::event_set_default_reimbursement_account,

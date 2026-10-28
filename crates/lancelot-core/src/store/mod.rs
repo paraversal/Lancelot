@@ -29,7 +29,7 @@ use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Depth, Report};
 use crate::ledger::BlockerOverride;
-use crate::model::{AccountId, AccountKind, AttachmentId, EventDetails, EventState, Person, TxnId};
+use crate::model::{AccountId, AccountKind, AttachmentId, EventDetails, Person, TxnId};
 use crate::money::Cents;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
@@ -376,13 +376,17 @@ impl Store {
         self.apply(None, |b| b.set_default_reimbursement_account(id))
     }
 
-    /// Changes the event state. Every change, including reopening, is in the change log.
-    pub fn set_state(
-        &mut self,
-        to: EventState,
-        overrides: Vec<BlockerOverride>,
-    ) -> Result<(), StoreError> {
-        self.apply(None, |b| b.set_state(to, overrides))
+    /// Closes the event (R-SET-7). Closing and reopening are in the change log.
+    pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), StoreError> {
+        self.apply(None, |b| b.close(overrides))
+    }
+
+    /// Reopens a closed event (R-EVT-2).
+    pub fn reopen(&mut self) -> Result<(), StoreError> {
+        self.apply(None, |b| {
+            b.reopen();
+            Ok(())
+        })
     }
 
     /// Stores a file inside the event file (R-ATT-1, R-ATT-2).

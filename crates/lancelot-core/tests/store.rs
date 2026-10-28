@@ -75,7 +75,7 @@ fn attachments_are_stored_inside_the_file() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
         "Bakery",
@@ -110,7 +110,7 @@ fn deleting_a_transaction_deletes_its_attachments() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
         "Bakery",
@@ -133,7 +133,7 @@ fn failed_commands_change_nothing() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let before = store.book().clone();
-    let food = expense(store.book(), "Food");
+    let food = expense(store.book(), "Kitchen");
     let err = store.save_txn(
         &draft(
             "x",
@@ -249,7 +249,7 @@ fn the_database_refuses_unbalanced_transactions() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
         "Bakery",
@@ -298,7 +298,7 @@ fn a_tampered_transaction_is_reported_and_the_file_not_loaded() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
         "Bakery",
@@ -337,7 +337,7 @@ fn a_transaction_with_the_wrong_shape_is_reported() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
         "Bakery",
@@ -348,7 +348,7 @@ fn a_transaction_with_the_wrong_shape_is_reported() {
     );
     drop(store);
 
-    // Balanced, but now it books money from Tickets into Food, which no form can create.
+    // Balanced, but now it books money from Tickets into Kitchen, which no form can create.
     let tickets = income(&new_book(), "Tickets");
     let conn = raw(&path);
     conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
@@ -376,7 +376,7 @@ fn a_tampered_attachment_is_reported_but_the_file_opens() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
         "Bakery",
@@ -427,7 +427,7 @@ fn every_change_is_in_the_change_log() {
     let (mut store, _) = create(&dir);
     let (cash, food, tech) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
         expense(store.book(), "Tech"),
     );
     let txn = store.save(
@@ -453,8 +453,8 @@ fn every_change_is_in_the_change_log() {
     store
         .set_closing_count(cash, june(14), Cents::ZERO)
         .unwrap();
-    store.set_state(EventState::Closed, vec![]).unwrap();
-    store.set_state(EventState::Settling, vec![]).unwrap();
+    store.close(vec![]).unwrap();
+    store.reopen().unwrap();
 
     let log = store.change_log(100).unwrap();
     let ops: Vec<(&str, &str)> = log
@@ -465,8 +465,8 @@ fn every_change_is_in_the_change_log() {
     assert_eq!(
         ops,
         [
-            ("event", "state"), // reopened (R-EVT-2)
-            ("event", "state"), // closed
+            ("event", "reopen"), // R-EVT-2
+            ("event", "close"),
             ("closing_count", "create"),
             ("txn", "delete"),
             ("txn", "update"),
@@ -477,7 +477,7 @@ fn every_change_is_in_the_change_log() {
     assert_eq!(update.before.as_ref().unwrap()["description"], "Bakery");
     assert_eq!(update.after.as_ref().unwrap()["description"], "Cables");
     assert_eq!(log[3].after, None);
-    assert_eq!(log[0].after.as_ref().unwrap()["state"], "settling");
+    assert_eq!(log[0].after.as_ref().unwrap()["closed"], false);
     // Creating the file logged the event and its default accounts.
     assert!(log.iter().any(|e| e.entity == "event" && e.op == "create"));
 }
@@ -488,7 +488,7 @@ fn ids_are_not_reused_after_reopening() {
     let (mut store, path) = create(&dir);
     let (cash, food) = (
         role(store.book(), Role::CashBox),
-        expense(store.book(), "Food"),
+        expense(store.book(), "Kitchen"),
     );
     let entry = Entry::Expense {
         payer: cash,

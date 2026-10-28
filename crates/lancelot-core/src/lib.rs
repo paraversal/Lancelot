@@ -28,7 +28,7 @@ pub use ledger::{
 };
 pub use model::{
     Account, AccountId, AccountKind, Attachment, AttachmentId, ClosingCount, Event, EventDetails,
-    EventState, Line, Person, Role, Txn, TxnId, TxnKind,
+    Line, Person, Role, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};

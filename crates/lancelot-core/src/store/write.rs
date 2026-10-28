@@ -155,12 +155,12 @@ pub(crate) fn persist(
     if before.map(|b| b.event()) != Some(event) {
         let d = &event.details;
         conn.execute(
-            "INSERT INTO event (id, name, starts_on, ends_on, location, notes, state,
+            "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed,
                                 default_reimbursement_account_id, closing_overrides)
              VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
-               location = excluded.location, notes = excluded.notes, state = excluded.state,
+               location = excluded.location, notes = excluded.notes, closed = excluded.closed,
                default_reimbursement_account_id = excluded.default_reimbursement_account_id,
                closing_overrides = excluded.closing_overrides",
             params![
@@ -169,16 +169,17 @@ pub(crate) fn persist(
                 d.ends_on.map(date_text),
                 d.location,
                 d.notes,
-                enum_text(&event.state)?,
+                event.closed,
                 event.default_reimbursement_account.0,
                 serde_json::to_string(&event.closing_overrides)?,
             ],
         )?;
         match before.map(|b| b.event()) {
             None => log.write("event", 1, &Change::Create(event))?,
-            Some(b) if b.state != event.state && b.details == event.details => {
+            Some(b) if b.closed != event.closed => {
                 let json = |e| serde_json::to_string(e);
-                log.raw("event", 1, "state", Some(json(b)?), Some(json(event)?))?;
+                let op = if event.closed { "close" } else { "reopen" };
+                log.raw("event", 1, op, Some(json(b)?), Some(json(event)?))?;
             }
             Some(b) => log.write("event", 1, &Change::Update(b, event))?,
         }

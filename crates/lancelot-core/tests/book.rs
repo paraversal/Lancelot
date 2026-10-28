@@ -17,13 +17,15 @@ fn new_event_has_default_accounts() {
     assert_eq!(names(AccountKind::Asset), ["Verein account", "Cash box"]);
     assert_eq!(
         names(AccountKind::Income),
-        ["Tickets", "Drink donations", "Other"]
+        ["Tickets", "Drink donations", "General"]
     );
     assert_eq!(
         names(AccountKind::Expense),
-        ["Food", "Venue", "Drinks", "Pfand", "Tech", "Other"]
+        [
+            "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General"
+        ]
     );
-    assert_eq!(book.event().state, EventState::Planning);
+    assert!(!book.event().closed);
     assert_eq!(
         book.event().default_reimbursement_account,
         role(&book, Role::Verein)
@@ -46,14 +48,14 @@ fn event_needs_a_name() {
 fn names_are_unique_per_kind_ignoring_case() {
     let mut book = new_book();
     assert_eq!(
-        book.add_account(AccountKind::Expense, " food ")
+        book.add_account(AccountKind::Expense, " kitchen ")
             .unwrap_err(),
         DomainError::DuplicateName {
             field: "name".into()
         }
     );
     // The same name is fine for another kind.
-    assert!(book.add_account(AccountKind::Asset, "Food").is_ok());
+    assert!(book.add_account(AccountKind::Asset, "Kitchen").is_ok());
     person(&mut book, "Anna");
     assert_eq!(
         book.add_person("ANNA", Person::default())
@@ -119,7 +121,7 @@ fn person_details_are_cleaned_and_checked() {
 #[test]
 fn failed_changes_leave_the_book_untouched() {
     let mut book = new_book();
-    let food = expense(&book, "Food");
+    let food = expense(&book, "Kitchen");
     let before = book.clone();
     let err = book.save_txn(
         &draft(
@@ -140,7 +142,7 @@ fn editing_replaces_and_deleting_removes() {
     let mut book = new_book();
     let (cash, food, tech) = (
         role(&book, Role::CashBox),
-        expense(&book, "Food"),
+        expense(&book, "Kitchen"),
         expense(&book, "Tech"),
     );
     let id = save(
@@ -187,7 +189,7 @@ fn editing_replaces_and_deleting_removes() {
 #[test]
 fn overpaying_a_settle_is_allowed_with_a_warning() {
     let mut book = new_book();
-    let (verein, food) = (role(&book, Role::Verein), expense(&book, "Food"));
+    let (verein, food) = (role(&book, Role::Verein), expense(&book, "Kitchen"));
     let malte = person(&mut book, "Malte");
     save(
         &mut book,
@@ -226,7 +228,7 @@ fn reimbursement_account_must_be_an_asset() {
     let cash = role(&book, Role::CashBox);
     book.set_default_reimbursement_account(cash).unwrap();
     assert_eq!(book.event().default_reimbursement_account, cash);
-    let food = expense(&book, "Food");
+    let food = expense(&book, "Kitchen");
     assert_eq!(
         book.set_default_reimbursement_account(food)
             .unwrap_err()
@@ -238,7 +240,7 @@ fn reimbursement_account_must_be_an_asset() {
 #[test]
 fn closing_needs_open_items_resolved_or_overridden() {
     let mut book = new_book();
-    let food = expense(&book, "Food");
+    let food = expense(&book, "Kitchen");
     let anna = person(&mut book, "Anna");
     let cash = role(&book, Role::CashBox);
     let groceries = save(
@@ -249,14 +251,12 @@ fn closing_needs_open_items_resolved_or_overridden() {
             lines: vec![split(food, "12")],
         },
     );
-    book.set_state(EventState::Settling, vec![]).unwrap();
-
     let item = OpenItem::PersonBalance {
         person: anna,
         net: eur("12"),
     };
     assert_eq!(
-        book.set_state(EventState::Closed, vec![]).unwrap_err(),
+        book.close(vec![]).unwrap_err(),
         DomainError::ClosingBlocked {
             blockers: vec![
                 item.clone(),
@@ -268,7 +268,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
     attach(&mut book, groceries);
     book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
     assert_eq!(
-        book.set_state(EventState::Closed, vec![]).unwrap_err(),
+        book.close(vec![]).unwrap_err(),
         DomainError::ClosingBlocked {
             blockers: vec![item.clone()]
         }
@@ -278,8 +278,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
         note: " ".into(),
     };
     assert_eq!(
-        book.set_state(EventState::Closed, vec![no_note])
-            .unwrap_err(),
+        book.close(vec![no_note]).unwrap_err(),
         DomainError::MissingNote
     );
 
@@ -287,9 +286,8 @@ fn closing_needs_open_items_resolved_or_overridden() {
         item,
         note: "Anna donates it".into(),
     };
-    book.set_state(EventState::Closed, vec![accepted.clone()])
-        .unwrap();
-    assert_eq!(book.event().state, EventState::Closed);
+    book.close(vec![accepted.clone()]).unwrap();
+    assert!(book.event().closed);
     assert_eq!(book.event().closing_overrides, vec![accepted]);
 }
 
@@ -298,7 +296,9 @@ fn a_closed_event_is_read_only_until_reopened() {
     let mut book = new_book();
     let cash = role(&book, Role::CashBox);
     book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
-    book.set_state(EventState::Closed, vec![]).unwrap();
+    book.close(vec![]).unwrap();
+    // Closing twice does nothing.
+    book.close(vec![]).unwrap();
     assert_eq!(
         book.save_txn(
             &draft(
@@ -317,12 +317,9 @@ fn a_closed_event_is_read_only_until_reopened() {
         book.add_account(AccountKind::Expense, "Misc").unwrap_err(),
         DomainError::EventClosed
     );
-    assert_eq!(
-        book.set_state(EventState::Running, vec![]).unwrap_err(),
-        DomainError::InvalidStateChange
-    );
 
-    book.set_state(EventState::Settling, vec![]).unwrap();
+    book.reopen();
+    assert!(!book.event().closed);
     assert!(book.event().closing_overrides.is_empty());
     assert!(
         book.save_txn(
@@ -395,7 +392,7 @@ fn closing_counts_show_the_difference() {
             .code(),
         "negative_amount"
     );
-    let food = expense(&book, "Food");
+    let food = expense(&book, "Kitchen");
     assert_eq!(
         book.set_closing_count(food, june(14), eur("1"))
             .unwrap_err()
@@ -407,7 +404,7 @@ fn closing_counts_show_the_difference() {
 #[test]
 fn attachments_belong_to_transactions() {
     let mut book = new_book();
-    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Food"));
+    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Kitchen"));
     let id = save(
         &mut book,
         "Bakery",

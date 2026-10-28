@@ -120,16 +120,6 @@ pub struct Txn {
     pub lines: Vec<Line>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
-#[ts(export)]
-#[serde(rename_all = "lowercase")]
-pub enum EventState {
-    Planning,
-    Running,
-    Settling,
-    Closed,
-}
-
 /// The editable details of an event (R-EVT-1, R-EVT-4).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -150,7 +140,8 @@ pub struct EventDetails {
 pub struct Event {
     #[serde(flatten)]
     pub details: EventDetails,
-    pub state: EventState,
+    /// A closed event is read-only until it is reopened (R-EVT-2).
+    pub closed: bool,
     /// Where reimbursements come from by default. Initially the Verein account.
     pub default_reimbursement_account: AccountId,
     /// Open items that were explicitly accepted when the event was closed (R-SET-7).
