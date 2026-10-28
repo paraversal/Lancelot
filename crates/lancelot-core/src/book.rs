@@ -8,7 +8,7 @@ use serde::Serialize;
 use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
-use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, lines_follow_rules};
+use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, lines_follow_rules, txn_amount};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
@@ -351,6 +351,9 @@ impl Book {
     pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved, DomainError> {
         let saved = self.change(|book| {
             let lines = build_lines(&draft.entry, &book.accounts)?;
+            if draft.total.is_some_and(|total| total != txn_amount(&lines)) {
+                return Err(DomainError::SplitMismatch);
+            }
             let id = match id {
                 Some(id) if book.txns.contains_key(&id) => id,
                 Some(_) => return Err(DomainError::UnknownTxn),

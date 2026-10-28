@@ -34,6 +34,8 @@ pub enum DomainError {
     DuplicateName { field: String },
     #[error("invalid BIC")]
     InvalidBic,
+    #[error("the lines do not add up to the total")]
+    SplitMismatch,
     #[error("amount must not be negative")]
     NegativeAmount { field: String },
     #[error("unknown attachment")]
@@ -66,6 +68,7 @@ impl DomainError {
             DomainError::DuplicateName { .. } => "duplicate_name",
             DomainError::InvalidBic => "invalid_bic",
             DomainError::NegativeAmount { .. } => "negative_amount",
+            DomainError::SplitMismatch => "split_mismatch",
             DomainError::UnknownAttachment => "unknown_attachment",
             DomainError::AttachmentTooLarge => "attachment_too_large",
             DomainError::MalformedTxn { .. } => "malformed_txn",
@@ -85,6 +88,7 @@ impl DomainError {
             | DomainError::DuplicateName { field } => Some(field),
             DomainError::SameAccount => Some("to"),
             DomainError::InvalidBic => Some("bic"),
+            DomainError::SplitMismatch => Some("lines"),
             _ => None,
         }
     }

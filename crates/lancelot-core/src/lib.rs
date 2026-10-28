@@ -19,7 +19,7 @@ pub mod store;
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
 pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
 pub use date::{DateError, format_date, parse_date};
-pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft};
+pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, txn_amount};
 pub use error::DomainError;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};

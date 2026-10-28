@@ -7,6 +7,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::book::Book;
+use crate::entry::txn_amount;
 use crate::ledger::{CashStatus, MoneyLocation, OpenItem, PersonSummary};
 use crate::model::{Account, AccountId, Attachment, ClosingCount, Event, Person, Txn};
 use crate::money::Cents;
@@ -51,6 +52,8 @@ pub struct PersonView {
 pub struct TxnView {
     #[serde(flatten)]
     pub txn: Txn,
+    /// What the transaction moves: the receipt total, the transfer or settle amount.
+    pub amount: Cents,
     pub attachments: Vec<Attachment>,
 }
 
@@ -84,6 +87,7 @@ impl EventSnapshot {
         let mut txns: Vec<TxnView> = book
             .txns()
             .map(|t| TxnView {
+                amount: txn_amount(&t.lines),
                 txn: t.clone(),
                 attachments: book.attachments_of(t.id).cloned().collect(),
             })

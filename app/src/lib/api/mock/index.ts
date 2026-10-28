@@ -8,10 +8,13 @@
 import type { ApiError } from '../generated/ApiError';
 import type { AppSettings } from '../generated/AppSettings';
 import type { BackupInfo } from '../generated/BackupInfo';
+import type { AccountKind } from '../generated/AccountKind';
 import type { EventDetails } from '../generated/EventDetails';
 import type { EventSnapshot } from '../generated/EventSnapshot';
 import type { OpenEvent } from '../generated/OpenEvent';
 import type { RecentEvent } from '../generated/RecentEvent';
+import type { Line } from '../generated/Line';
+import type { TxnDraft } from '../generated/TxnDraft';
 import empty from './empty-event.json';
 import example from './example-event.json';
 
@@ -165,6 +168,86 @@ function parseDate(input: string) {
 	}
 }
 
+// Transactions in the mock: lines in the shape the core builds, but no balances are
+// recomputed. Good enough to click through the ledger.
+function lines(draft: TxnDraft): Line[] {
+	const e = draft.entry;
+	const line = (account: number, amount: number): Line => ({ account, amount, memo: null });
+	switch (e.type) {
+		case 'expense':
+			return [
+				line(e.payer, -e.lines.reduce((s, l) => s + l.amount, 0)),
+				...e.lines.map((l) => line(l.account, l.amount))
+			];
+		case 'income':
+			return [
+				...e.lines.map((l) => line(l.account, -l.amount)),
+				line(
+					e.destination,
+					e.lines.reduce((s, l) => s + l.amount, 0)
+				)
+			];
+		case 'transfer':
+			return [line(e.from, -e.amount), line(e.to, e.amount)];
+		case 'settle':
+			return e.direction === 'reimburse'
+				? [line(e.account, -e.amount), line(e.person, e.amount)]
+				: [line(e.person, -e.amount), line(e.account, e.amount)];
+		case 'opening':
+			return [line(3, -e.amount), line(e.account, e.amount)];
+	}
+}
+
+function saveTxn(draft: TxnDraft, id: number | null) {
+	const built = lines(draft);
+	const amount = built.filter((l) => l.amount > 0).reduce((s, l) => s + l.amount, 0);
+	if (draft.total !== null && draft.total !== undefined && draft.total !== amount)
+		fail('split_mismatch', 'the lines do not add up to the total', { field: 'lines' });
+	let saved = id ?? 0;
+	const event = changed((s) => {
+		saved = id ?? Math.max(0, ...s.txns.map((t) => t.id)) + 1;
+		const txn = {
+			id: saved,
+			kind: draft.entry.type,
+			date: draft.date,
+			description: draft.description,
+			counterparty: draft.counterparty,
+			notes: draft.notes,
+			lines: built,
+			amount,
+			attachments: s.txns.find((t) => t.id === id)?.attachments ?? []
+		};
+		s.txns = [...s.txns.filter((t) => t.id !== saved), txn].sort((a, b) =>
+			a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1
+		);
+	});
+	return { event, id: saved, warnings: [] };
+}
+
+function addAccount(kind: AccountKind, name: string) {
+	let id = 0;
+	const event = changed((s) => {
+		if (
+			s.accounts.some((a) => a.kind === kind && a.name.toLowerCase() === name.trim().toLowerCase())
+		)
+			fail('duplicate_name', 'this name is already used', { field: 'name' });
+		id = Math.max(...s.accounts.map((a) => a.id)) + 1;
+		s.accounts.push({ id, kind, name: name.trim(), role: null, balance: 0 });
+		if (kind === 'person')
+			s.persons.push({
+				account: id,
+				name: name.trim(),
+				holder: null,
+				iban: null,
+				bic: null,
+				contact: null,
+				notes: null,
+				summary: { advanced: 0, held: 0, reimbursed: 0, repaid: 0, net: 0, status: 'settled' }
+			});
+	});
+	return { event, id };
+}
+
 type Args = Record<string, unknown>;
 
 const commands: Record<string, (a: Args) => unknown> = {
@@ -206,7 +289,16 @@ const commands: Record<string, (a: Args) => unknown> = {
 	backups_list: () => backups,
 	backup_restore: (a) => opened(a.target as string, example as EventSnapshot),
 	amount_parse: (a) => parseAmount(a.input as string, a.allowNegative as boolean),
-	date_parse: (a) => parseDate(a.input as string)
+	date_parse: (a) => parseDate(a.input as string),
+	txn_save: (a) => saveTxn(a.draft as TxnDraft, a.id as number | null),
+	txn_delete: (a) => changed((s) => (s.txns = s.txns.filter((t) => t.id !== a.id))),
+	account_add: (a) => addAccount(a.kind as AccountKind, a.name as string),
+	account_rename: (a) =>
+		changed((s) => {
+			const account = s.accounts.find((x) => x.id === a.id);
+			if (account) account.name = a.name as string;
+		}),
+	person_add: (a) => addAccount('person', a.name as string)
 };
 
 export async function invoke<T>(command: string, args: Args = {}): Promise<T> {

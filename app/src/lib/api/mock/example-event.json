@@ -220,6 +220,7 @@
           "memo": null
         }
       ],
+      "amount": 622750,
       "attachments": []
     },
     {
@@ -241,6 +242,7 @@
           "memo": null
         }
       ],
+      "amount": 30000,
       "attachments": []
     },
     {
@@ -262,6 +264,7 @@
           "memo": null
         }
       ],
+      "amount": 81250,
       "attachments": []
     },
     {
@@ -283,6 +286,7 @@
           "memo": null
         }
       ],
+      "amount": 5000,
       "attachments": []
     },
     {
@@ -304,6 +308,7 @@
           "memo": null
         }
       ],
+      "amount": 180000,
       "attachments": [
         {
           "id": 1,
@@ -340,6 +345,7 @@
           "memo": null
         }
       ],
+      "amount": 45200,
       "attachments": [
         {
           "id": 2,
@@ -371,6 +377,7 @@
           "memo": null
         }
       ],
+      "amount": 50000,
       "attachments": [
         {
           "id": 3,
@@ -402,6 +409,7 @@
           "memo": null
         }
       ],
+      "amount": 109850,
       "attachments": [
         {
           "id": 4,
@@ -433,6 +441,7 @@
           "memo": null
         }
       ],
+      "amount": 22500,
       "attachments": [
         {
           "id": 5,
@@ -469,6 +478,7 @@
           "memo": null
         }
       ],
+      "amount": 39125,
       "attachments": [
         {
           "id": 6,
@@ -500,6 +510,7 @@
           "memo": null
         }
       ],
+      "amount": 22635,
       "attachments": [
         {
           "id": 7,
@@ -531,6 +542,7 @@
           "memo": null
         }
       ],
+      "amount": 31240,
       "attachments": [
         {
           "id": 8,
@@ -562,6 +574,7 @@
           "memo": null
         }
       ],
+      "amount": 11000,
       "attachments": [
         {
           "id": 9,
@@ -593,6 +606,7 @@
           "memo": null
         }
       ],
+      "amount": 12000,
       "attachments": [
         {
           "id": 10,
@@ -624,6 +638,7 @@
           "memo": null
         }
       ],
+      "amount": 9500,
       "attachments": [
         {
           "id": 11,
@@ -655,6 +670,7 @@
           "memo": null
         }
       ],
+      "amount": 3200,
       "attachments": []
     },
     {
@@ -676,6 +692,7 @@
           "memo": null
         }
       ],
+      "amount": 20000,
       "attachments": []
     },
     {
@@ -697,6 +714,7 @@
           "memo": null
         }
       ],
+      "amount": 30000,
       "attachments": []
     },
     {
@@ -718,6 +736,7 @@
           "memo": null
         }
       ],
+      "amount": 9500,
       "attachments": []
     }
   ],

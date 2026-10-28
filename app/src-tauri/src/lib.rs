@@ -89,6 +89,11 @@ pub fn run() {
             commands::backup_restore,
             commands::amount_parse,
             commands::date_parse,
+            commands::txn_save,
+            commands::txn_delete,
+            commands::account_add,
+            commands::account_rename,
+            commands::person_add,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lancelot");

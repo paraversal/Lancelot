@@ -45,10 +45,10 @@
 		min-width: 0;
 	}
 
+	/* Pages bring their own padding, so the ledger's panel can run full height. */
 	main {
 		flex: 1;
 		min-height: 0;
 		overflow: auto;
-		padding: var(--spacing-10);
 	}
 </style>

@@ -25,6 +25,10 @@ pub struct TxnDraft {
     pub counterparty: Option<String>,
     pub notes: Option<String>,
     pub entry: Entry,
+    /// The total on the receipt, when the form has one. The entry's amount (the sum of its
+    /// split lines) must equal it, so a split that does not add up cannot be saved.
+    #[serde(default)]
+    pub total: Option<Cents>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
@@ -89,6 +93,13 @@ impl Entry {
             Entry::Opening { .. } => TxnKind::Opening,
         }
     }
+}
+
+/// The amount a transaction moves: the sum of its incoming lines. For an expense that is the
+/// receipt total, for a transfer or settle its amount.
+pub fn txn_amount(lines: &[Line]) -> Cents {
+    // Lines are validated and balanced, so the sum stays within the range of one amount.
+    try_sum(lines.iter().map(|l| l.amount).filter(|a| a.is_positive())).unwrap_or_default()
 }
 
 /// Validates an entry against the event's accounts and returns its balanced lines.

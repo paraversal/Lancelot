@@ -34,6 +34,20 @@ class Session {
 		return next;
 	}
 
+	/** Like `change`, for commands that return more than the new state (e.g. a new id). */
+	run<T extends { event: OpenEvent }>(command: () => Promise<T>): Promise<T> {
+		const next = this.#queue.then(async () => {
+			const result = await command();
+			this.update(result.event);
+			return result;
+		});
+		this.#queue = next.then(
+			() => {},
+			() => {}
+		);
+		return next;
+	}
+
 	#queue: Promise<void> = Promise.resolve();
 
 	close() {

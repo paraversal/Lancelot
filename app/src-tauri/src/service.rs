@@ -7,13 +7,14 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, BackupPolicy, EventDetails, EventSnapshot, Parsed, Report, Store, StoreOptions,
-    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date,
+    AccountId, AccountKind, BackupPolicy, EventDetails, EventSnapshot, Parsed, Person, Report,
+    Store, StoreOptions, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
+    parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::api::{ApiError, BackupInfo, OpenEvent, ParsedDate, RecentEvent};
+use crate::api::{Added, ApiError, BackupInfo, OpenEvent, ParsedDate, RecentEvent, SavedTxn};
 use crate::settings::{AppSettings, RecentEntry, SettingsFile};
 
 pub struct Service {
@@ -199,6 +200,54 @@ impl Service {
 
     pub fn set_default_reimbursement_account(&mut self, account: AccountId) -> Result<OpenEvent> {
         self.change(|s| Ok(s.set_default_reimbursement_account(account)?))
+    }
+
+    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<SavedTxn> {
+        let mut saved = None;
+        let event = self.change(|s| {
+            saved = Some(s.save_txn(draft, id)?);
+            Ok(())
+        })?;
+        let saved = saved.ok_or_else(ApiError::no_event)?;
+        Ok(SavedTxn {
+            event,
+            id: saved.id,
+            warnings: saved.warnings,
+        })
+    }
+
+    pub fn delete_txn(&mut self, id: TxnId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_txn(id)?))
+    }
+
+    /// Adds a category (income or expense) or an asset account.
+    pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<Added> {
+        let mut id = None;
+        let event = self.change(|s| {
+            id = Some(s.add_account(kind, name)?);
+            Ok(())
+        })?;
+        Ok(Added {
+            event,
+            id: id.ok_or_else(ApiError::no_event)?,
+        })
+    }
+
+    pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.rename_account(id, name)?))
+    }
+
+    /// Adds a person by name; bank details follow on the People screen (M4).
+    pub fn add_person(&mut self, name: &str) -> Result<Added> {
+        let mut id = None;
+        let event = self.change(|s| {
+            id = Some(s.add_person(name, Person::default())?);
+            Ok(())
+        })?;
+        Ok(Added {
+            event,
+            id: id.ok_or_else(ApiError::no_event)?,
+        })
     }
 
     pub fn check_integrity(&mut self) -> Result<OpenEvent> {
@@ -461,5 +510,69 @@ mod tests {
             .restore_backup(&path, Path::new(&backups[0].path), &copy)
             .unwrap();
         assert_eq!(open.snapshot.event.details.name, "Winterfest");
+    }
+
+    #[test]
+    fn enters_and_edits_transactions() {
+        use lancelot_core::{Entry, SplitLine};
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("e.lancelot");
+        let mut s = service(&dir);
+        let open = s.create_event(&path, details("E")).unwrap();
+        let category = |name: &str| {
+            open.snapshot
+                .accounts
+                .iter()
+                .find(|a| a.account.name == name)
+                .unwrap()
+                .account
+                .id
+        };
+        let kitchen = category("Kitchen");
+
+        let anna = s.add_person("Anna").unwrap().id;
+        let mobility = s.add_account(AccountKind::Expense, "Transport").unwrap().id;
+        s.rename_account(mobility, "Fuel").unwrap();
+        assert_eq!(s.add_person("anna").unwrap_err().code, "duplicate_name");
+
+        let cents = |c: i64| lancelot_core::Cents::new(c).unwrap();
+        let draft = TxnDraft {
+            date: time::macros::date!(2026 - 06 - 13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: Entry::Expense {
+                payer: anna,
+                lines: vec![
+                    SplitLine {
+                        account: kitchen,
+                        amount: cents(24_890),
+                        memo: None,
+                    },
+                    SplitLine {
+                        account: mobility,
+                        amount: cents(6_350),
+                        memo: None,
+                    },
+                ],
+            },
+            total: Some(cents(31_240)),
+        };
+        let saved = s.save_txn(&draft, None).unwrap();
+        let txn = &saved.event.snapshot.txns[0];
+        assert_eq!((txn.amount.get(), txn.txn.lines.len()), (31_240, 3));
+        let person = &saved.event.snapshot.persons[0];
+        assert_eq!(person.summary.net.get(), 31_240);
+
+        let mut wrong = draft.clone();
+        wrong.total = Some(cents(1));
+        let err = s.save_txn(&wrong, Some(saved.id)).unwrap_err();
+        assert_eq!(
+            (err.code.as_str(), err.field.as_deref()),
+            ("split_mismatch", Some("lines"))
+        );
+
+        let after = s.delete_txn(saved.id).unwrap();
+        assert!(after.snapshot.txns.is_empty());
     }
 }

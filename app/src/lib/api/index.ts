@@ -3,6 +3,8 @@
 import { invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
 
 import type { AccountId } from './generated/AccountId';
+import type { AccountKind } from './generated/AccountKind';
+import type { Added } from './generated/Added';
 import type { ApiError as ApiErrorData } from './generated/ApiError';
 import type { AppInfo } from './generated/AppInfo';
 import type { AppSettings } from './generated/AppSettings';
@@ -13,6 +15,9 @@ import type { Parsed } from './generated/Parsed';
 import type { ParsedDate } from './generated/ParsedDate';
 import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
+import type { SavedTxn } from './generated/SavedTxn';
+import type { TxnDraft } from './generated/TxnDraft';
+import type { TxnId } from './generated/TxnId';
 
 /** A failed command. `code` is stable; `message` is for people. */
 export class ApiError extends Error {
@@ -84,5 +89,11 @@ export const api = {
 
 	parseAmount: (input: string, allowNegative: boolean) =>
 		call<Parsed>('amount_parse', { input, allowNegative }),
-	parseDate: (input: string) => call<ParsedDate>('date_parse', { input })
+	parseDate: (input: string) => call<ParsedDate>('date_parse', { input }),
+
+	saveTxn: (draft: TxnDraft, id: TxnId | null) => call<SavedTxn>('txn_save', { draft, id }),
+	deleteTxn: (id: TxnId) => call<OpenEvent>('txn_delete', { id }),
+	addAccount: (kind: AccountKind, name: string) => call<Added>('account_add', { kind, name }),
+	renameAccount: (id: AccountId, name: string) => call<OpenEvent>('account_rename', { id, name }),
+	addPerson: (name: string) => call<Added>('person_add', { name })
 };

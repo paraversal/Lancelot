@@ -1,6 +1,9 @@
 //! What crosses the IPC boundary besides the core's own types (`docs/technical-design.md` §5).
 
-use lancelot_core::{AmountError, DateError, DomainError, EventSnapshot, Report, StoreError};
+use lancelot_core::{
+    AccountId, AmountError, DateError, DomainError, EventSnapshot, Report, StoreError, TxnId,
+    Warning,
+};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -127,4 +130,21 @@ pub struct BackupInfo {
 pub struct ParsedDate {
     /// ISO `YYYY-MM-DD`.
     pub date: String,
+}
+
+/// After saving a transaction: the new state, the transaction's id and any warnings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct SavedTxn {
+    pub event: OpenEvent,
+    pub id: TxnId,
+    pub warnings: Vec<Warning>,
+}
+
+/// After adding an account, a category or a person: the new state and its id.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct Added {
+    pub event: OpenEvent,
+    pub id: AccountId,
 }
