@@ -249,3 +249,40 @@ fn the_transactions_csv_has_one_row_per_line() {
     assert!(en.contains(",Kitchen,Expense,312.40,"), "{en}");
     assert!(en.contains("2026-06-13,"));
 }
+
+#[test]
+fn the_example_budget_forecasts_cautiously() {
+    let (book, _) = mock_event();
+    let budget = book.budget();
+    let figures = |estimate, actual, forecast| Figures {
+        estimate: eur(estimate),
+        actual: eur(actual),
+        forecast: eur(forecast),
+    };
+    let cat = |kind, name| budget.category(category(&book, kind, name)).unwrap();
+
+    // Complete: the actual. Income under way: the smaller. Expenses under way: the larger.
+    assert_eq!(
+        cat(AccountKind::Income, "Tickets").figures,
+        figures("6.500", "6.527,50", "6.527,50")
+    );
+    assert_eq!(
+        cat(AccountKind::Income, "Drink donations").figures,
+        figures("700", "812,50", "700")
+    );
+    assert_eq!(
+        cat(AccountKind::Expense, "Kitchen").figures,
+        figures("1.850", "2.100", "2.100")
+    );
+    assert_eq!(
+        cat(AccountKind::Expense, "Mobility").figures,
+        figures("150", "0", "150")
+    );
+    let tech = cat(AccountKind::Expense, "Tech");
+    assert_eq!(tech.figures, figures("450", "610", "610"));
+    assert_eq!(tech.unbudgeted, eur("110"));
+
+    assert_eq!(budget.income, figures("7.200", "7.390", "7.277,50"));
+    assert_eq!(budget.expense, figures("4.895", "5.362,50", "5.512,50"));
+    assert_eq!(budget.result, figures("2.305", "2.027,50", "1.765"));
+}

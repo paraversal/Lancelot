@@ -288,7 +288,7 @@
           "account": 4,
           "amount": -622750,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 1
         },
         {
           "account": 1,
@@ -312,7 +312,7 @@
           "account": 4,
           "amount": -30000,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 1
         },
         {
           "account": 16,
@@ -336,7 +336,7 @@
           "account": 5,
           "amount": -81250,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 2
         },
         {
           "account": 2,
@@ -390,7 +390,7 @@
           "account": 11,
           "amount": 180000,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 3
         }
       ],
       "amount": 180000,
@@ -424,7 +424,7 @@
           "account": 8,
           "amount": 42000,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 6
         },
         {
           "account": 9,
@@ -464,7 +464,7 @@
           "account": 12,
           "amount": 50000,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 7
         }
       ],
       "amount": 50000,
@@ -498,7 +498,7 @@
           "account": 7,
           "amount": 109850,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 4
         }
       ],
       "amount": 109850,
@@ -532,7 +532,7 @@
           "account": 13,
           "amount": 22500,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 8
         }
       ],
       "amount": 22500,
@@ -566,7 +566,7 @@
           "account": 7,
           "amount": 34275,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 5
         },
         {
           "account": 13,
@@ -606,7 +606,7 @@
           "account": 7,
           "amount": 22635,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 5
         }
       ],
       "amount": 22635,
@@ -640,7 +640,7 @@
           "account": 7,
           "amount": 31240,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 5
         }
       ],
       "amount": 31240,
@@ -708,7 +708,7 @@
           "account": 7,
           "amount": 12000,
           "memo": null,
-          "budgetLine": null
+          "budgetLine": 5
         }
       ],
       "amount": 12000,
@@ -952,23 +952,172 @@
     ],
     "repaymentTotal": 18000
   },
-  "budgetLines": [],
+  "budgetLines": [
+    {
+      "id": 1,
+      "category": 4,
+      "description": "Ticket sales",
+      "estimate": {
+        "type": "quantity",
+        "quantity": 260,
+        "unitPrice": 2500
+      },
+      "complete": true
+    },
+    {
+      "id": 2,
+      "category": 5,
+      "description": "Bar donations",
+      "estimate": {
+        "type": "amount",
+        "amount": 70000
+      },
+      "complete": false
+    },
+    {
+      "id": 3,
+      "category": 11,
+      "description": "Hall rent",
+      "estimate": {
+        "type": "amount",
+        "amount": 180000
+      },
+      "complete": true
+    },
+    {
+      "id": 4,
+      "category": 7,
+      "description": "Catering",
+      "estimate": {
+        "type": "amount",
+        "amount": 110000
+      },
+      "complete": true
+    },
+    {
+      "id": 5,
+      "category": 7,
+      "description": "Groceries",
+      "estimate": {
+        "type": "quantity",
+        "quantity": 3,
+        "unitPrice": 25000
+      },
+      "complete": false
+    },
+    {
+      "id": 6,
+      "category": 8,
+      "description": "Drink crates",
+      "estimate": {
+        "type": "quantity",
+        "quantity": 30,
+        "unitPrice": 1400
+      },
+      "complete": false
+    },
+    {
+      "id": 7,
+      "category": 12,
+      "description": "PA rental",
+      "estimate": {
+        "type": "amount",
+        "amount": 45000
+      },
+      "complete": true
+    },
+    {
+      "id": 8,
+      "category": 13,
+      "description": "Insurance",
+      "estimate": {
+        "type": "amount",
+        "amount": 22500
+      },
+      "complete": true
+    },
+    {
+      "id": 9,
+      "category": 10,
+      "description": "Van rental",
+      "estimate": {
+        "type": "amount",
+        "amount": 15000
+      },
+      "complete": false
+    }
+  ],
   "budget": {
-    "lines": [],
+    "lines": [
+      {
+        "line": 1,
+        "estimate": 650000,
+        "actual": 652750,
+        "forecast": 652750
+      },
+      {
+        "line": 2,
+        "estimate": 70000,
+        "actual": 81250,
+        "forecast": 70000
+      },
+      {
+        "line": 3,
+        "estimate": 180000,
+        "actual": 180000,
+        "forecast": 180000
+      },
+      {
+        "line": 4,
+        "estimate": 110000,
+        "actual": 109850,
+        "forecast": 109850
+      },
+      {
+        "line": 5,
+        "estimate": 75000,
+        "actual": 100150,
+        "forecast": 100150
+      },
+      {
+        "line": 6,
+        "estimate": 42000,
+        "actual": 42000,
+        "forecast": 42000
+      },
+      {
+        "line": 7,
+        "estimate": 45000,
+        "actual": 50000,
+        "forecast": 50000
+      },
+      {
+        "line": 8,
+        "estimate": 22500,
+        "actual": 22500,
+        "forecast": 22500
+      },
+      {
+        "line": 9,
+        "estimate": 15000,
+        "actual": 0,
+        "forecast": 15000
+      }
+    ],
     "categories": [
       {
         "category": 4,
-        "estimate": 0,
+        "estimate": 650000,
         "actual": 652750,
         "forecast": 652750,
-        "unbudgeted": 652750
+        "unbudgeted": 0
       },
       {
         "category": 5,
-        "estimate": 0,
+        "estimate": 70000,
         "actual": 81250,
-        "forecast": 81250,
-        "unbudgeted": 81250
+        "forecast": 70000,
+        "unbudgeted": 0
       },
       {
         "category": 6,
@@ -979,17 +1128,17 @@
       },
       {
         "category": 7,
-        "estimate": 0,
+        "estimate": 185000,
         "actual": 210000,
         "forecast": 210000,
-        "unbudgeted": 210000
+        "unbudgeted": 0
       },
       {
         "category": 8,
-        "estimate": 0,
+        "estimate": 42000,
         "actual": 45200,
         "forecast": 45200,
-        "unbudgeted": 45200
+        "unbudgeted": 3200
       },
       {
         "category": 9,
@@ -1000,47 +1149,47 @@
       },
       {
         "category": 10,
-        "estimate": 0,
+        "estimate": 15000,
         "actual": 0,
-        "forecast": 0,
+        "forecast": 15000,
         "unbudgeted": 0
       },
       {
         "category": 11,
-        "estimate": 0,
+        "estimate": 180000,
         "actual": 180000,
         "forecast": 180000,
-        "unbudgeted": 180000
+        "unbudgeted": 0
       },
       {
         "category": 12,
-        "estimate": 0,
+        "estimate": 45000,
         "actual": 61000,
         "forecast": 61000,
-        "unbudgeted": 61000
+        "unbudgeted": 11000
       },
       {
         "category": 13,
-        "estimate": 0,
+        "estimate": 22500,
         "actual": 36850,
         "forecast": 36850,
-        "unbudgeted": 36850
+        "unbudgeted": 14350
       }
     ],
     "income": {
-      "estimate": 0,
+      "estimate": 720000,
       "actual": 739000,
-      "forecast": 739000
+      "forecast": 727750
     },
     "expense": {
-      "estimate": 0,
+      "estimate": 489500,
       "actual": 536250,
-      "forecast": 536250
+      "forecast": 551250
     },
     "result": {
-      "estimate": 0,
+      "estimate": 230500,
       "actual": 202750,
-      "forecast": 202750
+      "forecast": 176500
     }
   }
 }

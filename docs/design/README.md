@@ -80,4 +80,4 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says *Note*.
 
-Budget is not designed yet.
+Budget is not designed yet. Until it is, the app's Budget page follows the People page: a table of estimate, actual and forecast with a right-hand panel per budget line.

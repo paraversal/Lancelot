@@ -9,6 +9,7 @@ import type { ApiError } from '../generated/ApiError';
 import type { AppSettings } from '../generated/AppSettings';
 import type { BackupInfo } from '../generated/BackupInfo';
 import type { BlockerOverride } from '../generated/BlockerOverride';
+import type { BudgetLineDraft } from '../generated/BudgetLineDraft';
 import type { AccountKind } from '../generated/AccountKind';
 import type { AssetType } from '../generated/AssetType';
 import type { CountInput } from '../generated/CountInput';
@@ -250,6 +251,7 @@ function saveTxn(draft: TxnDraft, id: number | null, files: string[], remove: nu
 		s.txns = [...s.txns.filter((t) => t.id !== saved), txn].sort((a, b) =>
 			a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1
 		);
+		rebudget(s);
 	});
 	return { event, id: saved, warnings: [] };
 }
@@ -354,6 +356,63 @@ function recount(
 
 type Args = Record<string, unknown>;
 
+// Budget lines in the mock. The figures are redone with the core's rules (R-BUD-4) so the
+// Budget page can be clicked through; the app gets them from the core.
+function checkBudgetLine(s: EventSnapshot, d: BudgetLineDraft) {
+	const kind = s.accounts.find((a) => a.id === d.category)?.kind;
+	if (kind !== 'income' && kind !== 'expense')
+		fail('wrong_account_kind', 'this account cannot be used here', { field: 'category' });
+	if (!d.description.trim()) fail('empty_name', 'a name is needed', { field: 'description' });
+	if (d.estimate.type === 'quantity' && d.estimate.quantity < 1)
+		fail('non_positive_amount', 'amount must be greater than zero', {
+			field: 'estimate.quantity'
+		});
+}
+
+function rebudget(s: EventSnapshot) {
+	const kindOf = (id: number) => s.accounts.find((a) => a.id === id)?.kind;
+	const linked = new Map<number, number>();
+	for (const l of s.txns.flatMap((t) => t.lines))
+		if (l.budgetLine !== null)
+			linked.set(
+				l.budgetLine,
+				(linked.get(l.budgetLine) ?? 0) + (kindOf(l.account) === 'income' ? -l.amount : l.amount)
+			);
+	s.budget.lines = s.budgetLines.map((b) => {
+		const estimate =
+			b.estimate.type === 'amount' ? b.estimate.amount : b.estimate.quantity * b.estimate.unitPrice;
+		const actual = linked.get(b.id) ?? 0;
+		const forecast = b.complete
+			? actual
+			: kindOf(b.category) === 'income'
+				? Math.min(estimate, actual)
+				: Math.max(estimate, actual);
+		return { line: b.id, estimate, actual, forecast };
+	});
+	const zero = () => ({ estimate: 0, actual: 0, forecast: 0 });
+	const totals = { income: zero(), expense: zero() };
+	s.budget.categories = s.budget.categories.map((c) => {
+		const own = s.budget.lines.filter(
+			(f) => s.budgetLines.find((b) => b.id === f.line)?.category === c.category
+		);
+		const sum = (k: 'estimate' | 'actual' | 'forecast') => own.reduce((t, f) => t + f[k], 0);
+		const unbudgeted = c.actual - sum('actual');
+		const next = {
+			...c,
+			estimate: sum('estimate'),
+			forecast: sum('forecast') + unbudgeted,
+			unbudgeted
+		};
+		const total = totals[kindOf(c.category) === 'income' ? 'income' : 'expense'];
+		for (const k of ['estimate', 'actual', 'forecast'] as const) total[k] += next[k];
+		return next;
+	});
+	s.budget.income = totals.income;
+	s.budget.expense = totals.expense;
+	for (const k of ['estimate', 'actual', 'forecast'] as const)
+		s.budget.result[k] = totals.income[k] - totals.expense[k];
+}
+
 const commands: Record<string, (a: Args) => unknown> = {
 	app_info: () => ({ version: 'dev', schemaVersion: 1 }),
 	settings_get: () => settings,
@@ -403,7 +462,11 @@ const commands: Record<string, (a: Args) => unknown> = {
 		),
 	attachment_open: () => null,
 	attachment_export: () => null,
-	txn_delete: (a) => changed((s) => (s.txns = s.txns.filter((t) => t.id !== a.id))),
+	txn_delete: (a) =>
+		changed((s) => {
+			s.txns = s.txns.filter((t) => t.id !== a.id);
+			rebudget(s);
+		}),
 	account_add: (a) => addAccount(a.kind as AccountKind, a.name as string),
 	account_rename: (a) =>
 		changed((s) => {
@@ -451,6 +514,37 @@ const commands: Record<string, (a: Args) => unknown> = {
 					.filter((r) => r.iban)
 					.reduce((t, r) => t + r.amount, 0);
 			}
+		}),
+	budget_line_add: (a) =>
+		changed((s) => {
+			const draft = a.draft as BudgetLineDraft;
+			checkBudgetLine(s, draft);
+			const id = Math.max(0, ...s.budgetLines.map((b) => b.id)) + 1;
+			s.budgetLines.push({ id, ...draft, description: draft.description.trim() });
+			rebudget(s);
+		}),
+	budget_line_update: (a) =>
+		changed((s) => {
+			const draft = a.draft as BudgetLineDraft;
+			checkBudgetLine(s, draft);
+			const line = s.budgetLines.find((b) => b.id === a.id);
+			if (!line) fail('unknown_budget_line', 'unknown budget line');
+			const linked = s.txns.some((t) => t.lines.some((l) => l.budgetLine === line.id));
+			if (linked && draft.category !== line.category)
+				fail(
+					'budget_line_in_use',
+					'transactions are linked to this budget line, so its category cannot change',
+					{ field: 'category' }
+				);
+			Object.assign(line, draft, { description: draft.description.trim() });
+			rebudget(s);
+		}),
+	budget_line_delete: (a) =>
+		changed((s) => {
+			s.budgetLines = s.budgetLines.filter((b) => b.id !== a.id);
+			for (const l of s.txns.flatMap((t) => t.lines))
+				if (l.budgetLine === a.id) l.budgetLine = null;
+			rebudget(s);
 		}),
 	payouts_export_csv: () => null,
 	transactions_export_csv: () => null,
