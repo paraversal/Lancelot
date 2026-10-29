@@ -3,4 +3,4 @@
 /**
  * System accounts that exist in every event and that the app refers to directly.
  */
-export type Role = "verein" | "cash_box" | "opening";
+export type Role = "verein" | "cash_box" | "opening" | "tickets" | "ticket_fees";

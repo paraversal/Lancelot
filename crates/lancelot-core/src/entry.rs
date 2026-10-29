@@ -11,7 +11,9 @@ use time::Date;
 use ts_rs::TS;
 
 use crate::error::DomainError;
-use crate::model::{Account, AccountId, AccountKind, BudgetLineId, Line, Role, TxnKind};
+use crate::model::{
+    Account, AccountId, AccountKind, BudgetLineId, Line, Origin, Role, Txn, TxnKind,
+};
 use crate::money::{Cents, try_sum};
 
 /// Everything a transaction form produces.
@@ -180,6 +182,33 @@ pub fn build_lines(
         }
     };
     Ok(lines)
+}
+
+/// Checks a stored transaction: typed-in ones follow [`lines_follow_rules`], and ticket income
+/// is an income line, optionally fee lines, and the account that received the money (R-TKT-6).
+pub fn txn_follows_rules(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> bool {
+    if txn.origin == Origin::Manual {
+        return lines_follow_rules(txn.kind, &txn.lines, accounts);
+    }
+    let lines = &txn.lines;
+    let kind = |l: &Line| accounts.get(&l.account).map(|a| a.kind);
+    let (Some(first), Some(last)) = (lines.first(), lines.last()) else {
+        return false;
+    };
+    txn.kind == TxnKind::Income
+        && lines.len() >= 2
+        && kind(first) == Some(AccountKind::Income)
+        && first.amount.is_negative()
+        && matches!(kind(last), Some(AccountKind::Asset | AccountKind::Person))
+        && last.amount.is_positive()
+        && lines[1..lines.len() - 1]
+            .iter()
+            .all(|l| kind(l) == Some(AccountKind::Expense) && l.amount.is_positive())
+        && lines
+            .iter()
+            .map(|l| i128::from(l.amount.get()))
+            .sum::<i128>()
+            == 0
 }
 
 /// Checks stored lines against the shape [`build_lines`] produces for their kind. Used when

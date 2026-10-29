@@ -10,6 +10,7 @@ import type { OpenItem } from "./OpenItem";
 import type { Payouts } from "./Payouts";
 import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
+import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
 
@@ -33,4 +34,8 @@ budgetLines: Array<BudgetLine>,
 /**
  * Plan vs actual and the forecast (R-BUD-3, R-BUD-4).
  */
-budget: Budget, };
+budget: Budget, 
+/**
+ * Tiers, imports and manual sales with their figures (R-TKT-1…7).
+ */
+tickets: Tickets, };

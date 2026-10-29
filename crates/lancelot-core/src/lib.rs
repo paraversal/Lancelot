@@ -17,8 +17,10 @@ pub mod ledger;
 pub mod model;
 pub mod money;
 pub mod payout;
+pub mod sheet;
 pub mod snapshot;
 pub mod store;
+pub mod tickets;
 
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
 pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
@@ -35,15 +37,20 @@ pub use ledger::{
 };
 pub use model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, Line, Person, Role,
-    Txn, TxnId, TxnKind,
+    BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, ImportId, Line,
+    ManualSaleId, Origin, Person, Role, TierId, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
+pub use sheet::{Problem, RowProblem, Sheet, SheetRow, read_sheet};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
     BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,
     list_backups,
+};
+pub use tickets::{
+    ImportPreview, ManualSale, ManualSaleDraft, TicketColumns, TicketImport, TicketTotals, Tickets,
+    Tier, TierDraft,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

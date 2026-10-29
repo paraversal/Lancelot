@@ -225,6 +225,7 @@ function saveTxn(draft: TxnDraft, id: number | null, files: string[], remove: nu
 			counterparty: draft.counterparty,
 			notes: draft.notes,
 			lines: built,
+			origin: { type: 'manual' as const },
 			amount,
 			attachments: [
 				...(s.txns.find((t) => t.id === id)?.attachments ?? []).filter(

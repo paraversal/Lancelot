@@ -15,6 +15,7 @@ use crate::ledger::{
 use crate::model::{Account, AccountId, Attachment, BudgetLine, ClosingCount, Event, Person, Txn};
 use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
+use crate::tickets::Tickets;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -38,6 +39,8 @@ pub struct EventSnapshot {
     pub budget_lines: Vec<BudgetLine>,
     /// Plan vs actual and the forecast (R-BUD-3, R-BUD-4).
     pub budget: Budget,
+    /// Tiers, imports and manual sales with their figures (R-TKT-1…7).
+    pub tickets: Tickets,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -127,6 +130,7 @@ impl EventSnapshot {
             payouts: payouts(book).unwrap_or_default(),
             budget_lines: book.budget_lines().cloned().collect(),
             budget: book.budget().clone(),
+            tickets: book.tickets().clone(),
         }
     }
 }

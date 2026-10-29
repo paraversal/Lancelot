@@ -15,8 +15,9 @@ use super::codec::{date_text, enum_text, timestamp_text};
 use crate::book::Book;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineId, ClosingCount, Estimate,
-    Person, Txn, TxnId,
+    ImportId, ManualSaleId, Origin, Person, TierId, Txn, TxnId,
 };
+use crate::tickets::{ManualSale, TicketImport, Tier};
 
 enum Change<'a, V> {
     Create(&'a V),
@@ -113,10 +114,12 @@ pub(crate) fn persist(
                 )?;
             }
             Change::Update(_, a) => {
+                // The role changes only when a category becomes the ticket fee category.
+                let role = a.role.as_ref().map(enum_text).transpose()?;
                 let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                 conn.execute(
-                    "UPDATE account SET name = ?2, asset_type = ?3 WHERE id = ?1",
-                    params![id.0, a.name, asset_type],
+                    "UPDATE account SET name = ?2, role = ?3, asset_type = ?4 WHERE id = ?1",
+                    params![id.0, a.name, role, asset_type],
                 )?;
             }
             Change::Delete(_) => {
@@ -157,15 +160,20 @@ pub(crate) fn persist(
     let event = after.event();
     if before.map(|b| b.event()) != Some(event) {
         let d = &event.details;
+        let columns = &event.ticket_columns;
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
-                                default_reimbursement_account_id, closing_overrides)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                                default_reimbursement_account_id, closing_overrides,
+                                ticket_tier_column, ticket_order_column, ticket_date_column)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
                location = excluded.location, notes = excluded.notes, closed_at = excluded.closed_at,
                default_reimbursement_account_id = excluded.default_reimbursement_account_id,
-               closing_overrides = excluded.closing_overrides",
+               closing_overrides = excluded.closing_overrides,
+               ticket_tier_column = excluded.ticket_tier_column,
+               ticket_order_column = excluded.ticket_order_column,
+               ticket_date_column = excluded.ticket_date_column",
             params![
                 d.name,
                 d.starts_on.map(date_text),
@@ -175,6 +183,9 @@ pub(crate) fn persist(
                 event.closed_at.map(timestamp_text).transpose()?,
                 event.default_reimbursement_account.0,
                 serde_json::to_string(&event.closing_overrides)?,
+                columns.tier,
+                columns.order,
+                columns.sale_date,
             ],
         )?;
         match before.map(|b| b.event()) {
@@ -233,6 +244,91 @@ pub(crate) fn persist(
         }
     }
 
+    // Tickets before the transactions generated from them; deleted ones after.
+    fn tiers(b: Option<&Book>) -> Vec<(TierId, &Tier)> {
+        b.map(|b| b.tiers().map(|t| (t.id, t)).collect())
+            .unwrap_or_default()
+    }
+    let tier_changes = diff(tiers(before), tiers(Some(after)));
+    for (id, change) in &tier_changes {
+        if let Change::Create(t) | Change::Update(_, t) = change {
+            let d = &t.draft;
+            conn.execute(
+                "INSERT INTO ticket_tier (id, name, price, fee_bp, quota) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (id) DO UPDATE SET
+                   name = excluded.name, price = excluded.price, fee_bp = excluded.fee_bp,
+                   quota = excluded.quota",
+                params![id.0, d.name, d.price.get(), d.fee_bp, d.quota],
+            )?;
+            conn.execute("DELETE FROM ticket_tier_alias WHERE tier_id = ?1", [id.0])?;
+            for (position, alias) in d.aliases.iter().enumerate() {
+                conn.execute(
+                    "INSERT INTO ticket_tier_alias (tier_id, position, alias) VALUES (?1, ?2, ?3)",
+                    params![id.0, position as i64, alias],
+                )?;
+            }
+            log.write("ticket_tier", id.0, change)?;
+        }
+    }
+
+    fn imports(b: Option<&Book>) -> Vec<(ImportId, &TicketImport)> {
+        b.map(|b| b.ticket_imports().map(|i| (i.id, i)).collect())
+            .unwrap_or_default()
+    }
+    let import_changes = diff(imports(before), imports(Some(after)));
+    for (id, change) in &import_changes {
+        match change {
+            Change::Create(i) => {
+                conn.execute(
+                    "INSERT INTO ticket_import (id, filename, sha256, imported_at, date)
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        id.0,
+                        i.filename,
+                        i.sha256,
+                        timestamp_text(i.imported_at)?,
+                        date_text(i.date)
+                    ],
+                )?;
+                let mut stmt = conn.prepare(
+                    "INSERT INTO ticket_import_row (import_id, order_id, tier_id, count) VALUES (?1, ?2, ?3, ?4)",
+                )?;
+                for o in &i.orders {
+                    stmt.execute(params![id.0, o.order, o.tier.0, o.count])?;
+                }
+            }
+            // Only the date of an import changes; its rows are fixed.
+            Change::Update(_, i) => {
+                conn.execute(
+                    "UPDATE ticket_import SET date = ?2 WHERE id = ?1",
+                    params![id.0, date_text(i.date)],
+                )?;
+            }
+            Change::Delete(_) => continue,
+        }
+        log.write("ticket_import", id.0, change)?;
+    }
+
+    fn sales(b: Option<&Book>) -> Vec<(ManualSaleId, &ManualSale)> {
+        b.map(|b| b.manual_sales().map(|s| (s.id, s)).collect())
+            .unwrap_or_default()
+    }
+    let sale_changes = diff(sales(before), sales(Some(after)));
+    for (id, change) in &sale_changes {
+        if let Change::Create(s) | Change::Update(_, s) = change {
+            let d = &s.draft;
+            conn.execute(
+                "INSERT INTO ticket_manual_sale (id, tier_id, count, person_id, date, reference)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT (id) DO UPDATE SET
+                   tier_id = excluded.tier_id, count = excluded.count, person_id = excluded.person_id,
+                   date = excluded.date, reference = excluded.reference",
+                params![id.0, d.tier.0, d.count, d.person.0, date_text(d.date), d.reference],
+            )?;
+            log.write("ticket_manual_sale", id.0, change)?;
+        }
+    }
+
     // Transactions: unseal, replace the lines, seal (R-COR-2).
     fn txns(b: Option<&Book>) -> Vec<(TxnId, &Txn)> {
         b.map(|b| b.txns().map(|t| (t.id, t)).collect())
@@ -241,16 +337,19 @@ pub(crate) fn persist(
     for (id, change) in diff(txns(before), txns(Some(after))) {
         match &change {
             Change::Create(t) => {
+                let (origin, origin_id) = origin_text(t.origin);
                 conn.execute(
-                    "INSERT INTO txn (id, kind, date, description, counterparty, notes, sealed)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0)",
+                    "INSERT INTO txn (id, kind, date, description, counterparty, notes, origin, origin_id, sealed)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)",
                     params![
                         id.0,
                         enum_text(&t.kind)?,
                         date_text(t.date),
                         t.description,
                         t.counterparty,
-                        t.notes
+                        t.notes,
+                        origin,
+                        origin_id
                     ],
                 )?;
                 write_lines(conn, t)?;
@@ -276,6 +375,24 @@ pub(crate) fn persist(
         if let Change::Delete(_) = change {
             conn.execute("DELETE FROM budget_line WHERE id = ?1", [id.0])?;
             log.write("budget_line", id.0, change)?;
+        }
+    }
+    for (id, change) in &sale_changes {
+        if let Change::Delete(_) = change {
+            conn.execute("DELETE FROM ticket_manual_sale WHERE id = ?1", [id.0])?;
+            log.write("ticket_manual_sale", id.0, change)?;
+        }
+    }
+    for (id, change) in &import_changes {
+        if let Change::Delete(_) = change {
+            conn.execute("DELETE FROM ticket_import WHERE id = ?1", [id.0])?;
+            log.write("ticket_import", id.0, change)?;
+        }
+    }
+    for (id, change) in &tier_changes {
+        if let Change::Delete(_) = change {
+            conn.execute("DELETE FROM ticket_tier WHERE id = ?1", [id.0])?;
+            log.write("ticket_tier", id.0, change)?;
         }
     }
 
@@ -330,6 +447,9 @@ pub(crate) fn persist(
             ("next_txn_id", next.txn),
             ("next_attachment_id", next.attachment),
             ("next_budget_line_id", next.budget_line),
+            ("next_tier_id", next.tier),
+            ("next_import_id", next.import),
+            ("next_manual_sale_id", next.manual_sale),
         ] {
             conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
@@ -357,4 +477,13 @@ fn write_lines(conn: &Connection, t: &Txn) -> Result<(), StoreError> {
     }
     conn.execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [t.id.0])?;
     Ok(())
+}
+
+/// A transaction's origin as stored: its kind and the tier or sale it comes from.
+fn origin_text(origin: Origin) -> (&'static str, Option<i64>) {
+    match origin {
+        Origin::Manual => ("manual", None),
+        Origin::TicketImport { tier } => ("ticket_import", Some(tier.0)),
+        Origin::TicketSale { sale } => ("ticket_sale", Some(sale.0)),
+    }
 }

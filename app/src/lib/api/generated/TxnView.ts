@@ -2,6 +2,7 @@
 import type { Attachment } from "./Attachment";
 import type { Cents } from "./Cents";
 import type { Line } from "./Line";
+import type { Origin } from "./Origin";
 import type { TxnId } from "./TxnId";
 import type { TxnKind } from "./TxnKind";
 
@@ -9,4 +10,8 @@ export type TxnView = {
 /**
  * What the transaction moves: the receipt total, the transfer or settle amount.
  */
-amount: Cents, attachments: Array<Attachment>, id: TxnId, kind: TxnKind, date: string, description: string, counterparty: string | null, notes: string | null, lines: Array<Line>, };
+amount: Cents, attachments: Array<Attachment>, id: TxnId, kind: TxnKind, date: string, description: string, counterparty: string | null, notes: string | null, lines: Array<Line>, 
+/**
+ * Typed in, or generated from tickets. Generated transactions are read-only (R-TKT-6).
+ */
+origin: Origin, };

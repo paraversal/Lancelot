@@ -71,6 +71,10 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 | People / Mark as paid | The reimbursements to record, people without an IBAN, the account and the date |
 | People / Edit person | The person's details in the panel; the IBAN previews its grouped form while typing |
 | Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |
+| Tickets / Import | The sheet in the right-hand panel: file and hash, the columns read, the snapshot date, an unknown tier to map or add, the changes per tier (removals lead to conflicts) and the rows not read; Import stays blocked while a tier is unmapped |
+| Tickets / Edit tier | Name, price, fee (`= 0,80 € per ticket`), quota and the sheet's names for the tier; sold, fees and net; a tier in use cannot be deleted |
+| Tickets / Manual sale | Tier, count, the amount, who received the money (with their balance before and after), date and reference; the earlier manual sales |
+| Tickets / Empty | No tiers yet: Import sheet and `+ Tier`; Manual sale is disabled |
 | Drinks | Drinks result, per-product commission records, Strichliste with tallies and unpaid amounts |
 | Start | Recent events (name, dates, path, last opened; `Not found` for moved files), New event and Open |
 | Start / New event | Name, dates (with the `= 06.12.2026` preview) and location in the right-hand panel |
