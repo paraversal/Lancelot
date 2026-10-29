@@ -13,6 +13,7 @@ pub trait Target {
     /// A made-up receipt: a photo, or a PDF for invoices.
     fn attach(&mut self, txn: TxnId, pdf: bool);
     fn count(&mut self, account: AccountId, amount: Cents);
+    fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId;
 }
 
 impl Target for Book {
@@ -43,6 +44,9 @@ impl Target for Book {
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
     }
+    fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
+        self.add_budget_line(draft).unwrap()
+    }
 }
 
 impl Target for Store {
@@ -66,6 +70,9 @@ impl Target for Store {
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
     }
+    fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
+        self.add_budget_line(draft).unwrap()
+    }
 }
 
 pub struct Mock {
@@ -82,13 +89,46 @@ pub fn build(t: &mut impl Target) -> Mock {
     let (verein, cash) = (role(b, Role::Verein), role(b, Role::CashBox));
     let [tickets, donations, other_in] =
         ["Tickets", "Drink donations", "General"].map(|n| income(b, n));
-    let [food, venue, drinks, pfand, tech, other] =
-        ["Kitchen", "Venue", "Drinks", "Pfand", "Tech", "General"].map(|n| expense(b, n));
+    let [food, venue, drinks, pfand, tech, other, mobility] = [
+        "Kitchen", "Venue", "Drinks", "Pfand", "Tech", "General", "Mobility",
+    ]
+    .map(|n| expense(b, n));
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
-    let income_to = |destination, account, amount: &str| Entry::Income {
+    // The budget. The mockups have none, so it is made up: some lines over, some under, some
+    // complete, and a few receipts left unbudgeted (Pfand, cups, cables, decoration).
+    let mut plan = |category, description: &str, estimate, complete| {
+        t.budget(BudgetLineDraft {
+            category,
+            description: description.into(),
+            estimate,
+            complete,
+        })
+    };
+    let amount = |text| Estimate::Amount { amount: eur(text) };
+    let times = |quantity, text| Estimate::Quantity {
+        quantity,
+        unit_price: eur(text),
+    };
+    let b_tickets = plan(tickets, "Ticket sales", times(260, "25"), true);
+    let b_bar = plan(donations, "Bar donations", amount("700"), false);
+    let b_hall = plan(venue, "Hall rent", amount("1.800"), true);
+    let b_catering = plan(food, "Catering", amount("1.100"), true);
+    let b_groceries = plan(food, "Groceries", times(3, "250"), false);
+    let b_drinks = plan(drinks, "Drink crates", times(30, "14"), false);
+    let b_pa = plan(tech, "PA rental", amount("450"), true);
+    let b_insurance = plan(other, "Insurance", amount("225"), true);
+    plan(mobility, "Van rental", amount("150"), false);
+
+    let to = |line| {
+        move |account, amount: &str| SplitLine {
+            budget_line: Some(line),
+            ..split(account, amount)
+        }
+    };
+    let income_to = |destination, line: SplitLine| Entry::Income {
         destination,
-        lines: vec![split(account, amount)],
+        lines: vec![line],
     };
     let expense_by = |payer, lines: Vec<SplitLine>| Entry::Expense { payer, lines };
     let settle = |person, amount: &str, direction| Entry::Settle {
@@ -99,31 +139,44 @@ pub fn build(t: &mut impl Target) -> Mock {
     };
 
     // Income
-    t.save("Ticket sheet", income_to(verein, tickets, "6.227,50"));
-    t.save("Tickets, paid to Bob", income_to(bob, tickets, "300"));
-    t.save("Drink donations", income_to(cash, donations, "812,50"));
-    t.save("Donation box", income_to(cash, other_in, "50"));
+    t.save(
+        "Ticket sheet",
+        income_to(verein, to(b_tickets)(tickets, "6.227,50")),
+    );
+    t.save(
+        "Tickets, paid to Bob",
+        income_to(bob, to(b_tickets)(tickets, "300")),
+    );
+    t.save(
+        "Drink donations",
+        income_to(cash, to(b_bar)(donations, "812,50")),
+    );
+    t.save("Donation box", income_to(cash, split(other_in, "50")));
 
     // Expenses with receipts
     for (description, payer, lines) in [
-        ("Hall rent", verein, vec![split(venue, "1.800")]),
+        ("Hall rent", verein, vec![to(b_hall)(venue, "1.800")]),
         (
             "Hoffmann drinks",
             verein,
-            vec![split(drinks, "420"), split(pfand, "32")],
+            vec![to(b_drinks)(drinks, "420"), split(pfand, "32")],
         ),
-        ("PA rental", verein, vec![split(tech, "500")]),
-        ("Catering", verein, vec![split(food, "1.098,50")]),
-        ("Event insurance", verein, vec![split(other, "225")]),
+        ("PA rental", verein, vec![to(b_pa)(tech, "500")]),
+        ("Catering", verein, vec![to(b_catering)(food, "1.098,50")]),
+        (
+            "Event insurance",
+            verein,
+            vec![to(b_insurance)(other, "225")],
+        ),
         (
             "Großmarkt",
             cash,
-            vec![split(food, "342,75"), split(other, "48,50")],
+            vec![to(b_groceries)(food, "342,75"), split(other, "48,50")],
         ),
-        ("Bakery", cash, vec![split(food, "226,35")]),
-        ("Groceries", anna, vec![split(food, "312,40")]),
+        ("Bakery", cash, vec![to(b_groceries)(food, "226,35")]),
+        ("Groceries", anna, vec![to(b_groceries)(food, "312,40")]),
         ("Cables", malte, vec![split(tech, "110")]),
-        ("Snacks", bob, vec![split(food, "120")]),
+        ("Snacks", bob, vec![to(b_groceries)(food, "120")]),
         ("Decoration", clara, vec![split(other, "95")]),
     ] {
         let invoice = matches!(description, "Hall rent" | "PA rental");

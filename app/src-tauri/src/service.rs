@@ -7,10 +7,10 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride, DomainError,
-    EventDetails, EventSnapshot, MAX_ATTACHMENT_SIZE, Parsed, Person, Report, Store, StoreOptions,
-    TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount,
-    parse_date,
+    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride,
+    BudgetLineDraft, BudgetLineId, DomainError, EventDetails, EventSnapshot, MAX_ATTACHMENT_SIZE,
+    Parsed, Person, Report, Store, StoreOptions, TxnDraft, TxnId, backup_time, event_uuid_of,
+    format_date, list_backups, parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -359,6 +359,27 @@ impl Service {
         person: Person,
     ) -> Result<OpenEvent> {
         self.change(|s| Ok(s.update_person(id, name, person)?))
+    }
+
+    /// Adds a budget line (R-BUD-1).
+    pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<OpenEvent> {
+        self.change(|s| {
+            s.add_budget_line(draft)?;
+            Ok(())
+        })
+    }
+
+    pub fn update_budget_line(
+        &mut self,
+        id: BudgetLineId,
+        draft: BudgetLineDraft,
+    ) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.update_budget_line(id, draft)?))
+    }
+
+    /// Deletes a budget line; its linked actuals stay, unbudgeted.
+    pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_budget_line(id)?))
     }
 
     /// Checks an IBAN as it is typed (R-PER-2).
@@ -830,6 +851,49 @@ mod tests {
             (p.name.as_str(), p.details.iban.as_ref().map(|i| i.as_str())),
             ("Anna Krüger", Some("DE89370400440532013000"))
         );
+    }
+
+    #[test]
+    fn adds_edits_and_deletes_budget_lines() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let open = s
+            .create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        let kitchen = open
+            .snapshot
+            .accounts
+            .iter()
+            .find(|a| a.account.name == "Kitchen")
+            .unwrap()
+            .account
+            .id;
+        let draft = |amount| lancelot_core::BudgetLineDraft {
+            category: kitchen,
+            description: "Food".into(),
+            estimate: lancelot_core::Estimate::Amount {
+                amount: lancelot_core::Cents::new(amount).unwrap(),
+            },
+            complete: false,
+        };
+
+        let open = s.add_budget_line(draft(100_000)).unwrap();
+        let id = open.snapshot.budget_lines[0].id;
+        assert_eq!(open.snapshot.budget.expense.forecast.get(), 100_000);
+        let open = s.update_budget_line(id, draft(120_000)).unwrap();
+        assert_eq!(open.snapshot.budget.expense.estimate.get(), 120_000);
+        let err = s
+            .add_budget_line(lancelot_core::BudgetLineDraft {
+                description: " ".into(),
+                ..draft(1)
+            })
+            .unwrap_err();
+        assert_eq!(
+            (err.code.as_str(), err.field.as_deref()),
+            ("empty_name", Some("description"))
+        );
+        let open = s.delete_budget_line(id).unwrap();
+        assert!(open.snapshot.budget_lines.is_empty());
     }
 
     #[test]

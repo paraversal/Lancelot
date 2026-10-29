@@ -24,6 +24,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
+	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import Receipts from './Receipts.svelte';
@@ -407,6 +408,7 @@
 							</div>
 							{#each lines as line, i (i)}
 								{@const account = line.account === null ? undefined : byId.get(line.account)}
+								{@const planned = snapshot.budgetLines.filter((b) => b.category === line.account)}
 								<div class="line">
 									{#if account}<span
 											class="dot"
@@ -444,6 +446,19 @@
 										</button>
 									{/if}
 								</div>
+								{#if planned.length}
+									<div class="budget-line">
+										<Select
+											label="Budget line"
+											value={line.budgetLine ?? 0}
+											options={[
+												{ value: 0, label: 'Not budgeted' },
+												...planned.map((b) => ({ value: b.id, label: b.description }))
+											]}
+											onchange={(v) => (lines[i].budgetLine = v === 0 ? null : v)}
+										/>
+									</div>
+								{/if}
 							{/each}
 							<button
 								type="button"
@@ -593,6 +608,10 @@
 
 	.line-amount {
 		width: 120px;
+	}
+
+	.budget-line {
+		padding-left: 14px;
 	}
 
 	.icon,

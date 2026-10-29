@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The event's sidebar: name and dates, the pages with their counts, and the file name, which
-	// opens Settings. Budget, Tickets and Drinks join in phase 2.
+	// opens Settings. Tickets and Drinks join later in phase 2.
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { markerTravel } from '../motion/effects';
@@ -16,7 +16,8 @@
 	const items = $derived([
 		{ href: '/event/overview', label: 'Overview', count: null },
 		{ href: '/event/ledger', label: 'Ledger', count: snapshot.txns.length || null },
-		{ href: '/event/people', label: 'People', count: snapshot.persons.length || null }
+		{ href: '/event/people', label: 'People', count: snapshot.persons.length || null },
+		{ href: '/event/budget', label: 'Budget', count: snapshot.budgetLines.length || null }
 	]);
 	const dates = $derived(
 		formatDateRange(snapshot.event.startsOn, snapshot.event.endsOn, session.format)

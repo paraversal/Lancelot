@@ -179,7 +179,9 @@ Built in three steps, each in its own pull request.
 
 **M6b · Budget screen**
 - [ ] **Design the Budget screen** in `UI.fig`.
-- [ ] The Budget page: add, edit and delete budget lines, plan vs actual per line and category, and linking a receipt's lines to a budget line.
+- [x] The Budget page (⌘4): forecast, planned result and result so far; estimate, actual and forecast per line and category, with what is not budgeted. A panel adds, edits and deletes budget lines and lists the receipts linked to each. Drafted before the design, following the People page.
+- [x] Linking: each category line in the entry panel picks a budget line of its category, and keeps it when the receipt is edited.
+- [ ] Match the page to the design once it is in `UI.fig`.
 
 **M6c · Forecast in the Overview and the report**
 - [ ] Forecast block on the Overview, and plan vs actual in the report (R-SET-2).
@@ -241,4 +243,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M6b: the Budget screen, starting with its design in `UI.fig`. The M5 parallel run happens at the next event, alongside it.
+M6b: design the Budget screen in `UI.fig` and match the drafted page to it. Then M6c: the forecast on the Overview and in the report. The M5 parallel run happens at the next event, alongside it.

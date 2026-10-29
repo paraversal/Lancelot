@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, EventDetails, Parsed, Person,
-    TxnDraft, TxnId,
+    AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
+    BudgetLineId, EventDetails, Parsed, Person, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -238,6 +238,28 @@ pub async fn person_update(
     person: Person,
 ) -> Result<OpenEvent> {
     with(&state, |s| s.update_person(id, &name, person))
+}
+
+#[tauri::command]
+pub async fn budget_line_add(
+    state: State<'_, AppState>,
+    draft: BudgetLineDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_budget_line(draft))
+}
+
+#[tauri::command]
+pub async fn budget_line_update(
+    state: State<'_, AppState>,
+    id: BudgetLineId,
+    draft: BudgetLineDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_budget_line(id, draft))
+}
+
+#[tauri::command]
+pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_budget_line(id))
 }
 
 #[tauri::command]

@@ -13,6 +13,8 @@ import type { AppInfo } from './generated/AppInfo';
 import type { AppSettings } from './generated/AppSettings';
 import type { BackupInfo } from './generated/BackupInfo';
 import type { BlockerOverride } from './generated/BlockerOverride';
+import type { BudgetLineDraft } from './generated/BudgetLineDraft';
+import type { BudgetLineId } from './generated/BudgetLineId';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
@@ -117,6 +119,12 @@ export const api = {
 	updatePerson: (id: AccountId, name: string, person: Person) =>
 		call<OpenEvent>('person_update', { id, name, person }),
 	checkIban: (input: string) => call<CheckedIban>('iban_check', { input }),
+
+	addBudgetLine: (draft: BudgetLineDraft) => call<OpenEvent>('budget_line_add', { draft }),
+	updateBudgetLine: (id: BudgetLineId, draft: BudgetLineDraft) =>
+		call<OpenEvent>('budget_line_update', { id, draft }),
+	/** The linked actuals stay and count as unbudgeted. */
+	deleteBudgetLine: (id: BudgetLineId) => call<OpenEvent>('budget_line_delete', { id }),
 
 	exportPayoutsCsv: (target: string) => call<void>('payouts_export_csv', { target }),
 	exportTransactionsCsv: (target: string) => call<void>('transactions_export_csv', { target }),
