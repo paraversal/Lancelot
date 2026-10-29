@@ -117,8 +117,9 @@ fn csv_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
         Err(_) => data.iter().map(|&b| char::from(b)).collect(),
     };
     let header = text.lines().next().unwrap_or_default();
-    let delimiter = [b';', b',', b'\t']
-        .into_iter()
+    let delimiter = b";,\t"
+        .iter()
+        .copied()
         .max_by_key(|d| header.bytes().filter(|b| b == d).count())
         .unwrap_or(b',');
     let mut reader = csv::ReaderBuilder::new()
