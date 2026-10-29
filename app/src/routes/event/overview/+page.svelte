@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Overview (R-SET-1, R-SET-5): the result, where the money came from and went, where it is
-	// now, and what is still open. Cash accounts are counted here; open items lead to their fix.
+	// Overview (R-SET-1, R-SET-5): the result and its forecast, where the money came from and
+	// went, where it is now, and what is still open. Cash accounts are counted here; open items lead to their fix.
 	// Closing happens here too; a closed event shows its final balance and what was accepted.
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '#lib/api/index.ts';
@@ -26,6 +26,9 @@
 	const format = $derived(session.format);
 	const totals = $derived(snapshot.totals);
 	const where = $derived(snapshot.whereTheMoneyIs);
+	const budget = $derived(snapshot.budget);
+	// The forecast (R-BUD-4) needs a budget, and means nothing once the event is closed.
+	const forecast = $derived(snapshot.budgetLines.length > 0 && !session.closed);
 
 	let counting = $state<number | null>(null);
 	const a5 = $derived(level('A5'));
@@ -152,6 +155,23 @@
 					><MovingAmount value={totals.result} {format} sign="always" level={a5} {countUp} /></span
 				>
 			</div>
+			{#if forecast}
+				<button
+					type="button"
+					class="figure forecast"
+					data-testid="forecast"
+					onclick={() => goto('/event/budget')}
+				>
+					<span class="label">Forecast<Icon name="chev" size={12} /></span>
+					<span
+						class="total"
+						class:plus={budget.result.forecast > 0}
+						class:minus={budget.result.forecast < 0}
+						><MovingAmount value={budget.result.forecast} {format} sign="always" level={a5} /></span
+					>
+					<span class="note">planned {formatAmount(budget.result.estimate, format, 'always')}</span>
+				</button>
+			{/if}
 			<div class="figure">
 				<span class="label">Income</span>
 				<span class="total"><MovingAmount value={totals.income} {format} level={a5} /></span>
@@ -376,8 +396,28 @@
 	}
 
 	.label {
+		display: flex;
+		align-items: center;
+		gap: 2px;
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.forecast {
+		margin: 0;
+		border-top: none;
+		border-right: none;
+		border-bottom: none;
+		background: none;
+		font: inherit;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+
+	.forecast:hover .label {
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 
 	.result {

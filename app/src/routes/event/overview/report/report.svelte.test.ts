@@ -37,6 +37,17 @@ describe('Settlement report', () => {
 			'+2.027,50 €'
 		);
 		expect(document.querySelectorAll('.entries tbody tr').length).toBe(snapshot.txns.length);
+		const plan = document.querySelector('.budget')!;
+		const row = (name: string) =>
+			[...plan.querySelectorAll('tr')]
+				.map((r) =>
+					[...r.querySelectorAll('td')].map((c) => c.textContent!.replace(/\s+/g, ' ').trim())
+				)
+				.find((cells) => cells[0] === name);
+		expect(row('Venue')).toEqual(['Venue', '1.800,00 €', '1.800,00 €', '1.800,00 €']);
+		expect(row('Mobility')).toEqual(['Mobility', '150,00 €', '–', '150,00 €']);
+		expect(row('Expenses')).toEqual(['Expenses', '4.895,00 €', '5.362,50 €', '5.512,50 €']);
+		expect(row('Result')).toEqual(['Result', '+2.305,00 €', '+2.027,50 €', '+1.765,00 €']);
 
 		await settle();
 		await settle();

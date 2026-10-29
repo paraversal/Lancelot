@@ -54,6 +54,22 @@ describe('Overview', () => {
 		expect(screen.getByText('No receipt: Cups and ice')).toBeTruthy();
 	});
 
+	it('shows the forecast and leads to the budget', async () => {
+		render(Overview);
+		const forecast = screen.getByTestId('forecast');
+		expect(text(forecast)).toBe('Forecast +1.765,00 € planned +2.305,00 €');
+		await fireEvent.click(forecast);
+		expect(goto).toHaveBeenCalledWith('/event/budget');
+	});
+
+	it('shows no forecast without a budget', () => {
+		const next = structuredClone(snapshot);
+		next.budgetLines = [];
+		session.update({ ...session.event!, snapshot: next });
+		render(Overview);
+		expect(screen.queryByTestId('forecast')).toBeNull();
+	});
+
 	it('leads from an open item to its fix', async () => {
 		render(Overview);
 		await fireEvent.click(screen.getByText('Anna is owed'));
@@ -106,5 +122,6 @@ describe('Overview', () => {
 		expect(screen.queryByText('Count')).toBeNull();
 		expect(screen.queryByText('New entry')).toBeNull();
 		expect(screen.getByText('Accepted when closing')).toBeTruthy();
+		expect(screen.queryByTestId('forecast')).toBeNull();
 	});
 });
