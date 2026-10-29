@@ -5,7 +5,8 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, EventDetails, Parsed, Person, TxnDraft, TxnId,
+    BudgetLineId, EventDetails, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed,
+    Person, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -260,6 +261,81 @@ pub async fn budget_line_update(
 #[tauri::command]
 pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) -> Result<OpenEvent> {
     with(&state, |s| s.delete_budget_line(id))
+}
+
+#[tauri::command]
+pub async fn tier_add(state: State<'_, AppState>, draft: TierDraft) -> Result<OpenEvent> {
+    with(&state, |s| s.add_tier(draft))
+}
+
+#[tauri::command]
+pub async fn tier_update(
+    state: State<'_, AppState>,
+    id: TierId,
+    draft: TierDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_tier(id, draft))
+}
+
+#[tauri::command]
+pub async fn tier_delete(state: State<'_, AppState>, id: TierId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_tier(id))
+}
+
+#[tauri::command]
+pub async fn ticket_columns_set(
+    state: State<'_, AppState>,
+    columns: TicketColumns,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.set_ticket_columns(columns))
+}
+
+#[tauri::command]
+pub async fn tickets_preview(state: State<'_, AppState>, path: PathBuf) -> Result<ImportPreview> {
+    with(&state, |s| s.preview_tickets(&path))
+}
+
+#[tauri::command]
+pub async fn tickets_import(
+    state: State<'_, AppState>,
+    path: PathBuf,
+    date: String,
+    sha256: String,
+) -> Result<OpenEvent> {
+    let date = lancelot_core::parse_date(&date)?;
+    with(&state, |s| s.import_tickets(&path, date, &sha256))
+}
+
+#[tauri::command]
+pub async fn import_set_date(
+    state: State<'_, AppState>,
+    id: ImportId,
+    date: String,
+) -> Result<OpenEvent> {
+    let date = lancelot_core::parse_date(&date)?;
+    with(&state, |s| s.set_import_date(id, date))
+}
+
+#[tauri::command]
+pub async fn manual_sale_add(
+    state: State<'_, AppState>,
+    draft: ManualSaleDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_manual_sale(draft))
+}
+
+#[tauri::command]
+pub async fn manual_sale_update(
+    state: State<'_, AppState>,
+    id: ManualSaleId,
+    draft: ManualSaleDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_manual_sale(id, draft))
+}
+
+#[tauri::command]
+pub async fn manual_sale_delete(state: State<'_, AppState>, id: ManualSaleId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_manual_sale(id))
 }
 
 #[tauri::command]

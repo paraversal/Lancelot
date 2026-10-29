@@ -44,7 +44,8 @@
 			drop: (paths) => {
 				dragging = null;
 				if (!paths.length || session.closed) return;
-				if (editing === undefined) {
+				// Generated ticket income takes no receipts: start a new expense instead.
+				if (editing === undefined || (editing && editing.origin.type !== 'manual')) {
 					open(null);
 					pending = paths;
 				} else pending = [...pending, ...paths.filter((p) => !pending.includes(p))];
@@ -134,7 +135,11 @@
 			<header><h1>Ledger</h1></header>
 			<div class="drop">
 				<Icon name="upload" size={28} />
-				<strong>{editing === undefined ? 'New expense' : 'Attach'}</strong>
+				<strong
+					>{editing === undefined || (editing && editing.origin.type !== 'manual')
+						? 'New expense'
+						: 'Attach'}</strong
+				>
 				{#if dragging.filter(Boolean).length}<span>{dragging.filter(Boolean).join(', ')}</span>{/if}
 			</div>
 		</section>
@@ -223,6 +228,7 @@
 								<span class="title">
 									{item.row.title}
 									{#if item.split}<span class="tag">SPLIT</span>{/if}
+									{#if txn.origin.type !== 'manual'}<span class="tag">TICKETS</span>{/if}
 								</span>
 								{#if grouping === 'day'}
 									<span class="categories">

@@ -9,6 +9,7 @@
 	// core; the "left" amount of a split is a display-only subtraction of whole cents, and the
 	// core checks the split against the total again when saving.
 	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { ApiError, api } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
@@ -70,6 +71,9 @@
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
+	// Ticket income comes from the Tickets page and cannot be changed here (R-TKT-6).
+	const origin = $derived(txn?.origin ?? { type: 'manual' as const });
+	const locked = $derived(session.closed || origin.type !== 'manual');
 	const byId = $derived(new Map(snapshot.accounts.map((a) => [a.id, a])));
 	const kindOf = (id: AccountId | null) => (id === null ? undefined : byId.get(id)?.kind);
 
@@ -271,7 +275,7 @@
 	}
 
 	function keydown(e: KeyboardEvent) {
-		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !session.closed) {
+		if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !locked) {
 			e.preventDefault();
 			save(e.shiftKey);
 		}
@@ -297,7 +301,7 @@
 
 <Panel {onclose} {onescape}>
 	{#snippet header()}
-		<fieldset class="plain" disabled={session.closed}>
+		<fieldset class="plain" disabled={locked}>
 			<Segmented
 				label="Kind"
 				bind:value={kind}
@@ -313,7 +317,7 @@
 	{/snippet}
 
 	<!-- A closed event shows its entries as they are (R-EVT-2). -->
-	<fieldset class="plain body" disabled={session.closed}>
+	<fieldset class="plain body" disabled={locked}>
 		<!-- B4: "Save & next" turns the form like a page; both forms share one grid cell. -->
 		<div class="stage">
 			{#key generation}
@@ -499,16 +503,18 @@
 						oninput={(t) => (description = t.trim() || null)}
 						oncommit={(v) => (description = v)}
 					/>
-					<Receipts
-						{attachments}
-						{pending}
-						{previewing}
-						{onpreview}
-						onremove={(a) => (removed = [...removed, a.id])}
-						onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
-						onadd={(paths) =>
-							(pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
-					/>
+					{#if origin.type === 'manual'}
+						<Receipts
+							{attachments}
+							{pending}
+							{previewing}
+							{onpreview}
+							onremove={(a) => (removed = [...removed, a.id])}
+							onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
+							onadd={(paths) =>
+								(pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
+						/>
+					{/if}
 					{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
 						<p class="error">{error.message}</p>
 					{/if}
@@ -518,7 +524,21 @@
 	</fieldset>
 
 	{#snippet footer()}
-		{#if session.closed}
+		{#if origin.type !== 'manual'}
+			<span class="closed"><Icon name="lock" size={14} />From tickets</span>
+			<span class="grow"></span>
+			<Button
+				size="sm"
+				onclick={() =>
+					goto(
+						origin.type === 'ticketImport'
+							? `/event/tickets?tier=${origin.tier}`
+							: origin.type === 'ticketSale'
+								? `/event/tickets?sale=${origin.sale}`
+								: '/event/tickets'
+					)}>Tickets</Button
+			>
+		{:else if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
 		{:else if confirming}
 			<div class="confirm">

@@ -8,9 +8,10 @@ use std::path::{Path, PathBuf};
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride,
-    BudgetLineDraft, BudgetLineId, DomainError, EventDetails, EventSnapshot, MAX_ATTACHMENT_SIZE,
-    Parsed, Person, Report, Store, StoreOptions, TxnDraft, TxnId, backup_time, event_uuid_of,
-    format_date, list_backups, parse_amount, parse_date,
+    BudgetLineDraft, BudgetLineId, DomainError, EventDetails, EventSnapshot, ImportId,
+    ImportPreview, MAX_ATTACHMENT_SIZE, ManualSaleDraft, ManualSaleId, Parsed, Person, Report,
+    Store, StoreOptions, TicketColumns, TierDraft, TierId, TxnDraft, TxnId, backup_time,
+    event_uuid_of, format_date, list_backups, parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -52,6 +53,22 @@ fn now() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_default()
+}
+
+/// A ticket sheet's name and bytes. Sheets are small; anything the size of an attachment
+/// limit is not one.
+fn read_sheet_file(path: &Path) -> Result<(String, Vec<u8>)> {
+    if std::fs::metadata(path)?.len() > MAX_ATTACHMENT_SIZE {
+        return Err(ApiError::new(
+            "sheet_too_large",
+            "this file is too large for a ticket sheet",
+        ));
+    }
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "sheet".into());
+    Ok((name, std::fs::read(path)?))
 }
 
 impl Service {
@@ -380,6 +397,79 @@ impl Service {
     /// Deletes a budget line; its linked actuals stay, unbudgeted.
     pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<OpenEvent> {
         self.change(|s| Ok(s.delete_budget_line(id)?))
+    }
+
+    // --- tickets (requirements §5.6) ------------------------------------------------------
+
+    pub fn add_tier(&mut self, draft: TierDraft) -> Result<OpenEvent> {
+        self.change(|s| {
+            s.add_tier(draft)?;
+            Ok(())
+        })
+    }
+
+    pub fn update_tier(&mut self, id: TierId, draft: TierDraft) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.update_tier(id, draft)?))
+    }
+
+    /// Deletes a tier that no import and no manual sale uses.
+    pub fn delete_tier(&mut self, id: TierId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_tier(id)?))
+    }
+
+    pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.set_ticket_columns(columns)?))
+    }
+
+    /// Reads a ticket sheet from disk and shows what importing it would change (R-TKT-5).
+    pub fn preview_tickets(&self, path: &Path) -> Result<ImportPreview> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let (name, data) = read_sheet_file(path)?;
+        Ok(open.store.preview_ticket_import(&name, &data)?)
+    }
+
+    /// Imports a ticket sheet as the snapshot of `date`. `sha256` is the file the preview
+    /// showed: a file changed since is not imported unseen.
+    pub fn import_tickets(
+        &mut self,
+        path: &Path,
+        date: time::Date,
+        sha256: &str,
+    ) -> Result<OpenEvent> {
+        let (name, data) = read_sheet_file(path)?;
+        self.change(|s| {
+            if s.preview_ticket_import(&name, &data)?.sha256 != sha256 {
+                return Err(ApiError::new(
+                    "file_changed",
+                    "the file changed since it was read; read it again",
+                ));
+            }
+            s.import_tickets(&name, &data, date)?;
+            Ok(())
+        })
+    }
+
+    pub fn set_import_date(&mut self, id: ImportId, date: time::Date) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.set_import_date(id, date)?))
+    }
+
+    pub fn add_manual_sale(&mut self, draft: ManualSaleDraft) -> Result<OpenEvent> {
+        self.change(|s| {
+            s.add_manual_sale(draft)?;
+            Ok(())
+        })
+    }
+
+    pub fn update_manual_sale(
+        &mut self,
+        id: ManualSaleId,
+        draft: ManualSaleDraft,
+    ) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.update_manual_sale(id, draft)?))
+    }
+
+    pub fn delete_manual_sale(&mut self, id: ManualSaleId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_manual_sale(id)?))
     }
 
     /// Checks an IBAN as it is typed (R-PER-2).
@@ -894,6 +984,87 @@ mod tests {
         );
         let open = s.delete_budget_line(id).unwrap();
         assert!(open.snapshot.budget_lines.is_empty());
+    }
+
+    #[test]
+    fn imports_ticket_sheets_and_records_manual_sales() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/tickets");
+        let tier = |name: &str, price| TierDraft {
+            name: name.into(),
+            price: lancelot_core::Cents::new(price).unwrap(),
+            fee_bp: 0,
+            quota: None,
+            aliases: Vec::new(),
+        };
+        s.add_tier(tier("Early Bird", 2_500)).unwrap();
+
+        // Regular is not a tier yet: the preview names it and the import is refused.
+        let sheet = fixtures.join("import-1.ods");
+        let preview = s.preview_tickets(&sheet).unwrap();
+        assert_eq!(preview.unknown[0].name, "Regular");
+        let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
+        let err = s
+            .import_tickets(&sheet, june(1), &preview.sha256)
+            .unwrap_err();
+        assert_eq!(err.code, "unknown_tiers");
+
+        let open = s.add_tier(tier("Regular", 3_200)).unwrap();
+        let regular = open.snapshot.tickets.tiers[1].tier.id;
+        s.add_tier(tier("Supporter", 4_500)).unwrap();
+        let preview = s.preview_tickets(&sheet).unwrap();
+        assert!(preview.unknown.is_empty());
+        // A file that is not the one previewed is not imported.
+        let err = s.import_tickets(&sheet, june(1), "0000").unwrap_err();
+        assert_eq!(err.code, "file_changed");
+        let open = s.import_tickets(&sheet, june(1), &preview.sha256).unwrap();
+        let tickets = &open.snapshot.tickets;
+        assert_eq!(tickets.imports.len(), 1);
+        assert_eq!(tickets.total.sheet, preview.tickets);
+        assert!(
+            open.snapshot
+                .txns
+                .iter()
+                .all(|t| t.txn.origin.is_generated())
+        );
+        let err = s.delete_tier(regular).unwrap_err();
+        assert_eq!(err.code, "tier_in_use");
+
+        let import = tickets.imports[0].import.id;
+        let open = s.set_import_date(import, june(2)).unwrap();
+        assert_eq!(open.snapshot.tickets.imports[0].import.date, june(2));
+        assert!(open.snapshot.txns.iter().all(|t| t.txn.date == june(2)));
+
+        let bob = s.add_person("Bob").unwrap().id;
+        let sale = |count| ManualSaleDraft {
+            tier: regular,
+            count,
+            person: bob,
+            date: june(13),
+            reference: Some(" Abendkasse ".into()),
+        };
+        let open = s.add_manual_sale(sale(2)).unwrap();
+        let view = &open.snapshot.tickets.manual_sales[0];
+        assert_eq!(view.gross.get(), 6_400);
+        assert_eq!(view.sale.draft.reference.as_deref(), Some("Abendkasse"));
+        let id = view.sale.id;
+        let open = s.update_manual_sale(id, sale(3)).unwrap();
+        assert_eq!(open.snapshot.tickets.total.manual, 3);
+        let open = s.delete_manual_sale(id).unwrap();
+        assert!(open.snapshot.tickets.manual_sales.is_empty());
+
+        let open = s
+            .set_ticket_columns(TicketColumns {
+                tier: "Kategorie".into(),
+                order: "Order ID".into(),
+                sale_date: None,
+            })
+            .unwrap();
+        assert_eq!(open.snapshot.event.ticket_columns.tier, "Kategorie");
+        assert!(s.preview_tickets(&sheet).is_err());
     }
 
     #[test]

@@ -18,6 +18,10 @@ import type { BudgetLineId } from './generated/BudgetLineId';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
+import type { ImportId } from './generated/ImportId';
+import type { ImportPreview } from './generated/ImportPreview';
+import type { ManualSaleDraft } from './generated/ManualSaleDraft';
+import type { ManualSaleId } from './generated/ManualSaleId';
 import type { OpenEvent } from './generated/OpenEvent';
 import type { Parsed } from './generated/Parsed';
 import type { Person } from './generated/Person';
@@ -25,6 +29,9 @@ import type { ParsedDate } from './generated/ParsedDate';
 import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
 import type { SavedTxn } from './generated/SavedTxn';
+import type { TicketColumns } from './generated/TicketColumns';
+import type { TierDraft } from './generated/TierDraft';
+import type { TierId } from './generated/TierId';
 import type { TxnDraft } from './generated/TxnDraft';
 import type { TxnId } from './generated/TxnId';
 
@@ -125,6 +132,22 @@ export const api = {
 		call<OpenEvent>('budget_line_update', { id, draft }),
 	/** The linked actuals stay and count as unbudgeted. */
 	deleteBudgetLine: (id: BudgetLineId) => call<OpenEvent>('budget_line_delete', { id }),
+
+	addTier: (draft: TierDraft) => call<OpenEvent>('tier_add', { draft }),
+	updateTier: (id: TierId, draft: TierDraft) => call<OpenEvent>('tier_update', { id, draft }),
+	/** Only a tier that no import and no manual sale uses. */
+	deleteTier: (id: TierId) => call<OpenEvent>('tier_delete', { id }),
+	setTicketColumns: (columns: TicketColumns) => call<OpenEvent>('ticket_columns_set', { columns }),
+	/** Reads a ticket sheet (path) with the event's columns; changes nothing. */
+	previewTickets: (path: string) => call<ImportPreview>('tickets_preview', { path }),
+	/** Imports the sheet the preview read: `sha256` is the preview's, so a changed file fails. */
+	importTickets: (path: string, date: string, sha256: string) =>
+		call<OpenEvent>('tickets_import', { path, date, sha256 }),
+	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
+	addManualSale: (draft: ManualSaleDraft) => call<OpenEvent>('manual_sale_add', { draft }),
+	updateManualSale: (id: ManualSaleId, draft: ManualSaleDraft) =>
+		call<OpenEvent>('manual_sale_update', { id, draft }),
+	deleteManualSale: (id: ManualSaleId) => call<OpenEvent>('manual_sale_delete', { id }),
 
 	exportPayoutsCsv: (target: string) => call<void>('payouts_export_csv', { target }),
 	exportTransactionsCsv: (target: string) => call<void>('transactions_export_csv', { target }),

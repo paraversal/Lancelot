@@ -13,3 +13,10 @@ export function categoryColor(account: AccountView, accounts: AccountView[]): st
 		index < DEFAULTS.length ? DEFAULTS[index] : SERIES[(index - DEFAULTS.length) % SERIES.length];
 	return `var(--color-${token ?? 'ink-muted'})`;
 }
+
+// Ticket tiers in creation order, as in UI.fig: Early Bird, Regular, Supporter, Reduced.
+const TIERS = ['tier-3', 'tier-2', 'tier-4', 'tier-1', 'tier-5'];
+
+export function tierColor(index: number): string {
+	return `var(--color-${TIERS[index % TIERS.length]})`;
+}
