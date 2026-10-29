@@ -5,6 +5,7 @@
 
 pub mod amount;
 pub mod book;
+pub mod budget;
 mod csv;
 pub mod date;
 pub mod entry;
@@ -21,6 +22,7 @@ pub mod store;
 
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
 pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
+pub use budget::{Budget, BudgetLineFigures, CategoryFigures, Figures};
 pub use date::{DateError, format_date, parse_date};
 pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, txn_amount};
 pub use error::DomainError;
@@ -32,8 +34,9 @@ pub use ledger::{
     PersonStatus, PersonSummary, PersonTotals,
 };
 pub use model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, ClosingCount, Event,
-    EventDetails, Line, Person, Role, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
+    BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, Line, Person, Role,
+    Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};

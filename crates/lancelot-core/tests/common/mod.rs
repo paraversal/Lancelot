@@ -44,6 +44,7 @@ pub fn split(account: AccountId, amount: &str) -> SplitLine {
         account,
         amount: eur(amount),
         memo: None,
+        budget_line: None,
     }
 }
 

@@ -167,5 +167,96 @@
     "payableTotal": 0,
     "repayments": [],
     "repaymentTotal": 0
+  },
+  "budgetLines": [],
+  "budget": {
+    "lines": [],
+    "categories": [
+      {
+        "category": 4,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 5,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 6,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 7,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 8,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 9,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 10,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 11,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 12,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 13,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      }
+    ],
+    "income": {
+      "estimate": 0,
+      "actual": 0,
+      "forecast": 0
+    },
+    "expense": {
+      "estimate": 0,
+      "actual": 0,
+      "forecast": 0
+    },
+    "result": {
+      "estimate": 0,
+      "actual": 0,
+      "forecast": 0
+    }
   }
 }

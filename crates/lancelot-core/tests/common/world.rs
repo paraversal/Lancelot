@@ -93,6 +93,7 @@ impl Ids {
                     account: pick(cats, s.b + i),
                     amount: Cents::new(*c).unwrap(),
                     memo: None,
+                    budget_line: None,
                 })
                 .collect()
         };

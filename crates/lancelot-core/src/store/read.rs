@@ -9,8 +9,8 @@ use super::codec::{text_date, text_enum, text_timestamp};
 use crate::book::{BookParts, NextIds};
 use crate::iban::validate_iban;
 use crate::model::{
-    Account, AccountId, Attachment, AttachmentId, ClosingCount, Event, EventDetails, Line, Person,
-    Txn, TxnId,
+    Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineDraft, BudgetLineId,
+    ClosingCount, Estimate, Event, EventDetails, Line, Person, Txn, TxnId,
 };
 use crate::money::Cents;
 
@@ -105,17 +105,18 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
     }
 
     let mut stmt = conn
-        .prepare("SELECT txn_id, account_id, amount, memo FROM line ORDER BY txn_id, position")?;
+        .prepare("SELECT txn_id, account_id, amount, memo, budget_line_id FROM line ORDER BY txn_id, position")?;
     let rows = stmt.query_map([], |r| {
         Ok((
             r.get::<_, i64>(0)?,
             r.get::<_, i64>(1)?,
             r.get::<_, i64>(2)?,
             r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<i64>>(4)?,
         ))
     })?;
     for row in rows {
-        let (txn, account, amount, memo) = row?;
+        let (txn, account, amount, memo, budget_line) = row?;
         let txn = txns
             .get_mut(&TxnId(txn))
             .ok_or_else(|| StoreError::corrupt(format!("line of unknown transaction {txn}")))?;
@@ -123,6 +124,7 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
             account: AccountId(account),
             amount: cents(amount)?,
             memo,
+            budget_line: budget_line.map(BudgetLineId),
         });
     }
     Ok(txns.into_values().collect())
@@ -242,6 +244,51 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         });
     }
 
+    let mut stmt = conn.prepare(
+        "SELECT id, category_id, description, amount, quantity, unit_price, complete
+         FROM budget_line ORDER BY id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, Option<i64>>(3)?,
+            r.get::<_, Option<i64>>(4)?,
+            r.get::<_, Option<i64>>(5)?,
+            r.get::<_, bool>(6)?,
+        ))
+    })?;
+    let mut budget_lines = Vec::new();
+    for row in rows {
+        let (id, category, description, amount, quantity, unit_price, complete) = row?;
+        let estimate = match (amount, quantity, unit_price) {
+            (Some(amount), None, None) => Estimate::Amount {
+                amount: cents(amount)?,
+            },
+            (None, Some(quantity), Some(unit_price)) => Estimate::Quantity {
+                quantity: u32::try_from(quantity).map_err(|_| {
+                    StoreError::corrupt(format!("quantity out of range: {quantity}"))
+                })?,
+                unit_price: cents(unit_price)?,
+            },
+            _ => {
+                return Err(StoreError::corrupt(format!(
+                    "budget line {id} has no estimate"
+                )));
+            }
+        };
+        budget_lines.push(BudgetLine {
+            id: BudgetLineId(id),
+            draft: BudgetLineDraft {
+                category: AccountId(category),
+                description,
+                estimate,
+                complete,
+            },
+        });
+    }
+
     Ok(BookParts {
         event,
         accounts: accounts(conn)?.into_values().collect(),
@@ -249,10 +296,12 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         txns: txns(conn)?,
         attachments,
         closing_counts,
+        budget_lines,
         next: NextIds {
             account: next_id(conn, "next_account_id")?,
             txn: next_id(conn, "next_txn_id")?,
             attachment: next_id(conn, "next_attachment_id")?,
+            budget_line: next_id(conn, "next_budget_line_id")?,
         },
     })
 }

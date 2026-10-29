@@ -177,16 +177,21 @@ function parseDate(input: string) {
 // recomputed. Good enough to click through the ledger.
 function lines(draft: TxnDraft): Line[] {
 	const e = draft.entry;
-	const line = (account: number, amount: number): Line => ({ account, amount, memo: null });
+	const line = (account: number, amount: number, budgetLine: number | null = null): Line => ({
+		account,
+		amount,
+		memo: null,
+		budgetLine
+	});
 	switch (e.type) {
 		case 'expense':
 			return [
 				line(e.payer, -e.lines.reduce((s, l) => s + l.amount, 0)),
-				...e.lines.map((l) => line(l.account, l.amount))
+				...e.lines.map((l) => line(l.account, l.amount, l.budgetLine))
 			];
 		case 'income':
 			return [
-				...e.lines.map((l) => line(l.account, -l.amount)),
+				...e.lines.map((l) => line(l.account, -l.amount, l.budgetLine)),
 				line(
 					e.destination,
 					e.lines.reduce((s, l) => s + l.amount, 0)

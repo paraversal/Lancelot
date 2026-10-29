@@ -28,6 +28,12 @@ pub struct TxnId(#[ts(type = "number")] pub i64);
 #[serde(transparent)]
 pub struct AttachmentId(#[ts(type = "number")] pub i64);
 
+/// Identifies a budget line within one event (R-BUD-1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct BudgetLineId(#[ts(type = "number")] pub i64);
+
 /// See requirements §4.1 and the sign convention in `docs/technical-design.md` §3.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -116,6 +122,10 @@ pub struct Line {
     pub account: AccountId,
     pub amount: Cents,
     pub memo: Option<String>,
+    /// The budget line this category line counts towards (R-BUD-2). Only income and expense
+    /// lines of the budget line's own category can have one.
+    #[serde(rename = "budgetLine", default)]
+    pub budget_line: Option<BudgetLineId>,
 }
 
 /// A balanced transaction: its lines always sum to zero (R-COR-2).
@@ -195,4 +205,54 @@ pub struct ClosingCount {
     #[ts(type = "string")]
     pub date: Date,
     pub amount: Cents,
+}
+
+/// A planned income or expense (R-BUD-1). Planning data only: it never affects a balance
+/// (R-BUD-5). Cost centres join in M9.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct BudgetLine {
+    pub id: BudgetLineId,
+    #[serde(flatten)]
+    pub draft: BudgetLineDraft,
+}
+
+/// What the budget form fills in.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct BudgetLineDraft {
+    /// An income or expense category.
+    pub category: AccountId,
+    pub description: String,
+    pub estimate: Estimate,
+    /// Nothing more is expected: the forecast uses the actual amount (R-BUD-4).
+    pub complete: bool,
+}
+
+/// A budget line's estimate, always positive or zero, whether it is an income or an expense.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum Estimate {
+    Amount {
+        amount: Cents,
+    },
+    /// Quantity × unit price, e.g. 40 crates at 12,50 €. Exact, so nothing is rounded.
+    Quantity {
+        quantity: u32,
+        #[serde(rename = "unitPrice")]
+        unit_price: Cents,
+    },
+}
+
+impl Estimate {
+    pub fn total(self) -> Result<Cents, crate::money::MoneyError> {
+        match self {
+            Estimate::Amount { amount } => Ok(amount),
+            Estimate::Quantity {
+                quantity,
+                unit_price,
+            } => unit_price.checked_mul(i64::from(quantity)),
+        }
+    }
 }

@@ -44,6 +44,12 @@ pub enum DomainError {
     AttachmentTooLarge,
     #[error("transaction {txn:?} does not follow the rules for its kind")]
     MalformedTxn { txn: crate::model::TxnId },
+    #[error("unknown budget line")]
+    UnknownBudgetLine,
+    #[error("the budget line belongs to another category")]
+    WrongBudgetLine { field: String },
+    #[error("transactions are linked to this budget line, so its category cannot change")]
+    BudgetLineInUse,
     #[error("inconsistent event data: {reason}")]
     Inconsistent { reason: String },
     #[error(transparent)]
@@ -72,6 +78,9 @@ impl DomainError {
             DomainError::UnknownAttachment => "unknown_attachment",
             DomainError::AttachmentTooLarge => "attachment_too_large",
             DomainError::MalformedTxn { .. } => "malformed_txn",
+            DomainError::UnknownBudgetLine => "unknown_budget_line",
+            DomainError::WrongBudgetLine { .. } => "wrong_budget_line",
+            DomainError::BudgetLineInUse => "budget_line_in_use",
             DomainError::Inconsistent { .. } => "inconsistent",
             DomainError::Money(e) => e.code(),
         }
@@ -85,7 +94,9 @@ impl DomainError {
             | DomainError::NonPositiveAmount { field }
             | DomainError::NegativeAmount { field }
             | DomainError::EmptyName { field }
-            | DomainError::DuplicateName { field } => Some(field),
+            | DomainError::DuplicateName { field }
+            | DomainError::WrongBudgetLine { field } => Some(field),
+            DomainError::BudgetLineInUse => Some("category"),
             DomainError::SameAccount => Some("to"),
             DomainError::InvalidBic => Some("bic"),
             DomainError::SplitMismatch => Some("lines"),

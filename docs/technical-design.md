@@ -178,9 +178,8 @@ The domain layer has already checked the balance before this. The trigger is the
 
 ### 3.4 Phase 2 tables (outline only)
 
-These are added by migrations; the names are fixed now so the MVP code does not paint us into a corner.
+These are added by migrations; the names are fixed now so the MVP code does not paint us into a corner. `budget_line` and `line.budget_line_id` (M6) came before v0.1.0, so they are in the initial schema.
 - `cost_centre`, plus `line.cost_centre_id`.
-- `budget_line`, plus `line.budget_line_id`.
 - `ticket_tier` and `ticket_tier_alias`.
 - `ticket_import` (file name, sha256, imported_at), `ticket_import_row` (order_id, tier_id, count) and `ticket_conflict`.
 - `ticket_manual_sale` and `ticket_cancellation`.
