@@ -7,7 +7,12 @@
     "notes": null,
     "closedAt": null,
     "defaultReimbursementAccount": 1,
-    "closingOverrides": []
+    "closingOverrides": [],
+    "ticketColumns": {
+      "tier": "Ticket",
+      "order": "Order ID",
+      "saleDate": null
+    }
   },
   "accounts": [
     {
@@ -38,7 +43,7 @@
       "id": 4,
       "kind": "income",
       "name": "Tickets",
-      "role": null,
+      "role": "tickets",
       "assetType": null,
       "balance": 0
     },
@@ -258,5 +263,18 @@
       "actual": 0,
       "forecast": 0
     }
+  },
+  "tickets": {
+    "tiers": [],
+    "total": {
+      "sheet": 0,
+      "manual": 0,
+      "sold": 0,
+      "gross": 0,
+      "fees": 0,
+      "net": 0
+    },
+    "imports": [],
+    "manualSales": []
   }
 }

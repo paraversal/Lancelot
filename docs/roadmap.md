@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is in progress. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is in progress. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -201,23 +201,36 @@ Built in three steps, each in its own pull request.
 
 ### M7 · Ticket import
 
-- [ ] Tiers with price, fee in basis points, quota and aliases. Covers R-TKT-1, R-TKT-2 and R-TKT-10.
-- [ ] Import `.ods`, `.xlsx` and `.csv` with `calamine`:
-  - [ ] Configurable columns.
-  - [ ] **Only those columns are read.**
-  - [ ] Unknown tiers block the import.
-  - [ ] Rows that cannot be parsed are listed.
+Built in three steps, each in its own pull request.
+
+**M7a · Ticket core (Rust only)**
+
+- [x] Designs in `UI.fig`: the Import panel (columns read, snapshot date, an unknown tier to map, the changes and the rows not read), Edit tier, Manual sale and the empty Tickets page.
+- [x] Tiers with price, fee in basis points (below the price), quota and aliases, unique across tiers. Covers R-TKT-1, R-TKT-2 and R-TKT-10.
+- [x] Import `.ods` and `.xlsx` with `calamine`, and `.csv` with `csv`:
+  - [x] Configurable columns, saved in the event.
+  - [x] **Only those columns are read.**
+  - [x] Unknown tiers block the import.
+  - [x] Rows that cannot be read are listed.
   - Covers R-TKT-3, R-TKT-4, R-TKT-17 and R-TKT-18.
-- [ ] Re-import with a change preview. Store the file name, hash and rows; the file itself is not stored. Covers R-TKT-5.
-- [ ] Generated income per tier with a fee line, marked as imported and read-only (R-TKT-6). Manual sales to a person (R-TKT-7).
-- [ ] Conflicts:
-  - [ ] Change detection by (order ID, tier).
-  - [ ] Conflicts view with a navigation badge.
-  - [ ] Refund 0–100 %, match or correction.
-  - [ ] Manual cancellations with automatic matching.
-  - [ ] Choice of refund payer.
-  - Covers R-TKT-12 to R-TKT-16.
-- [ ] Fixtures: a series of `.ods` sheets with additions, removals and an unknown tier.
+- [x] Re-import with a change preview per tier and per order. Every import is kept as a snapshot: file name, hash, date (changeable) and its tickets per (order ID, tier); the file itself is not stored, and order IDs stay out of the snapshot and the change log. Covers R-TKT-5 and the data for R-TKT-8.
+- [x] Generated income per tier from the latest import, with a fee line in `Ticket fees`, marked as generated and read-only (R-TKT-6). Manual sales to a person (R-TKT-7). A file whose ticket income differs from its tickets does not open.
+- [x] Fixtures: a series of `.ods` sheets with additions, a removal, a tier change and an unknown tier, plus `.xlsx` and `.csv` (`scripts/ticket-fixtures.py`).
+
+**M7b · Tickets screen**
+
+- [ ] The Tickets page: tiers with sold vs quota, gross and net; the tier, import and manual sale panels.
+- [ ] Shell commands, and the file dialog and drop target for the sheet.
+- [ ] Generated income shown as read-only in the ledger, leading to the Tickets page.
+
+**M7c · Conflicts**
+
+- [ ] Conflicts from removals between consecutive imports, by (order ID, tier); the preview already lists them.
+- [ ] Conflicts view with a navigation badge.
+- [ ] Refund 0–100 %, match or correction, booked to `Ticket refunds`.
+- [ ] Manual cancellations with automatic matching.
+- [ ] Choice of refund payer.
+- Covers R-TKT-12 to R-TKT-16.
 
 ### M8 · Ticket statistics and profitability
 
@@ -260,4 +273,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M6b: design the Budget screen in `UI.fig` (with the Overview's forecast figure) and match the drafted page to it. Then M7: ticket import. The M5 parallel run happens at the next event, alongside it.
+M7b: the Tickets screen on top of the ticket core, following the new frames in `UI.fig`. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.

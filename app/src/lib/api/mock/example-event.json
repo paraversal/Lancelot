@@ -7,7 +7,12 @@
     "notes": null,
     "closedAt": null,
     "defaultReimbursementAccount": 1,
-    "closingOverrides": []
+    "closingOverrides": [],
+    "ticketColumns": {
+      "tier": "Ticket",
+      "order": "Order ID",
+      "saleDate": null
+    }
   },
   "accounts": [
     {
@@ -38,7 +43,7 @@
       "id": 4,
       "kind": "income",
       "name": "Tickets",
-      "role": null,
+      "role": "tickets",
       "assetType": null,
       "balance": 652750
     },
@@ -297,6 +302,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 622750,
       "attachments": []
     },
@@ -321,6 +329,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 30000,
       "attachments": []
     },
@@ -345,6 +356,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 81250,
       "attachments": []
     },
@@ -369,6 +383,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 5000,
       "attachments": []
     },
@@ -393,6 +410,9 @@
           "budgetLine": 3
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 180000,
       "attachments": [
         {
@@ -433,6 +453,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 45200,
       "attachments": [
         {
@@ -467,6 +490,9 @@
           "budgetLine": 7
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 50000,
       "attachments": [
         {
@@ -501,6 +527,9 @@
           "budgetLine": 4
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 109850,
       "attachments": [
         {
@@ -535,6 +564,9 @@
           "budgetLine": 8
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 22500,
       "attachments": [
         {
@@ -575,6 +607,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 39125,
       "attachments": [
         {
@@ -609,6 +644,9 @@
           "budgetLine": 5
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 22635,
       "attachments": [
         {
@@ -643,6 +681,9 @@
           "budgetLine": 5
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 31240,
       "attachments": [
         {
@@ -677,6 +718,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 11000,
       "attachments": [
         {
@@ -711,6 +755,9 @@
           "budgetLine": 5
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 12000,
       "attachments": [
         {
@@ -745,6 +792,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 9500,
       "attachments": [
         {
@@ -779,6 +829,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 3200,
       "attachments": []
     },
@@ -803,6 +856,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 20000,
       "attachments": []
     },
@@ -827,6 +883,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 30000,
       "attachments": []
     },
@@ -851,6 +910,9 @@
           "budgetLine": null
         }
       ],
+      "origin": {
+        "type": "manual"
+      },
       "amount": 9500,
       "attachments": []
     }
@@ -1191,5 +1253,18 @@
       "actual": 202750,
       "forecast": 176500
     }
+  },
+  "tickets": {
+    "tiers": [],
+    "total": {
+      "sheet": 0,
+      "manual": 0,
+      "sold": 0,
+      "gross": 0,
+      "fees": 0,
+      "net": 0
+    },
+    "imports": [],
+    "manualSales": []
   }
 }

@@ -10,9 +10,13 @@ use crate::book::{BookParts, NextIds};
 use crate::iban::validate_iban;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineDraft, BudgetLineId,
-    ClosingCount, Estimate, Event, EventDetails, Line, Person, Txn, TxnId,
+    ClosingCount, Estimate, Event, EventDetails, ImportId, Line, ManualSaleId, Origin, Person,
+    TierId, Txn, TxnId,
 };
 use crate::money::Cents;
+use crate::tickets::{
+    ManualSale, ManualSaleDraft, OrderCount, TicketColumns, TicketImport, Tier, TierDraft,
+};
 
 pub(crate) fn cents(value: i64) -> Result<Cents, StoreError> {
     Cents::new(value).map_err(|_| StoreError::corrupt(format!("amount out of range: {value}")))
@@ -75,20 +79,35 @@ pub(crate) fn accounts(conn: &Connection) -> Result<BTreeMap<AccountId, Account>
 /// All transactions with their lines, ordered by id and line position.
 pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
     let mut stmt = conn
-        .prepare("SELECT id, kind, date, description, counterparty, notes FROM txn ORDER BY id")?;
+        .prepare("SELECT id, kind, date, description, counterparty, notes, origin, origin_id FROM txn ORDER BY id")?;
     let rows = stmt.query_map([], |r| {
         Ok((
-            r.get::<_, i64>(0)?,
-            r.get::<_, String>(1)?,
-            r.get::<_, String>(2)?,
-            r.get::<_, String>(3)?,
-            r.get::<_, Option<String>>(4)?,
-            r.get::<_, Option<String>>(5)?,
+            (
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, String>(3)?,
+                r.get::<_, Option<String>>(4)?,
+                r.get::<_, Option<String>>(5)?,
+            ),
+            (r.get::<_, String>(6)?, r.get::<_, Option<i64>>(7)?),
         ))
     })?;
     let mut txns = BTreeMap::new();
     for row in rows {
-        let (id, kind, date, description, counterparty, notes) = row?;
+        let ((id, kind, date, description, counterparty, notes), origin) = row?;
+        let origin = match origin {
+            (o, None) if o == "manual" => Origin::Manual,
+            (o, Some(tier)) if o == "ticket_import" => Origin::TicketImport { tier: TierId(tier) },
+            (o, Some(sale)) if o == "ticket_sale" => Origin::TicketSale {
+                sale: ManualSaleId(sale),
+            },
+            (o, _) => {
+                return Err(StoreError::corrupt(format!(
+                    "transaction {id} has origin `{o}`"
+                )));
+            }
+        };
         let id = TxnId(id);
         txns.insert(
             id,
@@ -100,6 +119,7 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
                 counterparty,
                 notes,
                 lines: Vec::new(),
+                origin,
             },
         );
     }
@@ -132,7 +152,8 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
 
 pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let event = conn.query_row(
-        "SELECT name, starts_on, ends_on, location, notes, closed_at, default_reimbursement_account_id, closing_overrides
+        "SELECT name, starts_on, ends_on, location, notes, closed_at, default_reimbursement_account_id, closing_overrides,
+                ticket_tier_column, ticket_order_column, ticket_date_column
          FROM event WHERE id = 1",
         [],
         |r| {
@@ -145,10 +166,16 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                 r.get::<_, Option<String>>(5)?,
                 r.get::<_, i64>(6)?,
                 r.get::<_, String>(7)?,
+                TicketColumns {
+                    tier: r.get(8)?,
+                    order: r.get(9)?,
+                    sale_date: r.get(10)?,
+                },
             ))
         },
     )?;
-    let (name, starts_on, ends_on, location, notes, closed_at, default_account, overrides) = event;
+    let (name, starts_on, ends_on, location, notes, closed_at, default_account, overrides, columns) =
+        event;
     let event = Event {
         details: EventDetails {
             name,
@@ -160,6 +187,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         closed_at: closed_at.as_deref().map(text_timestamp).transpose()?,
         default_reimbursement_account: AccountId(default_account),
         closing_overrides: serde_json::from_str(&overrides)?,
+        ticket_columns: columns,
     };
 
     let mut stmt = conn.prepare(
@@ -289,6 +317,8 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         });
     }
 
+    let (tiers, imports, manual_sales) = tickets(conn)?;
+
     Ok(BookParts {
         event,
         accounts: accounts(conn)?.into_values().collect(),
@@ -297,11 +327,136 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         attachments,
         closing_counts,
         budget_lines,
+        tiers,
+        imports,
+        manual_sales,
         next: NextIds {
             account: next_id(conn, "next_account_id")?,
             txn: next_id(conn, "next_txn_id")?,
             attachment: next_id(conn, "next_attachment_id")?,
             budget_line: next_id(conn, "next_budget_line_id")?,
+            tier: next_id(conn, "next_tier_id")?,
+            import: next_id(conn, "next_import_id")?,
+            manual_sale: next_id(conn, "next_manual_sale_id")?,
         },
     })
+}
+
+fn count(value: i64) -> Result<u32, StoreError> {
+    u32::try_from(value).map_err(|_| StoreError::corrupt(format!("count out of range: {value}")))
+}
+
+type TicketParts = (Vec<Tier>, Vec<TicketImport>, Vec<ManualSale>);
+
+/// Ticket tiers with their aliases, imports with their rows, and manual sales.
+fn tickets(conn: &Connection) -> Result<TicketParts, StoreError> {
+    let mut aliases: BTreeMap<i64, Vec<String>> = BTreeMap::new();
+    let mut stmt =
+        conn.prepare("SELECT tier_id, alias FROM ticket_tier_alias ORDER BY tier_id, position")?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))? {
+        let (tier, alias) = row?;
+        aliases.entry(tier).or_default().push(alias);
+    }
+    let mut stmt =
+        conn.prepare("SELECT id, name, price, fee_bp, quota FROM ticket_tier ORDER BY id")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, i64>(2)?,
+            r.get::<_, i64>(3)?,
+            r.get::<_, Option<i64>>(4)?,
+        ))
+    })?;
+    let mut tiers = Vec::new();
+    for row in rows {
+        let (id, name, price, fee_bp, quota) = row?;
+        tiers.push(Tier {
+            id: TierId(id),
+            draft: TierDraft {
+                name,
+                price: cents(price)?,
+                fee_bp: count(fee_bp)?,
+                quota: quota.map(count).transpose()?,
+                aliases: aliases.remove(&id).unwrap_or_default(),
+            },
+        });
+    }
+
+    let mut orders: BTreeMap<i64, Vec<OrderCount>> = BTreeMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT import_id, order_id, tier_id, count FROM ticket_import_row
+         ORDER BY import_id, order_id, tier_id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, i64>(2)?,
+            r.get::<_, i64>(3)?,
+        ))
+    })?;
+    for row in rows {
+        let (import, order, tier, n) = row?;
+        orders.entry(import).or_default().push(OrderCount {
+            order,
+            tier: TierId(tier),
+            count: count(n)?,
+        });
+    }
+    let mut stmt = conn
+        .prepare("SELECT id, filename, sha256, imported_at, date FROM ticket_import ORDER BY id")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+        ))
+    })?;
+    let mut imports = Vec::new();
+    for row in rows {
+        let (id, filename, sha256, imported_at, date) = row?;
+        let mut rows = orders.remove(&id).unwrap_or_default();
+        // SQLite sorts text by bytes, like Rust, but keep the book's order regardless.
+        rows.sort();
+        imports.push(TicketImport {
+            id: ImportId(id),
+            filename,
+            sha256,
+            imported_at: text_timestamp(&imported_at)?,
+            date: text_date(&date)?,
+            orders: rows,
+        });
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, tier_id, count, person_id, date, reference FROM ticket_manual_sale ORDER BY id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+            r.get::<_, i64>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, Option<String>>(5)?,
+        ))
+    })?;
+    let mut sales = Vec::new();
+    for row in rows {
+        let (id, tier, n, person, date, reference) = row?;
+        sales.push(ManualSale {
+            id: ManualSaleId(id),
+            draft: ManualSaleDraft {
+                tier: TierId(tier),
+                count: count(n)?,
+                person: AccountId(person),
+                date: text_date(&date)?,
+                reference,
+            },
+        });
+    }
+    Ok((tiers, imports, sales))
 }

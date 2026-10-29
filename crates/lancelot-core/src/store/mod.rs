@@ -34,7 +34,10 @@ use crate::model::{
     AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, EventDetails,
     Person, TxnId,
 };
+use crate::model::{ImportId, ManualSaleId, TierId};
 use crate::money::Cents;
+use crate::sheet::read_sheet;
+use crate::tickets::{ImportPreview, ManualSaleDraft, TicketColumns, TierDraft};
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
 /// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`.
@@ -412,6 +415,67 @@ impl Store {
 
     pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.delete_budget_line(id).map(|_| ()))
+    }
+
+    // --- tickets (requirements §5.6) ---
+
+    pub fn add_tier(&mut self, draft: TierDraft) -> Result<TierId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_tier(draft))
+    }
+
+    pub fn update_tier(&mut self, id: TierId, draft: TierDraft) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.update_tier(id, draft))
+    }
+
+    pub fn delete_tier(&mut self, id: TierId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_tier(id).map(|_| ()))
+    }
+
+    pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.set_ticket_columns(columns))
+    }
+
+    /// Reads a ticket sheet with the event's columns and shows what importing it would change.
+    pub fn preview_ticket_import(
+        &self,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<ImportPreview, StoreError> {
+        let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
+        Ok(self.book.preview_import(&sheet))
+    }
+
+    /// Imports a ticket sheet as the snapshot of `date`. Only the configured columns are kept,
+    /// never the file (R-TKT-17).
+    pub fn import_tickets(
+        &mut self,
+        filename: &str,
+        data: &[u8],
+        date: Date,
+    ) -> Result<ImportId, StoreError> {
+        let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
+        let now = (self.options.clock)();
+        self.apply(&BTreeMap::new(), |b| b.import_tickets(&sheet, date, now))
+    }
+
+    pub fn set_import_date(&mut self, id: ImportId, date: Date) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.set_import_date(id, date))
+    }
+
+    pub fn add_manual_sale(&mut self, draft: ManualSaleDraft) -> Result<ManualSaleId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_manual_sale(draft))
+    }
+
+    pub fn update_manual_sale(
+        &mut self,
+        id: ManualSaleId,
+        draft: ManualSaleDraft,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.update_manual_sale(id, draft))
+    }
+
+    pub fn delete_manual_sale(&mut self, id: ManualSaleId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_manual_sale(id).map(|_| ()))
     }
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), StoreError> {

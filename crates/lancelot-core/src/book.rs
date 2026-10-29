@@ -9,7 +9,7 @@ use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::budget::Budget;
-use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, lines_follow_rules, txn_amount};
+use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, txn_amount, txn_follows_rules};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
@@ -18,7 +18,11 @@ use crate::model::{
     BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, Line, Person, Role,
     Txn, TxnId, TxnKind,
 };
+use crate::model::{ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
+use crate::tickets::{ManualSale, TicketImport, Tickets, Tier};
+
+mod tickets;
 
 /// The largest attachment Lancelot accepts. Phone photos and PDFs are far smaller; the limit
 /// only catches accidents.
@@ -42,19 +46,26 @@ pub struct Book {
     attachments: BTreeMap<AttachmentId, Attachment>,
     closing_counts: BTreeMap<AccountId, ClosingCount>,
     budget_lines: BTreeMap<BudgetLineId, BudgetLine>,
+    tiers: BTreeMap<TierId, Tier>,
+    imports: BTreeMap<ImportId, TicketImport>,
+    manual_sales: BTreeMap<ManualSaleId, ManualSale>,
     next: NextIds,
     ledger: Ledger,
     budget: Budget,
+    tickets: Tickets,
 }
 
-/// The ids the next new account, transaction, attachment and budget line get. Ids are never reused, so
-/// the change log stays unambiguous after deletions.
+/// The ids the next new account, transaction, attachment, budget line, tier, import and manual
+/// sale get. Ids are never reused, so the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
     pub txn: i64,
     pub attachment: i64,
     pub budget_line: i64,
+    pub tier: i64,
+    pub import: i64,
+    pub manual_sale: i64,
 }
 
 /// A book taken apart into its stored pieces. [`Book::from_parts`] checks them all.
@@ -67,6 +78,9 @@ pub struct BookParts {
     pub attachments: Vec<Attachment>,
     pub closing_counts: Vec<ClosingCount>,
     pub budget_lines: Vec<BudgetLine>,
+    pub tiers: Vec<Tier>,
+    pub imports: Vec<TicketImport>,
+    pub manual_sales: Vec<ManualSale>,
     pub next: NextIds,
 }
 
@@ -97,6 +111,7 @@ impl Book {
                 closed_at: None,
                 default_reimbursement_account: AccountId(1),
                 closing_overrides: Vec::new(),
+                ticket_columns: Default::default(),
             },
             accounts: BTreeMap::new(),
             persons: BTreeMap::new(),
@@ -104,20 +119,28 @@ impl Book {
             attachments: BTreeMap::new(),
             closing_counts: BTreeMap::new(),
             budget_lines: BTreeMap::new(),
+            tiers: BTreeMap::new(),
+            imports: BTreeMap::new(),
+            manual_sales: BTreeMap::new(),
             next: NextIds {
                 account: 1,
                 txn: 1,
                 attachment: 1,
                 budget_line: 1,
+                tier: 1,
+                import: 1,
+                manual_sale: 1,
             },
             ledger: Ledger::default(),
             budget: Budget::default(),
+            tickets: Tickets::default(),
         };
         let verein = book.insert_account(AccountKind::Asset, "Verein account", Some(Role::Verein));
         book.insert_account(AccountKind::Asset, "Cash box", Some(Role::CashBox));
         book.insert_account(AccountKind::Opening, "Opening balance", Some(Role::Opening));
         for name in DEFAULT_INCOME {
-            book.insert_account(AccountKind::Income, name, None);
+            let role = (*name == "Tickets").then_some(Role::Tickets);
+            book.insert_account(AccountKind::Income, name, role);
         }
         for name in DEFAULT_EXPENSE {
             book.insert_account(AccountKind::Expense, name, None);
@@ -143,7 +166,7 @@ impl Book {
             }
             accounts.insert(a.id, a);
         }
-        for role in [Role::Verein, Role::CashBox, Role::Opening] {
+        for role in [Role::Verein, Role::CashBox, Role::Opening, Role::Tickets] {
             if accounts.values().filter(|a| a.role == Some(role)).count() != 1 {
                 return Err(bad("each system account must exist exactly once"));
             }
@@ -153,8 +176,14 @@ impl Book {
             .all(|a| (a.kind == AccountKind::Opening) == (a.role == Some(Role::Opening)));
         let roles_ok = accounts.values().all(|a| match a.role {
             Some(Role::Verein | Role::CashBox) => a.kind == AccountKind::Asset,
-            _ => true,
+            Some(Role::Tickets) => a.kind == AccountKind::Income,
+            Some(Role::TicketFees) => a.kind == AccountKind::Expense,
+            Some(Role::Opening) | None => true,
         });
+        let fee_accounts = accounts
+            .values()
+            .filter(|a| a.role == Some(Role::TicketFees))
+            .count();
         let types_ok = accounts
             .values()
             .all(|a| a.asset_type.is_some() == (a.kind == AccountKind::Asset));
@@ -162,7 +191,12 @@ impl Book {
             .values()
             .map(|a| (a.kind, a.name.to_ascii_lowercase()))
             .collect();
-        if !opening_ok || !roles_ok || !types_ok || names.len() != accounts.len() {
+        if !opening_ok
+            || !roles_ok
+            || !types_ok
+            || fee_accounts > 1
+            || names.len() != accounts.len()
+        {
             return Err(bad("account kinds, roles or names are inconsistent"));
         }
 
@@ -193,7 +227,7 @@ impl Book {
         let mut txns = BTreeMap::new();
         for t in parts.txns {
             if t.id.0 >= parts.next.txn
-                || !lines_follow_rules(t.kind, &t.lines, &accounts)
+                || !txn_follows_rules(&t, &accounts)
                 || !links_valid(&t.lines, &budget_lines)
             {
                 return Err(DomainError::MalformedTxn { txn: t.id });
@@ -224,6 +258,14 @@ impl Book {
             return Err(bad("default reimbursement account is not an asset"));
         }
 
+        let (tiers, imports, manual_sales) = tickets::check_parts(
+            parts.tiers,
+            parts.imports,
+            parts.manual_sales,
+            &parts.next,
+            &accounts,
+        )?;
+
         let mut book = Book {
             event: parts.event,
             accounts,
@@ -232,10 +274,20 @@ impl Book {
             attachments,
             closing_counts,
             budget_lines,
+            tiers,
+            imports,
+            manual_sales,
             next: parts.next,
             ledger: Ledger::default(),
             budget: Budget::default(),
+            tickets: Tickets::default(),
         };
+        // The ticket income must be exactly what the tickets generate.
+        let mut regenerated = book.clone();
+        regenerated.sync_tickets()?;
+        if regenerated.txns != book.txns || regenerated.accounts != book.accounts {
+            return Err(bad("ticket income differs from the tickets"));
+        }
         book.recompute()?;
         Ok(book)
     }
@@ -429,9 +481,12 @@ impl Book {
             if draft.total.is_some_and(|total| total != txn_amount(&lines)) {
                 return Err(DomainError::SplitMismatch);
             }
-            let id = match id {
-                Some(id) if book.txns.contains_key(&id) => id,
-                Some(_) => return Err(DomainError::UnknownTxn),
+            let id = match id.map(|id| (id, book.txns.get(&id))) {
+                Some((_, Some(t))) if t.origin.is_generated() => {
+                    return Err(DomainError::GeneratedTxn);
+                }
+                Some((id, Some(_))) => id,
+                Some((_, None)) => return Err(DomainError::UnknownTxn),
                 None => {
                     let id = TxnId(book.next.txn);
                     book.next.txn += 1;
@@ -448,6 +503,7 @@ impl Book {
                     counterparty: clean(draft.counterparty.clone()),
                     notes: clean(draft.notes.clone()),
                     lines,
+                    origin: Origin::Manual,
                 },
             );
             Ok(id)
@@ -480,9 +536,15 @@ impl Book {
         })
     }
 
-    /// Deletes a transaction together with its attachments.
+    /// Deletes a transaction together with its attachments. Generated ones go away with the
+    /// tickets they come from.
     pub fn delete_txn(&mut self, id: TxnId) -> Result<Txn, DomainError> {
-        self.change(|book| book.remove_txn(id).ok_or(DomainError::UnknownTxn))
+        self.change(|book| {
+            if book.txns.get(&id).is_some_and(|t| t.origin.is_generated()) {
+                return Err(DomainError::GeneratedTxn);
+            }
+            book.remove_txn(id).ok_or(DomainError::UnknownTxn)
+        })
     }
 
     // --- attachments and counts ----------------------------------------------------------
@@ -611,6 +673,7 @@ impl Book {
                     counterparty,
                     notes,
                     lines,
+                    origin: Origin::Manual,
                 },
             );
             Ok(id)
@@ -755,8 +818,8 @@ impl Book {
 
     // --- internals -----------------------------------------------------------------------
 
-    /// Applies `f` to a copy of the book, recomputes the ledger, and keeps the copy only if
-    /// both succeed. A closed event rejects every change.
+    /// Applies `f` to a copy of the book, regenerates the ticket income, recomputes the ledger,
+    /// and keeps the copy only if all succeed. A closed event rejects every change.
     fn change<T>(
         &mut self,
         f: impl FnOnce(&mut Book) -> Result<T, DomainError>,
@@ -766,12 +829,13 @@ impl Book {
         }
         let mut candidate = self.clone();
         let value = f(&mut candidate)?;
+        candidate.sync_tickets()?;
         candidate.recompute()?;
         *self = candidate;
         Ok(value)
     }
 
-    /// Recomputes the ledger and the budget.
+    /// Recomputes the ledger, the budget and the ticket figures.
     fn recompute(&mut self) -> Result<(), DomainError> {
         let with_attachments: BTreeSet<TxnId> = self.attachments.values().map(|a| a.txn).collect();
         self.ledger = Ledger::compute(LedgerInput {
@@ -782,6 +846,12 @@ impl Book {
         })?;
         self.budget =
             Budget::compute(&self.accounts, &self.budget_lines, &self.txns, &self.ledger)?;
+        self.tickets = Tickets::compute(
+            &self.tiers,
+            &self.imports,
+            &self.manual_sales,
+            &self.sale_txns(),
+        )?;
         Ok(())
     }
 

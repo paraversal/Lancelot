@@ -50,6 +50,24 @@ pub enum DomainError {
     WrongBudgetLine { field: String },
     #[error("transactions are linked to this budget line, so its category cannot change")]
     BudgetLineInUse,
+    #[error("unknown ticket tier")]
+    UnknownTier,
+    #[error("tickets of this tier were imported or sold, so it cannot be deleted")]
+    TierInUse,
+    #[error("the fee must be lower than the price")]
+    FeeTooHigh,
+    #[error("unknown ticket import")]
+    UnknownImport,
+    #[error("unknown manual sale")]
+    UnknownManualSale,
+    #[error("this transaction is generated from tickets and cannot be changed by hand")]
+    GeneratedTxn,
+    #[error("the ticket sheet cannot be read: {reason}")]
+    UnreadableSheet { reason: String },
+    #[error("the ticket sheet has no column `{column}`")]
+    MissingColumn { column: String },
+    #[error("the ticket sheet has tiers that match no tier: {}", names.join(", "))]
+    UnknownTiers { names: Vec<String> },
     #[error("inconsistent event data: {reason}")]
     Inconsistent { reason: String },
     #[error(transparent)]
@@ -81,6 +99,15 @@ impl DomainError {
             DomainError::UnknownBudgetLine => "unknown_budget_line",
             DomainError::WrongBudgetLine { .. } => "wrong_budget_line",
             DomainError::BudgetLineInUse => "budget_line_in_use",
+            DomainError::UnknownTier => "unknown_tier",
+            DomainError::TierInUse => "tier_in_use",
+            DomainError::FeeTooHigh => "fee_too_high",
+            DomainError::UnknownImport => "unknown_import",
+            DomainError::UnknownManualSale => "unknown_manual_sale",
+            DomainError::GeneratedTxn => "generated_txn",
+            DomainError::UnreadableSheet { .. } => "unreadable_sheet",
+            DomainError::MissingColumn { .. } => "missing_column",
+            DomainError::UnknownTiers { .. } => "unknown_tiers",
             DomainError::Inconsistent { .. } => "inconsistent",
             DomainError::Money(e) => e.code(),
         }
@@ -100,6 +127,8 @@ impl DomainError {
             DomainError::SameAccount => Some("to"),
             DomainError::InvalidBic => Some("bic"),
             DomainError::SplitMismatch => Some("lines"),
+            DomainError::FeeTooHigh => Some("feeBp"),
+            DomainError::UnknownTier => Some("tier"),
             _ => None,
         }
     }

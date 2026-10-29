@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
 use crate::book::Book;
-use crate::entry::lines_follow_rules;
+use crate::entry::txn_follows_rules;
 use crate::store::StoreError;
 use crate::store::read;
 
@@ -121,10 +121,7 @@ pub fn check(conn: &Connection, depth: Depth) -> Result<Report, StoreError> {
     // Every transaction has the shape its kind requires (docs/technical-design.md §3.3).
     match (read::accounts(conn), read::txns(conn)) {
         (Ok(accounts), Ok(txns)) => {
-            for t in txns
-                .iter()
-                .filter(|t| !lines_follow_rules(t.kind, &t.lines, &accounts))
-            {
+            for t in txns.iter().filter(|t| !txn_follows_rules(t, &accounts)) {
                 report.error(
                     "malformed_txn",
                     format!(

@@ -1,0 +1,2 @@
+# Ticket sheet fixtures keep their bytes, CRLF line endings included.
+fixtures/tickets/** -text
