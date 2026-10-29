@@ -15,6 +15,7 @@
 		format,
 		allowNegative = false,
 		large = false,
+		previewBelow = false,
 		text: initial,
 		autofocus = false,
 		oninput: onvalue,
@@ -26,6 +27,8 @@
 		allowNegative?: boolean;
 		/** The bigger type of the entry panel's main amount. */
 		large?: boolean;
+		/** For narrow fields: the preview goes in the hint line under the field. */
+		previewBelow?: boolean;
 		/** Pre-fills the input, e.g. on the design page. */
 		text?: string;
 		autofocus?: boolean;
@@ -99,7 +102,11 @@
 	}
 </script>
 
-<Field {label} {id} {error}>
+{#snippet below()}
+	{#if !error && preview}<span class:ambiguous={parsed?.ambiguous}>= {preview}</span>{/if}
+{/snippet}
+
+<Field {label} {id} {error} hint={previewBelow ? below : undefined}>
 	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		{id}
@@ -117,7 +124,7 @@
 		aria-invalid={!!error}
 		aria-describedby={error ? `${id}-error` : undefined}
 	/>
-	{#if !error && preview}
+	{#if !error && preview && !previewBelow}
 		<span class="preview" class:ambiguous={parsed?.ambiguous}>= {preview}</span>
 	{/if}
 </Field>
@@ -151,7 +158,7 @@
 		white-space: nowrap;
 	}
 
-	.preview.ambiguous {
+	.ambiguous {
 		color: var(--color-attention);
 	}
 </style>

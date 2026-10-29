@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is in progress. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is in progress: the ticket core and the Tickets screen are done, conflicts are next. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -190,7 +190,7 @@ Built in three steps, each in its own pull request.
 **M6b · Budget screen**
 
 - [ ] **Design the Budget screen** in `UI.fig`.
-- [x] The Budget page (⌘4): forecast, planned result and result so far; estimate, actual and forecast per line and category, with what is not budgeted. A panel adds, edits and deletes budget lines and lists the receipts linked to each. Drafted before the design, following the People page.
+- [x] The Budget page (⌘5 since M7b): forecast, planned result and result so far; estimate, actual and forecast per line and category, with what is not budgeted. A panel adds, edits and deletes budget lines and lists the receipts linked to each. Drafted before the design, following the People page.
 - [x] Linking: each category line in the entry panel picks a budget line of its category, and keeps it when the receipt is edited.
 - [ ] Match the page to the design once it is in `UI.fig`.
 
@@ -219,9 +219,10 @@ Built in three steps, each in its own pull request.
 
 **M7b · Tickets screen**
 
-- [ ] The Tickets page: tiers with sold vs quota, gross and net; the tier, import and manual sale panels.
-- [ ] Shell commands, and the file dialog and drop target for the sheet.
-- [ ] Generated income shown as read-only in the ledger, leading to the Tickets page.
+- [x] The Tickets page (⌘4, between People and Budget as in `UI.fig`): tiers with price, fee, sold vs quota and gross, manual sales per tier, ticket fees and ticket income. The tier, import and manual sale panels; the header line opens the earlier imports, whose snapshot dates can be changed.
+- [x] Shell commands for tiers, the sheet's columns, preview and import, the import date and manual sales. The import passes the preview's SHA-256, so a file changed since it was read is not imported unseen. A file dialog and a drop target on the page for `.ods`, `.xlsx` and `.csv`.
+- [x] Generated income is read-only in the ledger, tagged `TICKETS`, and leads to its tier or manual sale on the Tickets page.
+- [x] The mock backend imitates the ticket commands with three made-up sheets (an unknown tier, a removed order, rows not read), so the screen can be clicked through in a browser.
 
 **M7c · Conflicts**
 
@@ -273,4 +274,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M7b: the Tickets screen on top of the ticket core, following the new frames in `UI.fig`. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
+M7c: ticket conflicts, the card on top of the Tickets frame in `UI.fig`. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.

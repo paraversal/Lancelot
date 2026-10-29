@@ -84,4 +84,6 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says *Note*.
 
+The app's Tickets page follows the Tickets frames without the parts of later milestones: conflicts (M7c), break-even and sales per import (M8). Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals show the ticket fees and ticket income net of them, since refunds come with conflicts.
+
 Budget is not designed yet. Until it is, the app's Budget page follows the People page: a table of estimate, actual and forecast with a right-hand panel per budget line.
