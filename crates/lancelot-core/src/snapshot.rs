@@ -7,11 +7,12 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::book::Book;
+use crate::budget::Budget;
 use crate::entry::txn_amount;
 use crate::ledger::{
     CashStatus, MoneyLocation, OpenItem, PersonEntry, PersonSummary, PersonTotals,
 };
-use crate::model::{Account, AccountId, Attachment, ClosingCount, Event, Person, Txn};
+use crate::model::{Account, AccountId, Attachment, BudgetLine, ClosingCount, Event, Person, Txn};
 use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
 
@@ -33,6 +34,10 @@ pub struct EventSnapshot {
     pub open_items: Vec<OpenItem>,
     /// The payout and repayment lists (R-PER-4, R-PER-7).
     pub payouts: Payouts,
+    /// In creation order.
+    pub budget_lines: Vec<BudgetLine>,
+    /// Plan vs actual and the forecast (R-BUD-3, R-BUD-4).
+    pub budget: Budget,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -120,6 +125,8 @@ impl EventSnapshot {
             open_items: ledger.open_items(),
             // Sums of person balances that the ledger already checked: cannot overflow.
             payouts: payouts(book).unwrap_or_default(),
+            budget_lines: book.budget_lines().cloned().collect(),
+            budget: book.budget().clone(),
         }
     }
 }

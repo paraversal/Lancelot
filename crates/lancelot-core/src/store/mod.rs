@@ -30,7 +30,10 @@ use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Depth, Report};
 use crate::ledger::BlockerOverride;
-use crate::model::{AccountId, AccountKind, AssetType, AttachmentId, EventDetails, Person, TxnId};
+use crate::model::{
+    AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, EventDetails,
+    Person, TxnId,
+};
 use crate::money::Cents;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
@@ -393,6 +396,22 @@ impl Store {
         person: Person,
     ) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.update_person(id, name, person))
+    }
+
+    pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<BudgetLineId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_budget_line(draft))
+    }
+
+    pub fn update_budget_line(
+        &mut self,
+        id: BudgetLineId,
+        draft: BudgetLineDraft,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.update_budget_line(id, draft))
+    }
+
+    pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_budget_line(id).map(|_| ()))
     }
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), StoreError> {

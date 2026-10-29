@@ -8,13 +8,15 @@ use serde::Serialize;
 use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
+use crate::budget::Budget;
 use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, lines_follow_rules, txn_amount};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
 use crate::model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, ClosingCount, Event,
-    EventDetails, Person, Role, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
+    BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, Line, Person, Role,
+    Txn, TxnId, TxnKind,
 };
 use crate::money::Cents;
 
@@ -39,17 +41,20 @@ pub struct Book {
     txns: BTreeMap<TxnId, Txn>,
     attachments: BTreeMap<AttachmentId, Attachment>,
     closing_counts: BTreeMap<AccountId, ClosingCount>,
+    budget_lines: BTreeMap<BudgetLineId, BudgetLine>,
     next: NextIds,
     ledger: Ledger,
+    budget: Budget,
 }
 
-/// The ids the next new account, transaction and attachment get. Ids are never reused, so
+/// The ids the next new account, transaction, attachment and budget line get. Ids are never reused, so
 /// the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
     pub txn: i64,
     pub attachment: i64,
+    pub budget_line: i64,
 }
 
 /// A book taken apart into its stored pieces. [`Book::from_parts`] checks them all.
@@ -61,6 +66,7 @@ pub struct BookParts {
     pub txns: Vec<Txn>,
     pub attachments: Vec<Attachment>,
     pub closing_counts: Vec<ClosingCount>,
+    pub budget_lines: Vec<BudgetLine>,
     pub next: NextIds,
 }
 
@@ -97,12 +103,15 @@ impl Book {
             txns: BTreeMap::new(),
             attachments: BTreeMap::new(),
             closing_counts: BTreeMap::new(),
+            budget_lines: BTreeMap::new(),
             next: NextIds {
                 account: 1,
                 txn: 1,
                 attachment: 1,
+                budget_line: 1,
             },
             ledger: Ledger::default(),
+            budget: Budget::default(),
         };
         let verein = book.insert_account(AccountKind::Asset, "Verein account", Some(Role::Verein));
         book.insert_account(AccountKind::Asset, "Cash box", Some(Role::CashBox));
@@ -114,7 +123,7 @@ impl Book {
             book.insert_account(AccountKind::Expense, name, None);
         }
         book.event.default_reimbursement_account = verein;
-        book.ledger = book.compute_ledger()?;
+        book.recompute()?;
         Ok(book)
     }
 
@@ -171,9 +180,22 @@ impl Book {
             return Err(bad("person account without person details"));
         }
 
+        let mut budget_lines = BTreeMap::new();
+        for b in parts.budget_lines {
+            if b.id.0 >= parts.next.budget_line
+                || clean_budget_line(b.draft.clone(), &accounts).as_ref() != Ok(&b.draft)
+            {
+                return Err(bad("budget line with an invalid category or estimate"));
+            }
+            budget_lines.insert(b.id, b);
+        }
+
         let mut txns = BTreeMap::new();
         for t in parts.txns {
-            if t.id.0 >= parts.next.txn || !lines_follow_rules(t.kind, &t.lines, &accounts) {
+            if t.id.0 >= parts.next.txn
+                || !lines_follow_rules(t.kind, &t.lines, &accounts)
+                || !links_valid(&t.lines, &budget_lines)
+            {
                 return Err(DomainError::MalformedTxn { txn: t.id });
             }
             txns.insert(t.id, t);
@@ -209,10 +231,12 @@ impl Book {
             txns,
             attachments,
             closing_counts,
+            budget_lines,
             next: parts.next,
             ledger: Ledger::default(),
+            budget: Budget::default(),
         };
-        book.ledger = book.compute_ledger()?;
+        book.recompute()?;
         Ok(book)
     }
 
@@ -286,6 +310,19 @@ impl Book {
     /// All derived figures, always up to date.
     pub fn ledger(&self) -> &Ledger {
         &self.ledger
+    }
+
+    pub fn budget_lines(&self) -> impl Iterator<Item = &BudgetLine> {
+        self.budget_lines.values()
+    }
+
+    pub fn budget_line(&self, id: BudgetLineId) -> Option<&BudgetLine> {
+        self.budget_lines.get(&id)
+    }
+
+    /// Plan vs actual and the forecast, always up to date.
+    pub fn budget(&self) -> &Budget {
+        &self.budget
     }
 
     // --- accounts and persons ------------------------------------------------------------
@@ -387,6 +424,7 @@ impl Book {
     /// Adds a transaction (`id = None`) or replaces an existing one.
     pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved, DomainError> {
         let saved = self.change(|book| {
+            check_links(&draft.entry, &book.budget_lines)?;
             let lines = build_lines(&draft.entry, &book.accounts)?;
             if draft.total.is_some_and(|total| total != txn_amount(&lines)) {
                 return Err(DomainError::SplitMismatch);
@@ -596,6 +634,59 @@ impl Book {
         })
     }
 
+    // --- budget --------------------------------------------------------------------------
+
+    /// Adds a budget line (R-BUD-1).
+    pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<BudgetLineId, DomainError> {
+        self.change(|book| {
+            let draft = clean_budget_line(draft, &book.accounts)?;
+            let id = BudgetLineId(book.next.budget_line);
+            book.next.budget_line += 1;
+            book.budget_lines.insert(id, BudgetLine { id, draft });
+            Ok(id)
+        })
+    }
+
+    /// Changes a budget line. Its category stays while transaction lines are linked to it,
+    /// since a link always stays within its category.
+    pub fn update_budget_line(
+        &mut self,
+        id: BudgetLineId,
+        draft: BudgetLineDraft,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            let draft = clean_budget_line(draft, &book.accounts)?;
+            let line = book
+                .budget_lines
+                .get(&id)
+                .ok_or(DomainError::UnknownBudgetLine)?;
+            if line.draft.category != draft.category && book.links_to(id).next().is_some() {
+                return Err(DomainError::BudgetLineInUse);
+            }
+            book.budget_lines.insert(id, BudgetLine { id, draft });
+            Ok(())
+        })
+    }
+
+    /// Deletes a budget line. The transaction lines linked to it stay and count as
+    /// unbudgeted from then on. Returns the deleted line.
+    pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<BudgetLine, DomainError> {
+        self.change(|book| {
+            let line = book
+                .budget_lines
+                .remove(&id)
+                .ok_or(DomainError::UnknownBudgetLine)?;
+            for txn in book.txns.values_mut() {
+                for l in &mut txn.lines {
+                    if l.budget_line == Some(id) {
+                        l.budget_line = None;
+                    }
+                }
+            }
+            Ok(line)
+        })
+    }
+
     // --- event ---------------------------------------------------------------------------
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), DomainError> {
@@ -675,19 +766,31 @@ impl Book {
         }
         let mut candidate = self.clone();
         let value = f(&mut candidate)?;
-        candidate.ledger = candidate.compute_ledger()?;
+        candidate.recompute()?;
         *self = candidate;
         Ok(value)
     }
 
-    fn compute_ledger(&self) -> Result<Ledger, DomainError> {
+    /// Recomputes the ledger and the budget.
+    fn recompute(&mut self) -> Result<(), DomainError> {
         let with_attachments: BTreeSet<TxnId> = self.attachments.values().map(|a| a.txn).collect();
-        Ok(Ledger::compute(LedgerInput {
+        self.ledger = Ledger::compute(LedgerInput {
             accounts: &self.accounts,
             txns: &self.txns,
             closing_counts: &self.closing_counts,
             with_attachments: &with_attachments,
-        })?)
+        })?;
+        self.budget =
+            Budget::compute(&self.accounts, &self.budget_lines, &self.txns, &self.ledger)?;
+        Ok(())
+    }
+
+    /// The transaction lines linked to a budget line.
+    fn links_to(&self, id: BudgetLineId) -> impl Iterator<Item = &Line> {
+        self.txns
+            .values()
+            .flat_map(|t| &t.lines)
+            .filter(move |l| l.budget_line == Some(id))
     }
 
     fn insert_account(&mut self, kind: AccountKind, name: &str, role: Option<Role>) -> AccountId {
@@ -764,6 +867,86 @@ fn clean_details(d: EventDetails) -> Result<EventDetails, DomainError> {
         location: clean(d.location),
         notes: clean(d.notes),
         ..d
+    })
+}
+
+/// A trimmed description, an income or expense category and an estimate that fits.
+fn clean_budget_line(
+    d: BudgetLineDraft,
+    accounts: &BTreeMap<AccountId, Account>,
+) -> Result<BudgetLineDraft, DomainError> {
+    match accounts.get(&d.category).map(|a| a.kind) {
+        None => {
+            return Err(DomainError::UnknownAccount {
+                field: "category".into(),
+            });
+        }
+        Some(AccountKind::Income | AccountKind::Expense) => {}
+        Some(_) => {
+            return Err(DomainError::WrongAccountKind {
+                field: "category".into(),
+            });
+        }
+    }
+    let description = d.description.trim().to_owned();
+    if description.is_empty() {
+        return Err(DomainError::EmptyName {
+            field: "description".into(),
+        });
+    }
+    match d.estimate {
+        Estimate::Amount { amount } if amount.is_negative() => {
+            return Err(DomainError::NegativeAmount {
+                field: "estimate.amount".into(),
+            });
+        }
+        Estimate::Quantity { quantity: 0, .. } => {
+            return Err(DomainError::NonPositiveAmount {
+                field: "estimate.quantity".into(),
+            });
+        }
+        Estimate::Quantity { unit_price, .. } if unit_price.is_negative() => {
+            return Err(DomainError::NegativeAmount {
+                field: "estimate.unitPrice".into(),
+            });
+        }
+        _ => {}
+    }
+    d.estimate.total()?;
+    Ok(BudgetLineDraft { description, ..d })
+}
+
+/// Every link must point to an existing budget line of the line's own category (R-BUD-2).
+/// Errors name the form's split line.
+fn check_links(
+    entry: &Entry,
+    budget_lines: &BTreeMap<BudgetLineId, BudgetLine>,
+) -> Result<(), DomainError> {
+    let (Entry::Expense { lines, .. } | Entry::Income { lines, .. }) = entry else {
+        return Ok(());
+    };
+    for (i, l) in lines.iter().enumerate() {
+        let Some(id) = l.budget_line else { continue };
+        let b = budget_lines
+            .get(&id)
+            .ok_or(DomainError::UnknownBudgetLine)?;
+        if b.draft.category != l.account {
+            return Err(DomainError::WrongBudgetLine {
+                field: format!("lines[{i}].budgetLine"),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// The stored form of [`check_links`], for loading a file.
+fn links_valid(lines: &[Line], budget_lines: &BTreeMap<BudgetLineId, BudgetLine>) -> bool {
+    lines.iter().all(|l| {
+        l.budget_line.is_none_or(|id| {
+            budget_lines
+                .get(&id)
+                .is_some_and(|b| b.draft.category == l.account)
+        })
     })
 }
 

@@ -46,6 +46,17 @@ CREATE TABLE txn (
   sealed       INTEGER NOT NULL DEFAULT 0 CHECK (sealed IN (0,1))
 ) STRICT;
 
+CREATE TABLE budget_line (             -- R-BUD-1; planning data only (R-BUD-5)
+  id          INTEGER PRIMARY KEY,
+  category_id INTEGER NOT NULL REFERENCES account(id),
+  description TEXT NOT NULL,
+  amount      INTEGER CHECK (amount >= 0),        -- the estimate as an amount,
+  quantity    INTEGER CHECK (quantity > 0),       -- or as quantity × unit price
+  unit_price  INTEGER CHECK (unit_price >= 0),
+  complete    INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0,1)),
+  CHECK ((amount IS NULL) = (quantity IS NOT NULL) AND (quantity IS NULL) = (unit_price IS NULL))
+) STRICT;
+
 CREATE TABLE line (
   id           INTEGER PRIMARY KEY,
   txn_id       INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
@@ -53,9 +64,11 @@ CREATE TABLE line (
   account_id   INTEGER NOT NULL REFERENCES account(id),
   amount       INTEGER NOT NULL CHECK (amount <> 0),
   memo         TEXT,
+  budget_line_id INTEGER REFERENCES budget_line(id),   -- R-BUD-2
   UNIQUE (txn_id, position)
 ) STRICT;
 CREATE INDEX line_account ON line(account_id);
+CREATE INDEX line_budget_line ON line(budget_line_id);
 
 CREATE TABLE closing_count (           -- R-ISO-3; opening counts are 'opening' transactions
   account_id INTEGER PRIMARY KEY REFERENCES account(id),
@@ -78,7 +91,7 @@ CREATE INDEX attachment_txn ON attachment(txn_id);
 CREATE TABLE change_log (              -- R-TX-6
   id         INTEGER PRIMARY KEY,
   at         TEXT NOT NULL,            -- RFC 3339 UTC
-  entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count'
+  entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

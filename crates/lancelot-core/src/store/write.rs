@@ -14,7 +14,8 @@ use super::StoreError;
 use super::codec::{date_text, enum_text, timestamp_text};
 use crate::book::Book;
 use crate::model::{
-    Account, AccountId, Attachment, AttachmentId, ClosingCount, Person, Txn, TxnId,
+    Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineId, ClosingCount, Estimate,
+    Person, Txn, TxnId,
 };
 
 enum Change<'a, V> {
@@ -200,6 +201,38 @@ pub(crate) fn persist(
         }
     }
 
+    // Budget lines before the transactions that link to them; deleted ones after.
+    fn budget_lines(b: Option<&Book>) -> Vec<(BudgetLineId, &BudgetLine)> {
+        b.map(|b| b.budget_lines().map(|l| (l.id, l)).collect())
+            .unwrap_or_default()
+    }
+    let budget_changes = diff(budget_lines(before), budget_lines(Some(after)));
+    for (id, change) in &budget_changes {
+        match change {
+            Change::Create(b) | Change::Update(_, b) => {
+                let d = &b.draft;
+                let (amount, quantity, unit_price) = match d.estimate {
+                    Estimate::Amount { amount } => (Some(amount.get()), None, None),
+                    Estimate::Quantity {
+                        quantity,
+                        unit_price,
+                    } => (None, Some(i64::from(quantity)), Some(unit_price.get())),
+                };
+                conn.execute(
+                    "INSERT INTO budget_line (id, category_id, description, amount, quantity, unit_price, complete)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                     ON CONFLICT (id) DO UPDATE SET
+                       category_id = excluded.category_id, description = excluded.description,
+                       amount = excluded.amount, quantity = excluded.quantity,
+                       unit_price = excluded.unit_price, complete = excluded.complete",
+                    params![id.0, d.category.0, d.description, amount, quantity, unit_price, d.complete],
+                )?;
+                log.write("budget_line", id.0, change)?;
+            }
+            Change::Delete(_) => {}
+        }
+    }
+
     // Transactions: unseal, replace the lines, seal (R-COR-2).
     fn txns(b: Option<&Book>) -> Vec<(TxnId, &Txn)> {
         b.map(|b| b.txns().map(|t| (t.id, t)).collect())
@@ -237,6 +270,13 @@ pub(crate) fn persist(
             }
         }
         log.write("txn", id.0, &change)?;
+    }
+
+    for (id, change) in &budget_changes {
+        if let Change::Delete(_) = change {
+            conn.execute("DELETE FROM budget_line WHERE id = ?1", [id.0])?;
+            log.write("budget_line", id.0, change)?;
+        }
     }
 
     // New attachments, with their bytes.
@@ -289,6 +329,7 @@ pub(crate) fn persist(
             ("next_account_id", next.account),
             ("next_txn_id", next.txn),
             ("next_attachment_id", next.attachment),
+            ("next_budget_line_id", next.budget_line),
         ] {
             conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
@@ -302,8 +343,16 @@ pub(crate) fn persist(
 fn write_lines(conn: &Connection, t: &Txn) -> Result<(), StoreError> {
     for (position, l) in t.lines.iter().enumerate() {
         conn.execute(
-            "INSERT INTO line (txn_id, position, account_id, amount, memo) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![t.id.0, position as i64, l.account.0, l.amount.get(), l.memo],
+            "INSERT INTO line (txn_id, position, account_id, amount, memo, budget_line_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                t.id.0,
+                position as i64,
+                l.account.0,
+                l.amount.get(),
+                l.memo,
+                l.budget_line.map(|b| b.0)
+            ],
         )?;
     }
     conn.execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [t.id.0])?;

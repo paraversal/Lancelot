@@ -11,7 +11,7 @@ use time::Date;
 use ts_rs::TS;
 
 use crate::error::DomainError;
-use crate::model::{Account, AccountId, AccountKind, Line, Role, TxnKind};
+use crate::model::{Account, AccountId, AccountKind, BudgetLineId, Line, Role, TxnKind};
 use crate::money::{Cents, try_sum};
 
 /// Everything a transaction form produces.
@@ -71,6 +71,9 @@ pub struct SplitLine {
     pub account: AccountId,
     pub amount: Cents,
     pub memo: Option<String>,
+    /// Must belong to the line's category (R-BUD-2).
+    #[serde(rename = "budgetLine", default)]
+    pub budget_line: Option<BudgetLineId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
@@ -230,6 +233,7 @@ fn line(account: AccountId, amount: Cents) -> Line {
         account,
         amount,
         memo: None,
+        budget_line: None,
     }
 }
 
@@ -238,6 +242,7 @@ fn split(l: &SplitLine, amount: Cents) -> Line {
         account: l.account,
         amount,
         memo: l.memo.clone(),
+        budget_line: l.budget_line,
     }
 }
 
@@ -314,6 +319,7 @@ mod tests {
             account,
             amount: c(cents),
             memo: None,
+            budget_line: None,
         }
     }
 

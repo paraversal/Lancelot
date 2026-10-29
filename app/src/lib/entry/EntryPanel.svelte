@@ -11,6 +11,7 @@
 	import { untrack } from 'svelte';
 	import { ApiError, api } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
+	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
 	import type { Entry } from '#lib/api/generated/Entry.ts';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
@@ -32,7 +33,12 @@
 	import { session } from '#lib/state/session.svelte.ts';
 
 	type Kind = 'expense' | 'income' | 'transfer' | 'settle';
-	type SplitLine = { account: AccountId | null; amount: Cents | null };
+	// The budget line link is kept while the category stays (R-BUD-2); the Budget page sets it.
+	type SplitLine = {
+		account: AccountId | null;
+		amount: Cents | null;
+		budgetLine?: BudgetLineId | null;
+	};
 
 	let {
 		txn,
@@ -101,7 +107,11 @@
 		counterparty = t.counterparty;
 		description = t.description || null;
 		const cats = t.lines.filter((l) => category(l.account));
-		lines = cats.map((l) => ({ account: l.account, amount: Math.abs(l.amount) }));
+		lines = cats.map((l) => ({
+			account: l.account,
+			amount: Math.abs(l.amount),
+			budgetLine: l.budgetLine
+		}));
 		if (!lines.length) lines = [{ account: null, amount: null }];
 		const parties = t.lines.filter((l) => !category(l.account));
 		if (t.kind === 'expense') party = parties.find((l) => l.amount < 0)?.account ?? null;
@@ -192,7 +202,8 @@
 			const splits = lines.map((l) => ({
 				account: l.account!,
 				amount: split ? (l.amount ?? 0) : amount!,
-				memo: null
+				memo: null,
+				budgetLine: l.budgetLine ?? null
 			}));
 			return kind === 'expense'
 				? { type: 'expense', payer: party, lines: splits }
@@ -407,7 +418,10 @@
 											options={categories}
 											addLabel="New category…"
 											invalid={!!fieldError('lines') && line.account === null}
-											onchange={(v) => (lines[i].account = v)}
+											onchange={(v) => {
+												if (v !== lines[i].account) lines[i].budgetLine = null;
+												lines[i].account = v;
+											}}
 											onadd={addCategory}
 										/>
 									</div>

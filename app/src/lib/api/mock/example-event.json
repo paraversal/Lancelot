@@ -287,12 +287,14 @@
         {
           "account": 4,
           "amount": -622750,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 1,
           "amount": 622750,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 622750,
@@ -309,12 +311,14 @@
         {
           "account": 4,
           "amount": -30000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 16,
           "amount": 30000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 30000,
@@ -331,12 +335,14 @@
         {
           "account": 5,
           "amount": -81250,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 2,
           "amount": 81250,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 81250,
@@ -353,12 +359,14 @@
         {
           "account": 6,
           "amount": -5000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 2,
           "amount": 5000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 5000,
@@ -375,12 +383,14 @@
         {
           "account": 1,
           "amount": -180000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 11,
           "amount": 180000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 180000,
@@ -407,17 +417,20 @@
         {
           "account": 1,
           "amount": -45200,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 8,
           "amount": 42000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 9,
           "amount": 3200,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 45200,
@@ -444,12 +457,14 @@
         {
           "account": 1,
           "amount": -50000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 12,
           "amount": 50000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 50000,
@@ -476,12 +491,14 @@
         {
           "account": 1,
           "amount": -109850,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 7,
           "amount": 109850,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 109850,
@@ -508,12 +525,14 @@
         {
           "account": 1,
           "amount": -22500,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 13,
           "amount": 22500,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 22500,
@@ -540,17 +559,20 @@
         {
           "account": 2,
           "amount": -39125,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 7,
           "amount": 34275,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 13,
           "amount": 4850,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 39125,
@@ -577,12 +599,14 @@
         {
           "account": 2,
           "amount": -22635,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 7,
           "amount": 22635,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 22635,
@@ -609,12 +633,14 @@
         {
           "account": 14,
           "amount": -31240,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 7,
           "amount": 31240,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 31240,
@@ -641,12 +667,14 @@
         {
           "account": 15,
           "amount": -11000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 12,
           "amount": 11000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 11000,
@@ -673,12 +701,14 @@
         {
           "account": 16,
           "amount": -12000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 7,
           "amount": 12000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 12000,
@@ -705,12 +735,14 @@
         {
           "account": 17,
           "amount": -9500,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 13,
           "amount": 9500,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 9500,
@@ -737,12 +769,14 @@
         {
           "account": 2,
           "amount": -3200,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 8,
           "amount": 3200,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 3200,
@@ -759,12 +793,14 @@
         {
           "account": 14,
           "amount": -20000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 2,
           "amount": 20000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 20000,
@@ -781,12 +817,14 @@
         {
           "account": 1,
           "amount": -30000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 14,
           "amount": 30000,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 30000,
@@ -803,12 +841,14 @@
         {
           "account": 1,
           "amount": -9500,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         },
         {
           "account": 17,
           "amount": 9500,
-          "memo": null
+          "memo": null,
+          "budgetLine": null
         }
       ],
       "amount": 9500,
@@ -911,5 +951,96 @@
       }
     ],
     "repaymentTotal": 18000
+  },
+  "budgetLines": [],
+  "budget": {
+    "lines": [],
+    "categories": [
+      {
+        "category": 4,
+        "estimate": 0,
+        "actual": 652750,
+        "forecast": 652750,
+        "unbudgeted": 652750
+      },
+      {
+        "category": 5,
+        "estimate": 0,
+        "actual": 81250,
+        "forecast": 81250,
+        "unbudgeted": 81250
+      },
+      {
+        "category": 6,
+        "estimate": 0,
+        "actual": 5000,
+        "forecast": 5000,
+        "unbudgeted": 5000
+      },
+      {
+        "category": 7,
+        "estimate": 0,
+        "actual": 210000,
+        "forecast": 210000,
+        "unbudgeted": 210000
+      },
+      {
+        "category": 8,
+        "estimate": 0,
+        "actual": 45200,
+        "forecast": 45200,
+        "unbudgeted": 45200
+      },
+      {
+        "category": 9,
+        "estimate": 0,
+        "actual": 3200,
+        "forecast": 3200,
+        "unbudgeted": 3200
+      },
+      {
+        "category": 10,
+        "estimate": 0,
+        "actual": 0,
+        "forecast": 0,
+        "unbudgeted": 0
+      },
+      {
+        "category": 11,
+        "estimate": 0,
+        "actual": 180000,
+        "forecast": 180000,
+        "unbudgeted": 180000
+      },
+      {
+        "category": 12,
+        "estimate": 0,
+        "actual": 61000,
+        "forecast": 61000,
+        "unbudgeted": 61000
+      },
+      {
+        "category": 13,
+        "estimate": 0,
+        "actual": 36850,
+        "forecast": 36850,
+        "unbudgeted": 36850
+      }
+    ],
+    "income": {
+      "estimate": 0,
+      "actual": 739000,
+      "forecast": 739000
+    },
+    "expense": {
+      "estimate": 0,
+      "actual": 536250,
+      "forecast": 536250
+    },
+    "result": {
+      "estimate": 0,
+      "actual": 202750,
+      "forecast": 202750
+    }
   }
 }

@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.8. M0 to M4 are done, and M5 is done except the release (M3's exit test, a stack of receipts by keyboard, is yours to try). It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is in progress. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -159,7 +159,7 @@ Built in two steps.
 - [x] Settlement report: income and expenses by category, result, final balance per asset account with its counts, open or accepted items, every entry, and the receipts one per page (PDF receipts drawn with pdf.js). Printed to PDF from the print dialog. Covers R-SET-1, R-SET-4, R-SET-5 and R-SET-6.
 - [x] Transactions CSV, one row per line, in the user's number format (R-SET-6). XLSX is not planned.
 - [x] Closing is blocked while there are open items, and each blocker can be accepted with a note. A closed event is read-only and shows its final balance; Settings reopens it (R-EVT-2, R-SET-7, R-SET-8).
-- [ ] Unsigned macOS build from CI, attached to a GitHub release. Signing waits.
+- [x] Motion: every animation in the app, chosen on the `/design/motion` trial page, with a reduced-motion setting. See [design/motion.md](design/motion.md).
 - [ ] **Parallel run** with the Excel sheet at the next event.
 
 **Exit:** a real event is settled with Lancelot and its final balance matches Excel to the cent. Tag `v0.1.0`.
@@ -169,9 +169,19 @@ Built in two steps.
 ## Phase 2
 
 ### M6 · Budget and forecast
+
+Built in three steps, each in its own pull request.
+
+**M6a · Budget core (Rust only)**
+- [x] Budget lines on an income or expense category, as an amount or as quantity × unit price, with a "complete" flag. Transaction lines link to a budget line of their own category; deleting a budget line leaves its actuals unbudgeted. Covers R-BUD-1 and R-BUD-2.
+- [x] Plan vs actual per line, per category and in total, in the snapshot. Forecast rule: complete lines use the actual, otherwise the cautious one of estimate and actual (larger for expenses, smaller for income), plus unbudgeted actuals. Covers R-BUD-3, R-BUD-4 and R-BUD-5. Per cost centre follows with cost centres in M9.
+- [x] Property tests: actuals add up to the ledger's totals, category figures add up from their lines, and budget lines never change a balance.
+
+**M6b · Budget screen**
 - [ ] **Design the Budget screen** in `UI.fig`.
-- [ ] Budget lines, as an amount or as quantity × unit price, with links from actual lines. Covers R-BUD-1 and R-BUD-2.
-- [ ] Plan vs actual per line, category, cost centre and in total. Forecast rule: complete lines use the actual, otherwise the larger of estimate and actual, plus unbudgeted actuals. Covers R-BUD-3, R-BUD-4 and R-BUD-5.
+- [ ] The Budget page: add, edit and delete budget lines, plan vs actual per line and category, and linking a receipt's lines to a budget line.
+
+**M6c · Forecast in the Overview and the report**
 - [ ] Forecast block on the Overview, and plan vs actual in the report (R-SET-2).
 
 ### M7 · Ticket import
@@ -231,4 +241,4 @@ Built in two steps.
 
 ## Next step
 
-M5: settlement and closing — the Overview, the settlement report, cash counts, closing the event.
+M6b: the Budget screen, starting with its design in `UI.fig`. The M5 parallel run happens at the next event, alongside it.
