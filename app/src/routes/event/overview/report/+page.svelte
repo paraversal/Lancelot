@@ -1,8 +1,8 @@
 <script lang="ts">
-	// The settlement report (R-SET-1, R-SET-4, R-SET-5, R-SET-6): what the screen shows is what
-	// prints. Income and expenses by category, the final balance with every count, what is
-	// open or was accepted when closing, every entry, and the receipts, one per page. Saved as
-	// PDF from the print dialog.
+	// The settlement report (R-SET-1, R-SET-2, R-SET-4, R-SET-5, R-SET-6): what the screen shows
+	// is what prints. Income and expenses by category, plan vs actual when there is a budget, the
+	// final balance with every count, what is open or was accepted when closing, every entry, and
+	// the receipts, one per page. Saved as PDF from the print dialog.
 	import { goto } from '$app/navigation';
 	import { api, attachmentUrl } from '#lib/api/index.ts';
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
@@ -29,6 +29,15 @@
 	const categories = (kind: 'income' | 'expense') =>
 		snapshot.accounts.filter((a) => a.kind === kind && a.balance !== 0);
 	const assets = $derived(snapshot.accounts.filter((a) => a.kind === 'asset'));
+	const budget = $derived(snapshot.budget);
+	// Plan vs actual per category (R-SET-2), for categories with an estimate or an actual.
+	const planned = (kind: 'income' | 'expense') =>
+		budget.categories.flatMap((c) => {
+			const account = snapshot.accounts.find((a) => a.id === c.category);
+			if (account?.kind !== kind || (c.estimate === 0 && c.actual === 0)) return [];
+			return [{ ...c, name: account.name }];
+		});
+	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
 	const entries = $derived(rows(snapshot));
 	const open = $derived(snapshot.openItems.map((i) => describe(i, snapshot, format)));
 	const accepted = $derived(
@@ -180,6 +189,51 @@
 				</table>
 			{/each}
 		</div>
+
+		{#if snapshot.budgetLines.length}
+			<table class="budget">
+				<caption>Plan vs actual</caption>
+				<thead>
+					<tr>
+						<th></th><th class="num">Estimate</th><th class="num">Actual</th><th class="num"
+							>Forecast</th
+						>
+					</tr>
+				</thead>
+				{#each [{ title: 'Income', kind: 'income', total: budget.income }, { title: 'Expenses', kind: 'expense', total: budget.expense }] as const as t (t.kind)}
+					<tbody>
+						{#each planned(t.kind) as c (c.category)}
+							<tr>
+								<td
+									>{c.name}{#if c.unbudgeted && c.estimate}<small
+											>{cell(c.unbudgeted)} not budgeted</small
+										>{/if}</td
+								>
+								<td class="num">{cell(c.estimate)}</td>
+								<td class="num">{cell(c.actual)}</td>
+								<td class="num">{cell(c.forecast)}</td>
+							</tr>
+						{/each}
+						<tr class="subtotal">
+							<td>{t.title}</td>
+							<td class="num">{cell(t.total.estimate)}</td>
+							<td class="num">{cell(t.total.actual)}</td>
+							<td class="num">{cell(t.total.forecast)}</td>
+						</tr>
+					</tbody>
+				{/each}
+				<tfoot>
+					<tr data-testid="report-plan">
+						<td>Result</td>
+						{#each [budget.result.estimate, budget.result.actual, budget.result.forecast] as r, i (i)}
+							<td class="num" class:plus={r > 0} class:minus={r < 0}
+								>{formatAmount(r, format, 'always')}</td
+							>
+						{/each}
+					</tr>
+				</tfoot>
+			</table>
+		{/if}
 
 		<table>
 			<caption>Final balance</caption>
@@ -464,6 +518,16 @@
 	tfoot td {
 		border-bottom: none;
 		border-top: 1.5pt solid var(--color-ink);
+		font-weight: 600;
+	}
+
+	.budget td.num,
+	.budget th.num {
+		width: 72pt;
+		padding-left: 8pt;
+	}
+
+	.budget .subtotal td {
 		font-weight: 600;
 	}
 
