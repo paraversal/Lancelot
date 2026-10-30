@@ -229,17 +229,21 @@ fn checkpoints_survive_the_file_and_are_logged() {
     let verein = role(store.book(), Role::Verein);
 
     let a = store
-        .add_reconciliation(verein, june(10), eur("-1"))
+        .change(|book| book.add_reconciliation(verein, june(10), eur("-1")))
         .unwrap();
     let b = store
-        .add_reconciliation(verein, june(11), eur("2"))
+        .change(|book| book.add_reconciliation(verein, june(11), eur("2")))
         .unwrap();
     // One checkpoint takes the date another one just left.
-    store.update_reconciliation(a, june(12), eur("-1")).unwrap();
-    store.update_reconciliation(b, june(10), eur("2")).unwrap();
-    store.delete_reconciliation(a).unwrap();
+    store
+        .change(|book| book.update_reconciliation(a, june(12), eur("-1")))
+        .unwrap();
+    store
+        .change(|book| book.update_reconciliation(b, june(10), eur("2")))
+        .unwrap();
+    store.change(|book| book.delete_reconciliation(a)).unwrap();
     let c = store
-        .add_reconciliation(verein, june(11), eur("3"))
+        .change(|book| book.add_reconciliation(verein, june(11), eur("3")))
         .unwrap();
     assert_ne!(c, a, "ids are never reused");
 
@@ -352,11 +356,11 @@ fn a_negative_count_survives_the_file_and_a_negative_opening_is_refused() {
     let verein = role(store.book(), Role::Verein);
     let cash = role(store.book(), Role::CashBox);
     store
-        .set_counts(verein, None, Some((june(30), eur("-100"))))
+        .change(|book| book.set_counts(verein, None, Some((june(30), eur("-100")))))
         .unwrap();
     assert_eq!(
         store
-            .set_counts(cash, Some((june(1), eur("-5"))), None)
+            .change(|book| book.set_counts(cash, Some((june(1), eur("-5"))), None))
             .unwrap_err()
             .code(),
         "negative_amount"
@@ -400,16 +404,16 @@ mod properties {
             let details = new_book().event().details.clone();
             let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
             for (name, price, fee_bp) in [("Early Bird", "25", 0), ("Regular", "32", 250)] {
-                store.add_tier(TierDraft {
+                store.change(|book| book.add_tier(TierDraft {
                     name: name.into(),
                     price: eur(price),
                     fee_bp,
                     quota: None,
                     aliases: Vec::new(),
-                }).unwrap();
+                })).unwrap();
             }
             let verein = role(store.book(), Role::Verein);
-            let id = store.add_reconciliation(verein, june(checkpoint_day), Cents::ZERO).unwrap();
+            let id = store.change(|book| book.add_reconciliation(verein, june(checkpoint_day), Cents::ZERO)).unwrap();
 
             for (n, (rows, day)) in sheets.iter().enumerate() {
                 let before = store.book().clone();
@@ -424,7 +428,7 @@ mod properties {
 
                 // Taking every other sheet back gives the figures it had.
                 if n % 2 == 1 {
-                    store.delete_import(import).unwrap();
+                    store.change(|book| book.delete_import(import)).unwrap();
                     prop_assert_eq!(status(store.book(), id).computed, figure);
                     prop_assert_eq!(store.book().tickets().total, before.tickets().total);
                     prop_assert_eq!(
@@ -435,7 +439,7 @@ mod properties {
             }
 
             // A statement after every sheet compares with the whole balance.
-            let final_id = store.add_reconciliation(verein, june(28), Cents::ZERO).unwrap();
+            let final_id = store.change(|book| book.add_reconciliation(verein, june(28), Cents::ZERO)).unwrap();
             prop_assert_eq!(
                 status(store.book(), final_id).computed,
                 store.book().ledger().balance(verein)

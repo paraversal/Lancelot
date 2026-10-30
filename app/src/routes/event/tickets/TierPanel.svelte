@@ -111,7 +111,7 @@
 
 <Panel title={tier ? tier.name : 'New tier'} {onclose}>
 	<fieldset disabled={session.closed}>
-		<div class="labelled">
+		<div class="form-field">
 			<TextField
 				label="Name"
 				value={name}
@@ -119,11 +119,11 @@
 				oninput={(v) => (name = v)}
 				oncommit={(v) => (name = v ?? '')}
 			/>
-			{#if fieldError('name')}<span class="error">{fieldError('name')}</span>{/if}
+			{#if fieldError('name')}<span class="form-error">{fieldError('name')}</span>{/if}
 		</div>
 
 		<div class="three">
-			<div class="labelled">
+			<div class="form-field">
 				<AmountField
 					label="Price"
 					value={price}
@@ -131,9 +131,9 @@
 					previewBelow
 					oninput={(v) => (price = v)}
 				/>
-				{#if fieldError('price')}<span class="error">{fieldError('price')}</span>{/if}
+				{#if fieldError('price')}<span class="form-error">{fieldError('price')}</span>{/if}
 			</div>
-			<div class="labelled">
+			<div class="form-field">
 				<div class="percent">
 					<TextField
 						label="Fee"
@@ -144,24 +144,24 @@
 					<span class="sign">%</span>
 				</div>
 				{#if fieldError('feeBp')}
-					<span class="error">{fieldError('feeBp')}</span>
+					<span class="form-error">{fieldError('feeBp')}</span>
 				{:else if perTicket !== null}
 					<span class="hint">= {formatAmount(perTicket, format)} per ticket</span>
 				{/if}
 			</div>
-			<div class="labelled">
+			<div class="form-field">
 				<TextField
 					label="Quota"
 					value={quota}
 					oninput={(v) => (quota = v)}
 					oncommit={(v) => (quota = v ?? '')}
 				/>
-				{#if fieldError('quota')}<span class="error">{fieldError('quota')}</span>{/if}
+				{#if fieldError('quota')}<span class="form-error">{fieldError('quota')}</span>{/if}
 			</div>
 		</div>
 
-		<div class="labelled">
-			<span class="label">Names in the sheet</span>
+		<div class="form-field">
+			<span class="form-label">Names in the sheet</span>
 			<div class="names" class:invalid={!!fieldError('aliases')}>
 				{#if name.trim()}<span class="chip">{name.trim()}</span>{/if}
 				{#each aliases as a, i (a)}
@@ -190,12 +190,12 @@
 					onblur={addAlias}
 				/>
 			</div>
-			{#if fieldError('aliases')}<span class="error">{fieldError('aliases')}</span>{/if}
+			{#if fieldError('aliases')}<span class="form-error">{fieldError('aliases')}</span>{/if}
 		</div>
 	</fieldset>
 
 	{#if error && !['name', 'price', 'feeBp', 'quota', 'aliases'].some( (f) => error?.field?.startsWith(f) )}
-		<p class="error">{error.message}</p>
+		<p class="form-error">{error.message}</p>
 	{/if}
 
 	{#if tier?.unresolved}
@@ -236,7 +236,7 @@
 		{#if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
 		{:else if confirming}
-			<div class="confirm">
+			<div class="form-confirm">
 				<strong>Delete this tier?</strong>
 				<span class="grow"></span>
 				<Button size="sm" kind="primary" onclick={remove}>Delete</Button>
@@ -255,28 +255,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
-	.labelled {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		min-width: 0;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
-	}
-
 	.three {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -401,23 +379,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
-	}
-
-	.confirm {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		width: 100%;
-		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 </style>

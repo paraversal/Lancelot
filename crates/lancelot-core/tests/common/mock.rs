@@ -70,10 +70,13 @@ impl Target for Store {
         Store::book(self)
     }
     fn person(&mut self, name: &str) -> AccountId {
-        self.add_person(name, Person::default()).unwrap()
+        self.change(|b| b.add_person(name, Person::default()))
+            .unwrap()
     }
     fn save(&mut self, description: &str, entry: Entry) -> TxnId {
-        self.save_txn(&draft(description, entry), None).unwrap().id
+        self.change(|b| b.save_txn(&draft(description, entry), None))
+            .unwrap()
+            .id
     }
     fn attach(&mut self, txn: TxnId, pdf: bool) {
         let (name, bytes): (&str, &[u8]) = if pdf {
@@ -90,22 +93,24 @@ impl Target for Store {
         self.add_attachment(txn, name, bytes).unwrap();
     }
     fn count(&mut self, account: AccountId, amount: Cents) {
-        self.set_closing_count(account, june(14), amount).unwrap();
+        self.change(|b| b.set_closing_count(account, june(14), amount))
+            .unwrap();
     }
     fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents) {
-        self.add_reconciliation(account, date, amount).unwrap();
+        self.change(|b| b.add_reconciliation(account, date, amount))
+            .unwrap();
     }
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
-        self.add_budget_line(draft).unwrap()
+        self.change(|b| b.add_budget_line(draft)).unwrap()
     }
     fn save_draft(&mut self, draft: TxnDraft) -> TxnId {
-        self.save_txn(&draft, None).unwrap().id
+        self.change(|b| b.save_txn(&draft, None)).unwrap().id
     }
     fn product(&mut self, draft: DrinkProductDraft) {
-        self.add_drink_product(draft).unwrap();
+        self.change(|b| b.add_drink_product(draft)).unwrap();
     }
     fn drink_settings(&mut self, settings: DrinkSettings) {
-        self.set_drink_settings(settings).unwrap();
+        self.change(|b| b.set_drink_settings(settings)).unwrap();
     }
 }
 

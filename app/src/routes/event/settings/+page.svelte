@@ -3,7 +3,7 @@
 	// integrity, backups. Every field saves when it is left; there is no Save button.
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import { chooseEventFile, chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
 	import type { CopySummary } from '#lib/api/generated/CopySummary.ts';
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
@@ -49,7 +49,7 @@
 			error = null;
 			await f();
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 
@@ -81,7 +81,7 @@
 			keepInvalid = false;
 		} catch (e) {
 			keepInvalid = true;
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 
@@ -149,7 +149,7 @@
 			let name = 'New account';
 			for (let n = 2; accounts.some((a) => a.name.toLowerCase() === name.toLowerCase()); n++)
 				name = `New account ${n}`;
-			const added = await session.run(() => api.addAsset(name, 'cash'));
+			const added = await session.change(() => api.addAsset(name, 'cash'));
 			await tick();
 			const input = document.getElementById(`account-${added.id}`) as HTMLInputElement | null;
 			input?.focus();
@@ -271,7 +271,7 @@
 						required
 						oncommit={(v) => v && update({ name: v })}
 					/>
-					<div class="pair">
+					<div class="form-pair">
 						<DateField
 							label="From"
 							value={event.startsOn}
@@ -380,7 +380,7 @@
 						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
 					{/if}
 					<div class="labelled">
-						<span class="label">Categories start in</span>
+						<span class="form-label">Categories start in</span>
 						<ul class="accounts starts">
 							{#each categories as a (a.id)}
 								<li>
@@ -428,7 +428,7 @@
 			<section>
 				<h2>Display</h2>
 				<div class="labelled">
-					<span class="label">Numbers and dates</span>
+					<span class="form-label">Numbers and dates</span>
 					<Segmented
 						label="Numbers and dates"
 						value={format}
@@ -595,22 +595,11 @@
 		font-weight: 600;
 	}
 
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
-	}
-
 	.labelled {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 6px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.toggle {
@@ -645,10 +634,6 @@
 		color: var(--color-ink-muted);
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.muted {

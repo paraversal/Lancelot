@@ -166,7 +166,7 @@
 			{/if}
 			{#if source === 'order'}
 				<div class="pair">
-					<div class="labelled grow">
+					<div class="form-field grow">
 						<TextField
 							label="Order ID"
 							value={order}
@@ -176,7 +176,7 @@
 						/>
 						{#if fieldError('order')}<span class="error">{fieldError('order')}</span>{/if}
 					</div>
-					<div class="labelled grow">
+					<div class="form-field grow">
 						<Select
 							label="Tier"
 							value={tier}
@@ -200,7 +200,7 @@
 			{#if current?.note}<p class="meta">{current.note}</p>{/if}
 		{:else}
 			<div class="pair">
-				<div class="labelled small">
+				<div class="form-field small">
 					<TextField
 						label="Count"
 						value={count}
@@ -209,7 +209,7 @@
 					/>
 					{#if fieldError('count')}<span class="error">{fieldError('count')}</span>{/if}
 				</div>
-				<div class="labelled small">
+				<div class="form-field small">
 					<TextField
 						label="Refund %"
 						value={percent}
@@ -218,7 +218,7 @@
 					/>
 					{#if fieldError('refundBp')}<span class="error">{fieldError('refundBp')}</span>{/if}
 				</div>
-				<div class="labelled grow">
+				<div class="form-field grow">
 					<DateField
 						label="Date"
 						value={date}
@@ -270,16 +270,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
 	.source {
 		margin: 0;
 		font-weight: 600;
@@ -294,17 +284,6 @@
 	.pair {
 		display: flex;
 		gap: var(--spacing-3);
-	}
-
-	.labelled {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		min-width: 0;
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.small {

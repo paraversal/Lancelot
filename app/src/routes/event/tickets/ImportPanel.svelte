@@ -193,12 +193,12 @@
 			{:else if reading}
 				<span class="meta">Reading…</span>
 			{/if}
-			{#if error?.field === 'file'}<span class="error">{error.message}</span>{/if}
+			{#if error?.field === 'file'}<span class="form-error">{error.message}</span>{/if}
 		</div>
 
 		<fieldset disabled={session.closed}>
 			<div class="labelled">
-				<span class="label">Columns read</span>
+				<span class="form-label">Columns read</span>
 				<div class="columns">
 					{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }, { key: 'saleDate', label: 'sale date' }] as const as c (c.key)}
 						<div class="column">
@@ -210,7 +210,8 @@
 						</div>
 					{/each}
 				</div>
-				{#if error?.field?.startsWith('columns.')}<span class="error">{error.message}</span>{/if}
+				{#if error?.field?.startsWith('columns.')}<span class="form-error">{error.message}</span
+					>{/if}
 			</div>
 
 			<div class="date">
@@ -308,7 +309,7 @@
 		{/if}
 
 		{#if error && error.field !== 'file' && !error.field?.startsWith('columns.')}
-			<p class="error">{error.message}</p>
+			<p class="form-error">{error.message}</p>
 		{/if}
 	{:else}
 		<div class="imports">
@@ -356,7 +357,7 @@
 					</div>
 				{/if}
 			{/each}
-			{#if error}<p class="error">{error.message}</p>{/if}
+			{#if error}<p class="form-error">{error.message}</p>{/if}
 			<p class="note">The import with the latest date is the current sheet.</p>
 		</div>
 	{/if}
@@ -384,16 +385,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
 	.file {
 		display: flex;
 		flex-direction: column;
@@ -439,11 +430,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.columns {
@@ -634,11 +620,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

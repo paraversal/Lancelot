@@ -31,19 +31,16 @@ class Session {
 	/**
 	 * Runs event commands one after another. Commands that send the whole event details must
 	 * build them from the latest state, so `command` is called only when the previous one is
-	 * done; two quick edits in different fields can then never overwrite each other.
+	 * done; two quick edits in different fields can then never overwrite each other. A command
+	 * that returns more than the new state (e.g. a new id) hands the rest back to the caller.
 	 */
-	change(command: () => Promise<OpenEvent>, checked = false): Promise<void> {
-		const next = this.#queue.then(async () => this.update(await command(), checked));
-		this.#queue = next.catch(() => {});
-		return next;
-	}
-
-	/** Like `change`, for commands that return more than the new state (e.g. a new id). */
-	run<T extends { event: OpenEvent }>(command: () => Promise<T>): Promise<T> {
+	change<T extends OpenEvent | { event: OpenEvent }>(
+		command: () => Promise<T>,
+		checked = false
+	): Promise<T> {
 		const next = this.#queue.then(async () => {
 			const result = await command();
-			this.update(result.event);
+			this.update('event' in result ? result.event : result, checked);
 			return result;
 		});
 		this.#queue = next.then(

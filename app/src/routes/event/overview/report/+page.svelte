@@ -412,10 +412,6 @@
 		background: var(--color-paper);
 	}
 
-	.grow {
-		flex: 1;
-	}
-
 	.toggle {
 		display: inline-flex;
 		align-items: center;

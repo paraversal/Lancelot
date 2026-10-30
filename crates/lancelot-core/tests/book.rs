@@ -318,7 +318,7 @@ fn a_closed_event_is_read_only_until_reopened() {
         DomainError::EventClosed
     );
 
-    book.reopen();
+    book.reopen().unwrap();
     assert!(!book.event().is_closed());
     assert!(book.event().closing_overrides.is_empty());
     assert!(
@@ -621,4 +621,83 @@ fn an_opening_count_is_one_opening_transaction() {
             .open_items()
             .contains(&OpenItem::ClosingCountMissing { account: verein })
     );
+}
+
+#[test]
+fn marking_payouts_paid_settles_only_those_with_an_iban() {
+    let mut book = new_book();
+    let kitchen = book
+        .account_by_name(AccountKind::Expense, "Kitchen")
+        .unwrap()
+        .id;
+    let verein = book.account_by_role(Role::Verein).unwrap().id;
+    let with_iban = Person {
+        iban: Some(validate_iban("DE89370400440532013000").unwrap()),
+        ..Person::default()
+    };
+    let anna = book.add_person("Anna", with_iban).unwrap();
+    let bob = book.add_person("Bob", Person::default()).unwrap();
+    for payer in [anna, bob] {
+        let draft = TxnDraft {
+            date: june(13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: Entry::Expense {
+                payer,
+                lines: vec![SplitLine {
+                    account: kitchen,
+                    amount: eur("20,00"),
+                    memo: None,
+                    budget_line: None,
+                    cost_centre: None,
+                }],
+            },
+            total: None,
+        };
+        book.save_txn(&draft, None).unwrap();
+    }
+    assert_eq!(book.mark_payouts_paid(verein, june(20)), Ok(1));
+    assert!(book.ledger().person(anna).unwrap().net.is_zero());
+    assert_eq!(book.ledger().person(bob).unwrap().net, eur("20,00"));
+}
+
+#[test]
+fn setting_both_counts_is_one_change_that_fails_whole() {
+    let mut book = new_book();
+    let cash = book.account_by_role(Role::CashBox).unwrap().id;
+    book.set_counts(
+        cash,
+        Some((june(12), eur("50,00"))),
+        Some((june(14), eur("45,00"))),
+    )
+    .unwrap();
+    assert_eq!(book.closing_count(cash).unwrap().amount, eur("45,00"));
+    let before = book.clone();
+
+    let negative = Cents::ZERO.checked_sub(eur("1,00")).unwrap();
+    assert!(
+        book.set_counts(
+            cash,
+            Some((june(12), eur("60,00"))),
+            Some((june(14), negative))
+        )
+        .is_err()
+    );
+    assert_eq!(book, before);
+    assert!(
+        book.set_counts(cash, Some((june(12), negative)), None)
+            .is_err()
+    );
+    assert_eq!(book, before);
+
+    book.set_counts(cash, None, None).unwrap();
+    assert!(book.closing_count(cash).is_none());
+    assert!(book.txns().next().is_none());
+
+    let kitchen = book
+        .account_by_name(AccountKind::Expense, "Kitchen")
+        .unwrap()
+        .id;
+    assert!(book.set_counts(kitchen, None, None).is_err());
 }

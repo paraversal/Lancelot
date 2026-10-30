@@ -42,7 +42,7 @@
 		let name = base;
 		for (let n = 2; snapshot.persons.some((p) => p.name.toLowerCase() === name.toLowerCase()); n++)
 			name = `${base} ${n}`;
-		const added = await session.run(() => api.addPerson(name));
+		const added = await session.change(() => api.addPerson(name));
 		open(added.id);
 		editing = true;
 	}

@@ -308,11 +308,11 @@ The browser checks run against the real core, and the mock backend is gone.
 
 In this order, so the round-trip check is there for the `persist` rewrite.
 
-- [ ] Each write checks one round trip, `Book::from_parts(read::parts(tx))? == next`, in place of the quick check. The `Book` built during the check on open is reused (F9).
-- [ ] A public `Store::change` and one generic `Service` helper replace the forwarding methods. Multi-step operations such as `mark_payouts_paid` and `set_counts` move into `Book` (F7).
-- [ ] `PRAGMA defer_foreign_keys = ON` in `persist`, with each table handled in one place by a small helper (F10).
-- [ ] One function for the money of a tier and count, and one for a refund, used by `sync_tickets`, the views and the figures (F11).
-- [ ] One error helper, a shared form stylesheet and one session method (F20).
+- [x] Each write checks one round trip, `Book::from_parts(read::parts(tx))? == next`, in place of the quick check, and compares the generated entries as stored. The `Book` built during the check on open is reused (F9).
+- [x] A public `Store::change` and one generic `Service` helper replace the forwarding methods. Multi-step operations such as `mark_payouts_paid` and `set_counts` move into `Book` (F7).
+- [x] `PRAGMA defer_foreign_keys = ON` in `persist`, with each table handled in one place by a small helper (F10).
+- [x] One function for the money of a tier and count, and one for a refund, used by `sync_tickets`, the views and the figures (F11).
+- [x] One error helper, a shared form stylesheet and one session method (F20).
 
 ### Stage 4 · Decouple
 
@@ -364,4 +364,4 @@ All schema changes of the refactoring land here, as one batch.
 
 ## Next step
 
-Work through the [refactoring stages](#refactoring), starting with Stage 3. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
+Work through the [refactoring stages](#refactoring), starting with Stage 4. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).

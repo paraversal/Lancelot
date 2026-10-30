@@ -156,7 +156,7 @@ impl Profitability {
         let mut paying = 0u32;
         let mut places_left = Some(0u32);
         for t in &tickets.tiers {
-            let net_price = t.tier.draft.price.checked_sub(t.tier.fee()?)?;
+            let net_price = t.tier.money(1)?.net;
             if !net_price.is_positive() {
                 continue;
             }

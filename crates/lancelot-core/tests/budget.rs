@@ -312,37 +312,43 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
     let kitchen = expense(store.book(), "Kitchen");
     let drinks = expense(store.book(), "Drinks");
     let food = store
-        .add_budget_line(amount(kitchen, "Food", "1.000"))
+        .change(|book| book.add_budget_line(amount(kitchen, "Food", "1.000")))
         .unwrap();
     let crates = store
-        .add_budget_line(BudgetLineDraft {
-            cost_centre: None,
-            estimate: Estimate::Quantity {
-                quantity: 40,
-                unit_price: eur("12,50"),
-            },
-            complete: true,
-            ..amount(drinks, "Crates", "0")
+        .change(|book| {
+            book.add_budget_line(BudgetLineDraft {
+                cost_centre: None,
+                estimate: Estimate::Quantity {
+                    quantity: 40,
+                    unit_price: eur("12,50"),
+                },
+                complete: true,
+                ..amount(drinks, "Crates", "0")
+            })
         })
         .unwrap();
     let payer = role(store.book(), Role::Verein);
     store
-        .save_txn(
-            &draft(
-                "Groceries",
-                Entry::Expense {
-                    payer,
-                    lines: vec![
-                        linked(kitchen, "312,40", food),
-                        linked(drinks, "480", crates),
-                    ],
-                },
-            ),
-            None,
-        )
+        .change(|book| {
+            book.save_txn(
+                &draft(
+                    "Groceries",
+                    Entry::Expense {
+                        payer,
+                        lines: vec![
+                            linked(kitchen, "312,40", food),
+                            linked(drinks, "480", crates),
+                        ],
+                    },
+                ),
+                None,
+            )
+        })
         .unwrap();
-    let gone = store.add_budget_line(amount(kitchen, "Gas", "50")).unwrap();
-    store.delete_budget_line(gone).unwrap();
+    let gone = store
+        .change(|book| book.add_budget_line(amount(kitchen, "Gas", "50")))
+        .unwrap();
+    store.change(|book| book.delete_budget_line(gone)).unwrap();
 
     let book = store.book().clone();
     drop(store);

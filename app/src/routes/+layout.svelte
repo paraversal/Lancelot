@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '#lib/styles/tokens.css';
 	import '#lib/styles/base.css';
+	import '#lib/styles/forms.css';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api/index.ts';
 	import { motion, reduced, watchReducedMotion } from '#lib/motion/mode.svelte.ts';

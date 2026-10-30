@@ -10,7 +10,7 @@ use crate::model::{
     Account, AccountId, AccountKind, CancellationId, ImportId, Line, ManualSaleId, Origin, Role,
     TierId, Txn, TxnId, TxnKind,
 };
-use crate::money::{BP_FULL, percent_bp};
+use crate::money::BP_FULL;
 use crate::sales::Profitability;
 use crate::sheet::Sheet;
 use crate::tickets::{
@@ -492,17 +492,16 @@ impl Book {
             }
             for (tier, count) in counts {
                 let t = self.tiers.get(&tier).ok_or(DomainError::UnknownTier)?;
-                let gross = t.draft.price.checked_mul(i64::from(count))?;
-                if gross.is_zero() {
+                let money = t.money(count)?;
+                if money.gross.is_zero() {
                     continue;
                 }
-                let fee = t.fee()?.checked_mul(i64::from(count))?;
                 let description = format!("{count} × {}", t.draft.name);
-                let mut lines = vec![line(income, -gross)];
-                if fee.is_positive() {
-                    lines.push(line(self.ticket_fees_account(), fee));
+                let mut lines = vec![line(income, -money.gross)];
+                if money.fees.is_positive() {
+                    lines.push(line(self.ticket_fees_account(), money.fees));
                 }
-                lines.push(line(verein, gross.checked_sub(fee)?));
+                lines.push(line(verein, money.net));
                 wanted.insert(
                     Origin::TicketImport { tier },
                     (date, description, None, lines),
@@ -514,7 +513,7 @@ impl Book {
                 .tiers
                 .get(&s.draft.tier)
                 .ok_or(DomainError::UnknownTier)?;
-            let gross = t.draft.price.checked_mul(i64::from(s.draft.count))?;
+            let gross = t.money(s.draft.count)?.gross;
             if gross.is_zero() {
                 continue;
             }
@@ -533,8 +532,7 @@ impl Book {
         for c in refunds {
             let Some(terms) = c.terms else { continue };
             let t = self.tiers.get(&c.tier).ok_or(DomainError::UnknownTier)?;
-            let refund =
-                percent_bp(t.draft.price, terms.refund_bp)?.checked_mul(i64::from(c.count))?;
+            let refund = t.refund(terms.refund_bp, c.count)?;
             if refund.is_zero() {
                 continue;
             }

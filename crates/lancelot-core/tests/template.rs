@@ -340,13 +340,15 @@ fn copied_data_is_written_to_the_file() {
     let path = dir.path().join("new.lancelot");
     let (mut store, _) = Store::create(&path, details("New"), StoreOptions::default()).unwrap();
     store
-        .copy_from(
-            &source,
-            CopyChoice {
-                persons: true,
-                budget: true,
-            },
-        )
+        .change(|book| {
+            book.copy_from(
+                &source,
+                CopyChoice {
+                    persons: true,
+                    budget: true,
+                },
+            )
+        })
         .unwrap();
     let book = store.book().clone();
     drop(store);

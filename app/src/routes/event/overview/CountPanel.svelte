@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Counting an asset account (R-ISO-3): what was there at the start and what is there at the
 	// end. The start brings money in as an opening entry; the end is compared with the books.
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import AmountField from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import DateField from '#lib/components/DateField.svelte';
@@ -54,7 +54,7 @@
 			);
 			onclose();
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 </script>
@@ -71,7 +71,7 @@
 <Panel title={name} {onclose}>
 	{#if !movement}<div class="group">
 			<h3>Opening count</h3>
-			<div class="pair">
+			<div class="form-pair">
 				<DateField
 					label="Date"
 					value={openingDate}
@@ -90,7 +90,7 @@
 		</div>{/if}
 	<div class="group">
 		<h3>Closing count</h3>
-		<div class="pair">
+		<div class="form-pair">
 			<DateField
 				label="Date"
 				value={closingDate}
@@ -125,7 +125,7 @@
 			</div>
 		{/if}
 	</div>
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 	{#snippet footer()}
 		<Button kind="primary" shortcut="⌘↵" onclick={save}>Save</Button>
 		<Button shortcut="esc" onclick={onclose}>Cancel</Button>
@@ -143,12 +143,6 @@
 		margin: 0;
 		font-size: 13px;
 		font-weight: 600;
-	}
-
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
 	}
 
 	.sums {
@@ -180,12 +174,6 @@
 	}
 
 	.minus {
-		color: var(--color-minus);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
 		color: var(--color-minus);
 	}
 </style>

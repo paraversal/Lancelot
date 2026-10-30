@@ -3,7 +3,7 @@
 	// result (`= 1.234,50 €`), in attention when the input was ambiguous, and turns minus with a
 	// warning when it cannot be read. Nothing is committed until the input is valid.
 	import { untrack } from 'svelte';
-	import { api, ApiError } from '../api';
+	import { api, errorMessage } from '../api';
 	import type { Cents } from '../api/generated/Cents';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatAmount } from '../format';
@@ -79,7 +79,7 @@
 		} catch (e) {
 			if (mine !== seq) return;
 			parsed = null;
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 			onvalue?.(null);
 		}
 	}

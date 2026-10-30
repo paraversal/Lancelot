@@ -109,11 +109,11 @@ Every write of a transaction is part of one SQL transaction with these steps:
 2. Replace its lines.
 3. Seal it.
 4. Write the change log entry.
-5. Run the quick integrity check, and commit only if it passes.
+5. Read the file back into a `Book`, and commit only if it equals the one written (§4.1).
 
 Deleting a transaction also unseals it first, so the cascade can remove its lines.
 
-The domain layer has already checked the balance before this. The trigger is the second line of defence. The integrity check also reports any transaction with `sealed = 0`, because that could only exist after a crash outside a transaction, which should be impossible.
+The domain layer has already checked the balance before this. The trigger is the second line of defence. The integrity check, on open and on demand, also reports any transaction with `sealed = 0`, because that could only exist after a crash outside a transaction, which should be impossible.
 
 **Further rules, checked in the domain layer and again by the integrity check:**
 - An `opening` account appears only in `opening` transactions.
@@ -137,13 +137,15 @@ The domain layer has already checked the balance before this. The trigger is the
 
 `Book` holds the whole event in memory and enforces every domain rule. Each change is applied to a copy, the `Ledger` is recomputed, and the copy replaces the original only if both succeed. A closed event rejects every change except reopening.
 
-`Store` holds the open file and a `Book`. For each command it:
+`Store` holds the open file and a `Book`. A command is a closure over the `Book`, passed to `Store::change`, which:
 1. applies the command to a copy of the `Book`;
 2. writes the difference between the two books in one SQL transaction, with one change log entry per changed row;
-3. runs the quick integrity check inside that transaction;
-4. commits, and only then keeps the copy.
+3. reads the file back inside that transaction and compares it with the copy, including the generated entries as stored, since loading regenerates them;
+4. commits, which also enforces the foreign keys, and only then keeps the copy.
 
-Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
+A command therefore lives in `Book`, whatever its size, and a new one needs a Tauri command, an API wrapper and a line in the dev bridge. `Store` has its own methods only where a command needs the clock or bytes from outside the book: closing, importing a sheet and attaching files. `Service::change` wraps `Store::change` and returns the new state; `Service::add` also returns a new account's id.
+
+Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Foreign keys are deferred during the write, so each table is handled in one place and in any order. Only checkpoints keep an order of their own, because a checkpoint can take the date another one just left. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
 
 The settle direction is explicit, and the UI pre-fills it from the person's balance. Deriving it from the balance would let an edit to an older transaction silently turn a reimbursement into a repayment.
 
@@ -179,7 +181,9 @@ Unit tests for every module, property tests with `proptest` for the money invari
 
 **Saving edits.** Fields save when they are left (blur or Enter). Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
 
-**Dev bridge.** In a plain browser (`pnpm dev`), `lib/api/dev.ts` sends the commands to `crates/lancelot-bridge`, through Vite's proxy at `/__bridge`, instead of Tauri. The bridge runs the real `Service` on real event files in a temporary folder, on `127.0.0.1:5174`, so screens are checked against the real core and nothing about money is imitated. It is never part of the app, and adding a command to the app means one line in its `commands.rs`, which a test enforces. Start it with `cargo run -p lancelot-bridge`, or the `bridge` entry in `.claude/launch.json`. To run a second pair beside it, set `LANCELOT_BRIDGE_PORT` for both the bridge and Vite, as the `bridge-alt` and `ui-alt` entries do.
+**Shared styles.** `lib/styles/forms.css` holds what the panels' forms share, as `form-*` classes. Layout stays in each component.
+
+**Dev bridge.** In a plain browser (`pnpm dev`), `lib/api/dev.ts` sends the commands to `crates/lancelot-bridge`, through Vite's proxy at `/__bridge`, instead of Tauri. The bridge runs the real `Service` on real event files in a temporary folder, on `127.0.0.1:5174`, so screens are checked against the real core and nothing about money is imitated. It is never part of the app, and adding a command to the app means an entry in its `commands.rs`, which a test enforces. Start it with `cargo run -p lancelot-bridge`, or the `bridge` entry in `.claude/launch.json`. To run a second pair beside it, set `LANCELOT_BRIDGE_PORT` for both the bridge and Vite, as the `bridge-alt` and `ui-alt` entries do.
 - **Scenarios:** `POST /__bridge/reset/<name>`, with the header `X-Lancelot-Bridge`, starts over from `start` (the default, nothing open), `example`, `empty`, `conflict` or `closed`. The recent events always include a damaged file and one that is already open. Reload the page afterwards. Add a scenario in `scenarios.rs`.
 - **Stand-ins:** the native dialogs never ask. Open gives the example event, a save gives a new path in the folder, receipts come from `fixtures/receipts` and sheets from `fixtures/tickets` in turn. Files dropped onto the page are uploaded to the folder. Opening an attachment in its app and revealing a file in Finder do nothing.
 - **Guard:** a POST without that header is refused, so other pages open in the browser cannot call commands that write files.

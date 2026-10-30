@@ -116,7 +116,7 @@
 
 		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
 			<div class="figure">
-				<span class="label">Forecast</span>
+				<span class="form-label">Forecast</span>
 				<span
 					class="result"
 					class:plus={budget.result.forecast > 0}
@@ -125,11 +125,11 @@
 				>
 			</div>
 			<div class="figure">
-				<span class="label">Planned</span>
+				<span class="form-label">Planned</span>
 				<span class="total">{formatAmount(budget.result.estimate, format, 'always')}</span>
 			</div>
 			<div class="figure">
-				<span class="label">{session.closed ? 'Result' : 'Result so far'}</span>
+				<span class="form-label">{session.closed ? 'Result' : 'Result so far'}</span>
 				<span class="total">{formatAmount(budget.result.actual, format, 'always')}</span>
 			</div>
 		</div>
@@ -268,11 +268,6 @@
 	.figure:first-child {
 		padding-left: 0;
 		border-left: none;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.result {

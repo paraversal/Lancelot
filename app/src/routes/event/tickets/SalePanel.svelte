@@ -3,7 +3,7 @@
 	// is income held by the person who took it, so their balance moves by the amount. Below, the
 	// earlier manual sales, each opening here.
 	import { untrack } from 'svelte';
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { ManualSaleDraft } from '#lib/api/generated/ManualSaleDraft.ts';
 	import type { ManualSaleId } from '#lib/api/generated/ManualSaleId.ts';
@@ -113,9 +113,9 @@
 
 	async function addPerson(name: string) {
 		try {
-			return (await session.run(() => api.addPerson(name))).id;
+			return (await session.change(() => api.addPerson(name))).id;
 		} catch (e) {
-			error = { field: 'person', message: e instanceof ApiError ? e.message : String(e) };
+			error = { field: 'person', message: errorMessage(e) };
 			return null;
 		}
 	}
@@ -133,8 +133,8 @@
 <Panel title="Manual sale" {onclose}>
 	<fieldset disabled={session.closed}>
 		<div class="pair">
-			<div class="labelled tier">
-				<label class="label" for="sale-tier">Tier</label>
+			<div class="form-field tier">
+				<label class="form-label" for="sale-tier">Tier</label>
 				<div class="select">
 					{#if tier !== null}
 						<span class="dot" style:background={tierColor(tiers.findIndex((t) => t.id === tier))}
@@ -151,9 +151,9 @@
 					</select>
 					<Icon name="down" size={14} />
 				</div>
-				{#if fieldError('tier')}<span class="error">{fieldError('tier')}</span>{/if}
+				{#if fieldError('tier')}<span class="form-error">{fieldError('tier')}</span>{/if}
 			</div>
-			<div class="labelled count">
+			<div class="form-field count">
 				<TextField
 					label="Count"
 					value={count}
@@ -161,7 +161,7 @@
 					oninput={(v) => (count = v)}
 					oncommit={(v) => (count = v ?? '')}
 				/>
-				{#if fieldError('count')}<span class="error">{fieldError('count')}</span>{/if}
+				{#if fieldError('count')}<span class="form-error">{fieldError('count')}</span>{/if}
 			</div>
 		</div>
 
@@ -194,7 +194,7 @@
 		</ChoiceField>
 
 		<div class="pair">
-			<div class="labelled date">
+			<div class="form-field date">
 				<DateField
 					label="Date"
 					value={date}
@@ -203,16 +203,16 @@
 					oninput={(v) => (date = v)}
 					oncommit={(v) => (date = v ?? date)}
 				/>
-				{#if fieldError('date')}<span class="error">{fieldError('date')}</span>{/if}
+				{#if fieldError('date')}<span class="form-error">{fieldError('date')}</span>{/if}
 			</div>
-			<div class="labelled reference">
+			<div class="form-field reference">
 				<TextField label="Reference" value={reference} oncommit={(v) => (reference = v)} />
 			</div>
 		</div>
 	</fieldset>
 
 	{#if error && !['tier', 'count', 'person', 'date'].includes(error.field ?? '')}
-		<p class="error">{error.message}</p>
+		<p class="form-error">{error.message}</p>
 	{/if}
 
 	{#if sales.length}
@@ -234,7 +234,7 @@
 		{#if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
 		{:else if confirming}
-			<div class="confirm">
+			<div class="form-confirm">
 				<strong>Delete this sale?</strong>
 				<span class="grow"></span>
 				<Button size="sm" kind="primary" onclick={remove}>Delete</Button>
@@ -252,28 +252,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
-	.labelled {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		min-width: 0;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
-	}
-
 	.pair {
 		display: flex;
 		gap: var(--spacing-3);
@@ -427,23 +405,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
-	}
-
-	.confirm {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		width: 100%;
-		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 </style>

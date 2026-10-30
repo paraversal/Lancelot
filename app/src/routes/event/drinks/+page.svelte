@@ -379,10 +379,6 @@
 		font-size: 13px;
 	}
 
-	.grow {
-		flex: 1;
-	}
-
 	.ok {
 		display: flex;
 		color: var(--color-plus);

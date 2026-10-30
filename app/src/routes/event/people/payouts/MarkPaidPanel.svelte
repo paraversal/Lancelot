@@ -1,7 +1,7 @@
 <script lang="ts">
 	// "Mark as paid" (R-PER-5): records every reimbursement on the payout list that has an
 	// IBAN, from one account on one date, in a single step. Repayments are not part of it.
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import Button from '#lib/components/Button.svelte';
 	import DateField from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -43,7 +43,7 @@
 			paid = shown;
 			setTimeout(onclose, 300 + wave(fx, shown.length));
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 </script>
@@ -93,7 +93,7 @@
 		oninput={(v) => v && (date = v)}
 		oncommit={(v) => (date = v)}
 	/>
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 	{#snippet footer()}
 		<Button kind="primary" shortcut="⌘↵" disabled={!payable.length} onclick={confirm}
 			>Mark as paid</Button
@@ -150,11 +150,5 @@
 		gap: 6px;
 		font-size: 13px;
 		color: var(--color-attention);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

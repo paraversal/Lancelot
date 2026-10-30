@@ -65,10 +65,31 @@ pub struct TierDraft {
     pub aliases: Vec<String>,
 }
 
+/// What a number of tickets of a tier come to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TicketMoney {
+    pub gross: Cents,
+    pub fees: Cents,
+    pub net: Cents,
+}
+
 impl Tier {
-    /// The fee on one ticket, rounded half-up to the cent (R-TKT-10).
-    pub fn fee(&self) -> Result<Cents, MoneyError> {
-        percent_bp(self.draft.price, self.draft.fee_bp)
+    /// The money of `count` tickets (R-COR-6). The fee is rounded half-up to the cent on each
+    /// ticket (R-TKT-10). Every figure and generated entry of a ticket comes from here.
+    pub fn money(&self, count: u32) -> Result<TicketMoney, MoneyError> {
+        let count = i64::from(count);
+        let gross = self.draft.price.checked_mul(count)?;
+        let fees = percent_bp(self.draft.price, self.draft.fee_bp)?.checked_mul(count)?;
+        Ok(TicketMoney {
+            gross,
+            fees,
+            net: gross.checked_sub(fees)?,
+        })
+    }
+
+    /// The refund on `count` tickets, rounded half-up to the cent on each ticket.
+    pub fn refund(&self, refund_bp: u32, count: u32) -> Result<Cents, MoneyError> {
+        percent_bp(self.draft.price, refund_bp)?.checked_mul(i64::from(count))
     }
 
     /// Whether `name` from the sheet means this tier: its name or one of its aliases,
@@ -725,12 +746,12 @@ impl Tickets {
 
         let mut views = Vec::new();
         for c in cancellations.values() {
-            let price = tiers.get(&c.tier).map_or(Cents::ZERO, |t| t.draft.price);
-            let per_ticket = match &c.terms {
-                Some(r) => percent_bp(price, r.refund_bp)?,
-                None => Cents::ZERO,
+            let refund_on = |count| match (tiers.get(&c.tier), &c.terms) {
+                (Some(t), Some(r)) => t.refund(r.refund_bp, count),
+                _ => Ok(Cents::ZERO),
             };
-            let refund = per_ticket.checked_mul(i64::from(c.count))?;
+            let per_ticket = refund_on(1)?;
+            let refund = refund_on(c.count)?;
             views.push(CancellationView {
                 order: c.order.clone(),
                 gone_now: reckoning.gone.get(&c.id).copied().unwrap_or(0),
@@ -776,12 +797,13 @@ impl Tickets {
 
         let mut manual_sales = Vec::new();
         for s in sales.values() {
-            let price = tiers
+            let money = tiers
                 .get(&s.draft.tier)
-                .map_or(Cents::ZERO, |t| t.draft.price);
+                .map(|t| t.money(s.draft.count))
+                .transpose()?;
             manual_sales.push(ManualSaleView {
                 sale: s.clone(),
-                gross: price.checked_mul(i64::from(s.draft.count))?,
+                gross: money.map_or(Cents::ZERO, |m| m.gross),
                 txn: generated.get(&Origin::TicketSale { sale: s.id }).copied(),
             });
         }
@@ -824,8 +846,10 @@ pub(crate) fn figures_at(
         let Some(terms) = c.terms.filter(|t| by_then(t.date)) else {
             continue;
         };
-        let price = tiers.get(&c.tier).map_or(Cents::ZERO, |t| t.draft.price);
-        let refund = percent_bp(price, terms.refund_bp)?.checked_mul(i64::from(c.count))?;
+        let refund = match tiers.get(&c.tier) {
+            Some(t) => t.refund(terms.refund_bp, c.count)?,
+            None => Cents::ZERO,
+        };
         let sum = refunds.entry(c.tier).or_default();
         *sum = sum.checked_add(refund)?;
     }
@@ -836,8 +860,9 @@ pub(crate) fn figures_at(
         let cancelled = reckoning.cancelled.get(&t.id).copied().unwrap_or(0);
         let manual = manual.get(&t.id).copied().unwrap_or(0);
         let sold = in_sheet + cancelled + manual;
-        let gross = t.draft.price.checked_mul(i64::from(sold))?;
-        let fees = t.fee()?.checked_mul(i64::from(in_sheet + cancelled))?;
+        // Manual sales pay no fee, so the two come from different counts.
+        let gross = t.money(sold)?.gross;
+        let fees = t.money(in_sheet + cancelled)?.fees;
         let refunds = refunds.get(&t.id).copied().unwrap_or_default();
         figures.push((
             t.id,
@@ -1137,6 +1162,27 @@ mod tests {
         assert_eq!(ok.aliases, ["Erm."]);
         // A tier may keep its own names.
         assert!(clean_tier(draft("Regular", &["Normal"]), Some(TierId(1)), &tiers).is_ok());
+    }
+
+    #[test]
+    fn a_tier_rounds_its_fee_and_refund_on_each_ticket() {
+        let tier = Tier {
+            id: TierId(1),
+            draft: TierDraft {
+                name: "Early Bird".into(),
+                price: Cents::new(2_500).unwrap(),
+                fee_bp: 250,
+                quota: None,
+                aliases: Vec::new(),
+            },
+        };
+        // 0,625 € rounds to 0,63 € on each ticket, not 1,875 € to 1,88 € on the three.
+        let money = tier.money(3).unwrap();
+        assert_eq!(money.gross.get(), 7_500);
+        assert_eq!(money.fees.get(), 189);
+        assert_eq!(money.net.get(), 7_311);
+        assert_eq!(tier.refund(2_502, 3).unwrap().get(), 1_878);
+        assert_eq!(tier.refund(2_502, 1).unwrap().get(), 626);
     }
 
     #[test]

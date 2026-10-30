@@ -10,7 +10,7 @@
 	// core checks the split against the total again when saving.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ApiError, api } from '#lib/api/index.ts';
+	import { ApiError, api, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
@@ -202,21 +202,21 @@
 	// --- adding people and categories on the spot ------------------------------------
 	async function addPerson(name: string) {
 		try {
-			return (await session.run(() => api.addPerson(name))).id;
+			return (await session.change(() => api.addPerson(name))).id;
 		} catch (e) {
-			error = { field: 'party', message: e instanceof ApiError ? e.message : String(e) };
+			error = { field: 'party', message: errorMessage(e) };
 			return null;
 		}
 	}
 
 	async function addCategory(name: string) {
 		try {
-			const added = await session.run(() =>
+			const added = await session.change(() =>
 				api.addAccount(kind === 'income' ? 'income' : 'expense', name)
 			);
 			return added.id;
 		} catch (e) {
-			error = { field: 'lines', message: e instanceof ApiError ? e.message : String(e) };
+			error = { field: 'lines', message: errorMessage(e) };
 			return null;
 		}
 	}
@@ -254,7 +254,7 @@
 		const total = kind === 'expense' || kind === 'income' ? amount : null;
 		try {
 			const files = [...pending];
-			const saved = await session.run(() =>
+			const saved = await session.change(() =>
 				api.saveTxn(
 					{
 						date: date!,
@@ -365,7 +365,7 @@
 							{/snippet}
 						</ChoiceField>
 						<div class="labelled">
-							<span class="label">Direction</span>
+							<span class="form-label">Direction</span>
 							<Segmented
 								label="Direction"
 								bind:value={direction}
@@ -390,7 +390,7 @@
 						{#if overSettles}
 							<span class="attention">more than {formatAmount(net, format, 'magnitude')}</span>
 						{/if}
-						{#if fieldError('amount')}<span class="error">{fieldError('amount')}</span>{/if}
+						{#if fieldError('amount')}<span class="form-error">{fieldError('amount')}</span>{/if}
 					</div>
 
 					{#if kind !== 'settle'}
@@ -417,11 +417,11 @@
 							onchange={(v) => (other = v)}
 							onadd={async (name) => {
 								try {
-									return (await session.run(() => api.addAccount('asset', name))).id;
+									return (await session.change(() => api.addAccount('asset', name))).id;
 								} catch (e) {
 									error = {
 										field: 'other',
-										message: e instanceof ApiError ? e.message : String(e)
+										message: errorMessage(e)
 									};
 									return null;
 								}
@@ -432,7 +432,7 @@
 					{#if kind === 'expense' || kind === 'income'}
 						<div class="split">
 							<div class="split-head">
-								<span class="label">Split</span>
+								<span class="form-label">Split</span>
 								{#if left !== null}
 									<span class="left" class:done={left === 0}>{formatAmount(left, format)} left</span
 									>
@@ -526,11 +526,11 @@
 							>
 								<Icon name="plus" size={14} />Line
 							</button>
-							{#if fieldError('lines')}<span class="error">{fieldError('lines')}</span>{/if}
+							{#if fieldError('lines')}<span class="form-error">{fieldError('lines')}</span>{/if}
 						</div>
 					{/if}
 
-					<div class="pair">
+					<div class="form-pair">
 						<DateField
 							label="Date"
 							value={date}
@@ -567,7 +567,7 @@
 						/>
 					{/if}
 					{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
-						<p class="error">{error.message}</p>
+						<p class="form-error">{error.message}</p>
 					{/if}
 				</div>
 			{/key}
@@ -630,11 +630,6 @@
 		gap: 6px;
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--color-ink-muted);
-	}
-
-	.label {
-		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
 	}
 
@@ -704,21 +699,9 @@
 		align-self: flex-start;
 	}
 
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
-	}
-
 	.attention {
 		font-size: var(--type-xs);
 		color: var(--color-attention);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 
 	.confirm {
@@ -729,9 +712,5 @@
 		padding-top: 14px;
 		border-top: 1px solid var(--color-rule);
 		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 </style>

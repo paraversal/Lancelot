@@ -7,7 +7,7 @@ import IbanField from './IbanField.svelte';
 
 // The real parsers live in Rust; here they are replaced by fixed answers.
 vi.mock('../api', async () => {
-	const { ApiError } = await vi.importActual<typeof import('../api')>('../api');
+	const { ApiError, errorMessage } = await vi.importActual<typeof import('../api')>('../api');
 	const amounts: Record<string, { cents: number; ambiguous: boolean }> = {
 		'1.234,5': { cents: 123450, ambiguous: false },
 		'1.234': { cents: 123400, ambiguous: true },
@@ -26,6 +26,7 @@ vi.mock('../api', async () => {
 		new ApiError({ code, message: messages[code], field: null, report: null });
 	return {
 		ApiError,
+		errorMessage,
 		api: {
 			parseAmount: vi.fn(async (input: string) => {
 				if (amounts[input]) return amounts[input];

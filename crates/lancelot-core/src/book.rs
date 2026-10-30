@@ -1060,9 +1060,73 @@ impl Book {
     }
 
     /// Makes a closed event editable again. The store records it in the change log.
-    pub fn reopen(&mut self) {
+    pub fn reopen(&mut self) -> Result<(), DomainError> {
         self.event.closed_at = None;
         self.event.closing_overrides.clear();
+        Ok(())
+    }
+
+    /// Records every reimbursement on the payout list that has an IBAN, from `account` on
+    /// `date` (R-PER-5). Returns how many were recorded.
+    pub fn mark_payouts_paid(
+        &mut self,
+        account: AccountId,
+        date: Date,
+    ) -> Result<usize, DomainError> {
+        let list = self.payouts.clone();
+        self.change(|b| {
+            let mut n = 0;
+            for p in list.payouts.iter().filter(|p| p.iban.is_some()) {
+                let draft = TxnDraft {
+                    date,
+                    description: "Reimbursement".into(),
+                    counterparty: None,
+                    notes: Some(p.reference.clone()),
+                    entry: Entry::Settle {
+                        person: p.person,
+                        account,
+                        amount: p.amount,
+                        direction: SettleDirection::Reimburse,
+                    },
+                    total: None,
+                };
+                b.save_txn(&draft, None)?;
+                n += 1;
+            }
+            Ok(n)
+        })
+    }
+
+    /// Replaces both counts of an asset account in one change, as the count panel saves them.
+    /// `None` removes a count, and so does an opening count of zero.
+    pub fn set_counts(
+        &mut self,
+        account: AccountId,
+        opening: Option<(Date, Cents)>,
+        closing: Option<(Date, Cents)>,
+    ) -> Result<(), DomainError> {
+        self.change(|b| {
+            if b.account(account).map(|a| a.kind) != Some(AccountKind::Asset) {
+                return Err(DomainError::WrongAccountKind {
+                    field: "account".into(),
+                });
+            }
+            match opening {
+                Some((_, amount)) if amount.is_negative() => {
+                    return Err(DomainError::NegativeAmount {
+                        field: "opening".into(),
+                    });
+                }
+                Some((date, amount)) if amount.is_positive() => {
+                    b.set_opening_count(account, date, amount)?;
+                }
+                _ => b.clear_opening_count(account)?,
+            }
+            match closing {
+                Some((date, amount)) => b.set_closing_count(account, date, amount),
+                None => b.clear_closing_count(account),
+            }
+        })
     }
 
     // --- internals -----------------------------------------------------------------------

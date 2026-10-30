@@ -57,7 +57,9 @@ fn conflict(store: &mut Store) -> Result<(), ApiError> {
         tier("Regular", "32", 250),
         tier("Supporter", "45", 0),
     ] {
-        store.add_tier(draft).map_err(store_error)?;
+        store
+            .change(|book| book.add_tier(draft))
+            .map_err(store_error)?;
     }
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/tickets");
     for (file, day) in [("import-1.ods", 1), ("import-2.ods", 8)] {

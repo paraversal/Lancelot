@@ -1,8 +1,9 @@
-//! The commands by name, as `app/src-tauri/src/commands.rs` offers them to the UI. One line per
-//! command; `tests/bridge.rs` checks that none of the app's is missing.
+//! The commands by name, as `app/src-tauri/src/commands.rs` offers them to the UI.
+//! `tests/bridge.rs` checks that none of the app's is missing.
 
 use std::path::PathBuf;
 
+use lancelot_core::{Book, DomainError, Person};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -24,6 +25,28 @@ fn json<T: Serialize>(result: Result<T>) -> Result<Value> {
 fn date(args: &Value) -> Result<time::Date> {
     let text: String = arg(args, "date")?;
     Ok(lancelot_core::parse_date(&text)?)
+}
+
+/// A change to the book that takes one argument.
+fn one<A: DeserializeOwned, T>(
+    s: &mut Service,
+    args: &Value,
+    key: &str,
+    command: impl FnOnce(&mut Book, A) -> std::result::Result<T, DomainError>,
+) -> Result<Value> {
+    let first = arg(args, key)?;
+    json(s.change(|b| command(b, first)))
+}
+
+/// A change to the book that takes two arguments.
+fn two<A: DeserializeOwned, B: DeserializeOwned, T>(
+    s: &mut Service,
+    args: &Value,
+    keys: (&str, &str),
+    command: impl FnOnce(&mut Book, A, B) -> std::result::Result<T, DomainError>,
+) -> Result<Value> {
+    let (first, second) = (arg(args, keys.0)?, arg(args, keys.1)?);
+    json(s.change(|b| command(b, first, second)))
 }
 
 pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
@@ -55,10 +78,12 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
             Ok(Value::Null)
         }
         "event_current" => json(Ok(s.current())),
-        "event_update" => json(s.update_event(arg(a, "details")?)),
+        "event_update" => one(s, a, "details", Book::update_event),
+
         "event_set_default_reimbursement_account" => {
-            json(s.set_default_reimbursement_account(arg(a, "account")?))
+            one(s, a, "account", Book::set_default_reimbursement_account)
         }
+
         "integrity_check" => json(s.check_integrity()),
         "backups_list" => json(s.backups(&arg::<PathBuf>(a, "event")?)),
         "backup_restore" => json(s.restore_backup(
@@ -81,75 +106,149 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "attachment_export" => {
             json(s.export_attachment(arg(a, "id")?, &arg::<PathBuf>(a, "target")?))
         }
-        "txn_delete" => json(s.delete_txn(arg(a, "id")?)),
-        "account_add" => json(s.add_account(arg(a, "kind")?, &arg::<String>(a, "name")?)),
-        "asset_add" => json(s.add_asset(&arg::<String>(a, "name")?, arg(a, "assetType")?)),
-        "asset_set_type" => json(s.set_asset_type(arg(a, "id")?, arg(a, "assetType")?)),
+        "txn_delete" => one(s, a, "id", Book::delete_txn),
+
+        "account_add" => {
+            let kind = arg(a, "kind")?;
+            let name: String = arg(a, "name")?;
+            json(s.add(|b| b.add_account(kind, &name)))
+        }
+
+        "asset_add" => {
+            let name: String = arg(a, "name")?;
+            let asset_type = arg(a, "assetType")?;
+            json(s.add(|b| b.add_asset(&name, asset_type)))
+        }
+
+        "asset_set_type" => two(s, a, ("id", "assetType"), Book::set_asset_type),
+
         "counts_set" => {
             json(s.set_counts(arg(a, "account")?, arg(a, "opening")?, arg(a, "closing")?))
         }
-        "reconciliation_add" => json(s.add_reconciliation(
-            arg(a, "account")?,
-            &arg::<String>(a, "date")?,
-            arg(a, "amount")?,
-        )),
-        "reconciliation_update" => json(s.update_reconciliation(
-            arg(a, "id")?,
-            &arg::<String>(a, "date")?,
-            arg(a, "amount")?,
-        )),
-        "reconciliation_delete" => json(s.delete_reconciliation(arg(a, "id")?)),
-        "account_rename" => json(s.rename_account(arg(a, "id")?, &arg::<String>(a, "name")?)),
-        "person_add" => json(s.add_person(&arg::<String>(a, "name")?)),
+        "reconciliation_add" => {
+            let account = arg(a, "account")?;
+            let date = date(a)?;
+            let amount = arg(a, "amount")?;
+            json(s.change(|b| b.add_reconciliation(account, date, amount)))
+        }
+
+        "reconciliation_update" => {
+            let id = arg(a, "id")?;
+            let date = date(a)?;
+            let amount = arg(a, "amount")?;
+            json(s.change(|b| b.update_reconciliation(id, date, amount)))
+        }
+
+        "reconciliation_delete" => one(s, a, "id", Book::delete_reconciliation),
+
+        "account_rename" => {
+            let id = arg(a, "id")?;
+            let name: String = arg(a, "name")?;
+            json(s.change(|b| b.rename_account(id, &name)))
+        }
+
+        "person_add" => {
+            let name: String = arg(a, "name")?;
+            json(s.add(|b| b.add_person(&name, Person::default())))
+        }
+
         "person_update" => {
-            json(s.update_person(arg(a, "id")?, &arg::<String>(a, "name")?, arg(a, "person")?))
+            let id = arg(a, "id")?;
+            let name: String = arg(a, "name")?;
+            let person = arg(a, "person")?;
+            json(s.change(|b| b.update_person(id, &name, person)))
         }
-        "budget_line_add" => json(s.add_budget_line(arg(a, "draft")?)),
-        "budget_line_update" => json(s.update_budget_line(arg(a, "id")?, arg(a, "draft")?)),
-        "budget_line_delete" => json(s.delete_budget_line(arg(a, "id")?)),
-        "cost_centre_add" => json(s.add_cost_centre(&arg::<String>(a, "name")?)),
+
+        "budget_line_add" => one(s, a, "draft", Book::add_budget_line),
+
+        "budget_line_update" => two(s, a, ("id", "draft"), Book::update_budget_line),
+
+        "budget_line_delete" => one(s, a, "id", Book::delete_budget_line),
+
+        "cost_centre_add" => {
+            let name: String = arg(a, "name")?;
+            json(s.change(|b| b.add_cost_centre(&name)))
+        }
+
         "cost_centre_rename" => {
-            json(s.rename_cost_centre(arg(a, "id")?, &arg::<String>(a, "name")?))
+            let id = arg(a, "id")?;
+            let name: String = arg(a, "name")?;
+            json(s.change(|b| b.rename_cost_centre(id, &name)))
         }
-        "cost_centre_delete" => json(s.delete_cost_centre(arg(a, "id")?)),
-        "category_set_cost_centre" => {
-            json(s.set_category_cost_centre(arg(a, "category")?, arg(a, "costCentre")?))
-        }
-        "drink_product_add" => json(s.add_drink_product(arg(a, "draft")?)),
-        "drink_product_update" => json(s.update_drink_product(arg(a, "id")?, arg(a, "draft")?)),
-        "drink_product_delete" => json(s.delete_drink_product(arg(a, "id")?)),
-        "drink_settings_set" => json(s.set_drink_settings(arg(a, "settings")?)),
-        "tier_add" => json(s.add_tier(arg(a, "draft")?)),
-        "tier_update" => json(s.update_tier(arg(a, "id")?, arg(a, "draft")?)),
-        "tier_delete" => json(s.delete_tier(arg(a, "id")?)),
-        "ticket_columns_set" => json(s.set_ticket_columns(arg(a, "columns")?)),
+
+        "cost_centre_delete" => one(s, a, "id", Book::delete_cost_centre),
+
+        "category_set_cost_centre" => two(
+            s,
+            a,
+            ("category", "costCentre"),
+            Book::set_category_cost_centre,
+        ),
+
+        "drink_product_add" => one(s, a, "draft", Book::add_drink_product),
+
+        "drink_product_update" => two(s, a, ("id", "draft"), Book::update_drink_product),
+
+        "drink_product_delete" => one(s, a, "id", Book::delete_drink_product),
+
+        "drink_settings_set" => one(s, a, "settings", Book::set_drink_settings),
+
+        "tier_add" => one(s, a, "draft", Book::add_tier),
+
+        "tier_update" => two(s, a, ("id", "draft"), Book::update_tier),
+
+        "tier_delete" => one(s, a, "id", Book::delete_tier),
+
+        "ticket_columns_set" => one(s, a, "columns", Book::set_ticket_columns),
+
         "tickets_preview" => json(s.preview_tickets(&arg::<PathBuf>(a, "path")?, date(a)?)),
         "tickets_import" => json(s.import_tickets(
             &arg::<PathBuf>(a, "path")?,
             date(a)?,
             &arg::<String>(a, "sha256")?,
         )),
-        "import_set_date" => json(s.set_import_date(arg(a, "id")?, date(a)?)),
+        "import_set_date" => {
+            let id = arg(a, "id")?;
+            let date = date(a)?;
+            json(s.change(|b| b.set_import_date(id, date)))
+        }
+
         "import_delete_preview" => json(s.preview_delete_import(arg(a, "id")?)),
-        "import_delete" => json(s.delete_import(arg(a, "id")?)),
-        "account_delete" => json(s.delete_account(arg(a, "id")?)),
-        "manual_sale_add" => json(s.add_manual_sale(arg(a, "draft")?)),
-        "manual_sale_update" => json(s.update_manual_sale(arg(a, "id")?, arg(a, "draft")?)),
-        "manual_sale_delete" => json(s.delete_manual_sale(arg(a, "id")?)),
-        "cancellation_add" => json(s.add_cancellation(arg(a, "draft")?)),
-        "cancellation_update" => json(s.update_cancellation(arg(a, "id")?, arg(a, "edit")?)),
-        "cancellation_delete" => json(s.delete_cancellation(arg(a, "id")?)),
-        "conflict_resolve" => json(s.resolve_conflict(
-            &arg::<String>(a, "order")?,
-            arg(a, "tier")?,
-            arg(a, "resolution")?,
-        )),
+        "import_delete" => one(s, a, "id", Book::delete_import),
+
+        "account_delete" => one(s, a, "id", Book::delete_account),
+
+        "manual_sale_add" => one(s, a, "draft", Book::add_manual_sale),
+
+        "manual_sale_update" => two(s, a, ("id", "draft"), Book::update_manual_sale),
+
+        "manual_sale_delete" => one(s, a, "id", Book::delete_manual_sale),
+
+        "cancellation_add" => one(s, a, "draft", Book::add_cancellation),
+
+        "cancellation_update" => two(s, a, ("id", "edit"), Book::update_cancellation),
+
+        "cancellation_delete" => one(s, a, "id", Book::delete_cancellation),
+
+        "conflict_resolve" => {
+            let order: String = arg(a, "order")?;
+            let tier = arg(a, "tier")?;
+            let resolution = arg(a, "resolution")?;
+            json(s.change(|b| b.resolve_conflict(&order, tier, resolution)))
+        }
+
         "iban_check" => json(s.check_iban(&arg::<String>(a, "input")?)),
         "transactions_export_csv" => json(s.export_transactions_csv(&arg::<PathBuf>(a, "target")?)),
         "event_close" => json(s.close_event(arg(a, "overrides")?)),
-        "event_reopen" => json(s.reopen_event()),
+        "event_reopen" => json(s.change(|b| b.reopen())),
+
         "payouts_export_csv" => json(s.export_payouts_csv(&arg::<PathBuf>(a, "target")?)),
-        "payouts_mark_paid" => json(s.mark_payouts_paid(arg(a, "account")?, date(a)?)),
+        "payouts_mark_paid" => {
+            let account = arg(a, "account")?;
+            let date = date(a)?;
+            json(s.change(|b| b.mark_payouts_paid(account, date)))
+        }
+
         _ => Err(ApiError::new(
             "unknown_command",
             format!("the dev bridge has no command {command}"),

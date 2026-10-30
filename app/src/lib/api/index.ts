@@ -64,6 +64,11 @@ export class ApiError extends Error {
 	}
 }
 
+/** What to show for a failure of any kind. */
+export function errorMessage(e: unknown): string {
+	return e instanceof ApiError ? e.message : String(e);
+}
+
 function isErrorData(value: unknown): value is ApiErrorData {
 	return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
 }

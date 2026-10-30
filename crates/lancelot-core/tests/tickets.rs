@@ -382,27 +382,37 @@ fn tickets_survive_saving_and_reopening() {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
-    let regular = store.add_tier(tier("Regular", "32", 250)).unwrap();
+    let regular = store
+        .change(|book| book.add_tier(tier("Regular", "32", 250)))
+        .unwrap();
     let mut early = tier("Early Bird", "25", 0);
     early.quota = Some(60);
     early.aliases = vec!["Frühbucher".into()];
-    store.add_tier(early).unwrap();
-    store.add_tier(tier("Supporter", "45", 0)).unwrap();
+    store.change(|book| book.add_tier(early)).unwrap();
+    store
+        .change(|book| book.add_tier(tier("Supporter", "45", 0)))
+        .unwrap();
     let (name, data) = fixture("import-1.ods");
     let first = store.import_tickets(&name, &data, june(1)).unwrap();
     let (name, data) = fixture("import-2.ods");
     let preview = store.preview_ticket_import(&name, &data, june(1)).unwrap();
     assert_eq!(preview.removed.len(), 2);
     store.import_tickets(&name, &data, june(8)).unwrap();
-    store.set_import_date(first, june(2)).unwrap();
-    let anna = store.add_person("Anna", Person::default()).unwrap();
     store
-        .add_manual_sale(ManualSaleDraft {
-            tier: regular,
-            count: 2,
-            person: anna,
-            date: june(12),
-            reference: None,
+        .change(|book| book.set_import_date(first, june(2)))
+        .unwrap();
+    let anna = store
+        .change(|book| book.add_person("Anna", Person::default()))
+        .unwrap();
+    store
+        .change(|book| {
+            book.add_manual_sale(ManualSaleDraft {
+                tier: regular,
+                count: 2,
+                person: anna,
+                date: june(12),
+                reference: None,
+            })
         })
         .unwrap();
     let book = store.book().clone();
@@ -428,9 +438,15 @@ fn imported_file(dir: &TempDir) -> (std::path::PathBuf, Store) {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
-    store.add_tier(tier("Early Bird", "25", 0)).unwrap();
-    store.add_tier(tier("Regular", "32", 250)).unwrap();
-    store.add_tier(tier("Supporter", "45", 0)).unwrap();
+    store
+        .change(|book| book.add_tier(tier("Early Bird", "25", 0)))
+        .unwrap();
+    store
+        .change(|book| book.add_tier(tier("Regular", "32", 250)))
+        .unwrap();
+    store
+        .change(|book| book.add_tier(tier("Supporter", "45", 0)))
+        .unwrap();
     let (name, data) = fixture("import-1.ods");
     store.import_tickets(&name, &data, june(1)).unwrap();
     (path, store)
@@ -544,7 +560,7 @@ fn a_wrongly_chosen_sheet_can_be_deleted_and_leaves_nothing_behind() {
         "only a preview"
     );
 
-    store.delete_import(wrong).unwrap();
+    store.change(|book| book.delete_import(wrong)).unwrap();
     assert_eq!(store.book().tickets().conflict_count(), 0);
     assert_eq!(store.book().tickets().total, clean.total);
     let log = store.change_log(50).unwrap();
@@ -1153,7 +1169,9 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
-    let regular = store.add_tier(tier("Regular", "32", 250)).unwrap();
+    let regular = store
+        .change(|book| book.add_tier(tier("Regular", "32", 250)))
+        .unwrap();
     let rows = |rows: &[(&str, &str)]| {
         let mut text = String::from("Order ID,Ticket\n");
         for (order, tier) in rows {
@@ -1168,33 +1186,37 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
         .import_tickets("b.csv", &rows(ONE_LEFT), june(2))
         .unwrap();
     let id = store
-        .resolve_conflict(
-            "4711",
-            regular,
-            Resolution::Refund {
-                count: 1,
-                terms: terms(5000),
-                note: Some("called in".into()),
-            },
-        )
+        .change(|book| {
+            book.resolve_conflict(
+                "4711",
+                regular,
+                Resolution::Refund {
+                    count: 1,
+                    terms: terms(5000),
+                    note: Some("called in".into()),
+                },
+            )
+        })
         .unwrap();
     store
-        .resolve_conflict("4711", regular, correction(1))
+        .change(|book| book.resolve_conflict("4711", regular, correction(1)))
         .unwrap();
     let cash = store.book().account_by_role(Role::CashBox).unwrap().id;
     store
-        .update_cancellation(
-            id,
-            CancellationEdit {
-                count: 1,
-                terms: RefundTerms {
-                    refund_bp: 2500,
-                    date: june(4),
-                    payer: Some(cash),
+        .change(|book| {
+            book.update_cancellation(
+                id,
+                CancellationEdit {
+                    count: 1,
+                    terms: RefundTerms {
+                        refund_bp: 2500,
+                        date: june(4),
+                        payer: Some(cash),
+                    },
+                    note: None,
                 },
-                note: None,
-            },
-        )
+            )
+        })
         .unwrap();
     let book = store.book().clone();
     let log = store.change_log(1000).unwrap();
@@ -1216,18 +1238,22 @@ fn a_file_with_a_cancellation_of_tickets_it_never_had_does_not_open() {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
-    let regular = store.add_tier(tier("Regular", "32", 0)).unwrap();
+    let regular = store
+        .change(|book| book.add_tier(tier("Regular", "32", 0)))
+        .unwrap();
     let data = b"Order ID,Ticket\n4711,Regular\n";
     store.import_tickets("a.csv", data, june(1)).unwrap();
     store
-        .add_cancellation(CancellationDraft {
-            source: CancellationSource::Order {
-                order: "4711".into(),
-                tier: regular,
-            },
-            count: 1,
-            terms: terms(0),
-            note: None,
+        .change(|book| {
+            book.add_cancellation(CancellationDraft {
+                source: CancellationSource::Order {
+                    order: "4711".into(),
+                    tier: regular,
+                },
+                count: 1,
+                terms: terms(0),
+                note: None,
+            })
         })
         .unwrap();
     drop(store);

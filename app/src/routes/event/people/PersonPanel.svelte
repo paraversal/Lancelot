@@ -117,11 +117,11 @@
 			multiline
 			oncommit={(v) => save(person.name, { notes: v })}
 		/>
-		{#if error}<p class="error">{error.message}</p>{/if}
+		{#if error}<p class="form-error">{error.message}</p>{/if}
 	{:else}
-		{#if error}<p class="error">{error.message}</p>{/if}
+		{#if error}<p class="form-error">{error.message}</p>{/if}
 		<section>
-			<span class="label">Bank</span>
+			<span class="form-label">Bank</span>
 			{#if iban}
 				<strong class="iban">{iban}</strong>
 				<span class="muted"
@@ -134,17 +134,17 @@
 
 		<section>
 			{#if net > 0}
-				<span class="label">Owed to {first}</span>
+				<span class="form-label">Owed to {first}</span>
 				<span class="figure"
 					><MovingAmount value={Math.abs(net)} {format} level={level('A5')} /></span
 				>
 			{:else if net < 0}
-				<span class="label">{first} owes</span>
+				<span class="form-label">{first} owes</span>
 				<span class="figure attention"
 					><MovingAmount value={Math.abs(net)} {format} level={level('A5')} /></span
 				>
 			{:else}
-				<span class="label">Balance</span>
+				<span class="form-label">Balance</span>
 				<span class="figure settled" in:stampIn={{ level: level('C1') }}>Settled</span>
 			{/if}
 		</section>
@@ -211,11 +211,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.muted {
@@ -302,15 +297,5 @@
 		font-size: 13px;
 		color: var(--color-ink-muted);
 		text-align: right;
-	}
-
-	.grow {
-		flex: 1;
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

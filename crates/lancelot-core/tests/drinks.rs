@@ -315,26 +315,34 @@ fn everything_survives_saving_and_reopening() {
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
 
     let centre = store.book().drinks_cost_centre().unwrap().id;
-    let crew = store.add_cost_centre("Crew").unwrap();
-    let gone = store.add_cost_centre("Gone").unwrap();
+    let crew = store.change(|book| book.add_cost_centre("Crew")).unwrap();
+    let gone = store.change(|book| book.add_cost_centre("Gone")).unwrap();
     let kitchen = expense(store.book(), "Kitchen");
     let verein = role(store.book(), Role::Verein);
-    store.set_category_cost_centre(kitchen, Some(crew)).unwrap();
+    store
+        .change(|book| book.set_category_cost_centre(kitchen, Some(crew)))
+        .unwrap();
     let food = store
-        .add_budget_line(plan(kitchen, "100", Some(crew)))
+        .change(|book| book.add_budget_line(plan(kitchen, "100", Some(crew))))
         .unwrap();
     let pils = store
-        .add_drink_product(product("Pils", 10, 4, "1"))
+        .change(|book| book.add_drink_product(product("Pils", 10, 4, "1")))
         .unwrap();
-    let cola = store.add_drink_product(product("Cola", 5, 1, "2")).unwrap();
-    store
-        .update_drink_product(pils, product("Pils 0,33", 10, 5, "1"))
+    let cola = store
+        .change(|book| book.add_drink_product(product("Cola", 5, 1, "2")))
         .unwrap();
-    store.delete_drink_product(cola).unwrap();
     store
-        .set_drink_settings(DrinkSettings {
-            supplier: Some("Hoffmann".into()),
-            price_per_strich: Some(eur("1,50")),
+        .change(|book| book.update_drink_product(pils, product("Pils 0,33", 10, 5, "1")))
+        .unwrap();
+    store
+        .change(|book| book.delete_drink_product(cola))
+        .unwrap();
+    store
+        .change(|book| {
+            book.set_drink_settings(DrinkSettings {
+                supplier: Some("Hoffmann".into()),
+                price_per_strich: Some(eur("1,50")),
+            })
         })
         .unwrap();
     let drinks = expense(store.book(), "Drinks");
@@ -355,7 +363,7 @@ fn everything_survives_saving_and_reopening() {
             },
         )
     };
-    store.save_txn(&txn, None).unwrap();
+    store.change(|book| book.save_txn(&txn, None)).unwrap();
     // A centre that goes away must clear its references before its row does.
     let lines = vec![tagged(kitchen, "1", gone)];
     let last = draft(
@@ -365,8 +373,8 @@ fn everything_survives_saving_and_reopening() {
             lines,
         },
     );
-    store.save_txn(&last, None).unwrap();
-    store.delete_cost_centre(gone).unwrap();
+    store.change(|book| book.save_txn(&last, None)).unwrap();
+    store.change(|book| book.delete_cost_centre(gone)).unwrap();
 
     let entities: Vec<String> = store
         .change_log(100)
