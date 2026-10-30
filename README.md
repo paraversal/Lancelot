@@ -4,6 +4,7 @@ A local desktop app for settling volunteer-run events: receipts, advances, reimb
 
 - [Requirements](docs/requirements.md)
 - [Roadmap](docs/roadmap.md)
+- [Future](docs/FUTURE.md)
 - [Technical design](docs/technical-design.md)
 - [Design notes](docs/design/README.md)
 

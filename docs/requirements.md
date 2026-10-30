@@ -259,10 +259,10 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 | Domain core | **Rust crate** (`lancelot-core`), independent of Tauri | All money logic in one strongly typed, testable place. The UI only displays results and sends commands. |
 | Storage | **SQLite**, one `.lancelot` file per event, attachments as BLOBs | One portable file, transactional writes, open format, trivial backup. |
 | Money type | `Cents(i64)` newtype in Rust. Crosses the IPC boundary as an integer, formatted for display in the UI only. | Rules out float errors by construction. |
-| PDF export | Generated in Rust (e.g. `typst` as a library) or from HTML via the webview's print-to-PDF | To decide in the design phase. |
+| PDF export | The webview's print dialog, with `typst` as an option for the polished report (M13) | Decided in the [technical design](technical-design.md). |
 | Strichliste | A Rust trait `StrichlisteProvider` in core, with a CSV implementation | Matches R-STR-1. |
 | Excel import | `calamine` crate in Rust (reads .xlsx/.xls/.ods) | Pure Rust, read-only, no Office installation needed. |
-| Charts | A lightweight Svelte-friendly chart library (e.g. LayerChart or uPlot) | Sales over time and plan vs actual. To decide in the design phase. |
+| Charts | Hand-written SVG components, no library | The design needs only simple bars. Decided in the [technical design](technical-design.md). |
 
 Alternatives considered:
 - **Electron**: heavier, and the money logic would live in JS.

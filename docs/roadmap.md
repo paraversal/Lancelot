@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. M9 is done: cost centres and the Drinks page, without the frame's Strichliste, which is M11. M10 is done: reconciliation checkpoints, templates and copying from another event; the Phase 2 exit still needs the next event. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. M9 is done: cost centres and the Drinks page, without the frame's Strichliste, which is M11. M10 is done: reconciliation checkpoints, templates and copying from another event; the Phase 2 exit still needs the next event. The [refactoring](#refactoring) comes first. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -39,7 +39,7 @@ Decide everything that is expensive to change later, then set up an empty projec
   - [x] File handling: opening, the single-writer lock, atomic save, backups (R-NF-5) and schema migrations.
   - [x] The rounding and splitting rules written out with examples (R-COR-3).
 - [x] Decisions, recorded in the technical design:
-  - **PDF export:** Typst as a library.
+  - **PDF export:** the print dialog for now; Typst stays an option for M13.
   - **Charts:** hand-written SVG, to be revisited in M8.
   - **HEIC and PDF preview:** native WebKit.
   - **Where the amount parser runs:** Rust behind IPC, with a shared test-vector file.
@@ -270,6 +270,76 @@ Built in three steps, each in its own pull request.
 
 ---
 
+## Refactoring
+
+From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm) of 2026-10-30, made at commit `071e403`; F-numbers refer to its findings. The stages run in order and have no deadline. No real event file exists yet, so `0001_initial.sql` is edited in place until Stage 6 freezes the format. Balancing, integer cents and derived balances (R-COR-1 to R-COR-6) are never traded for flexibility.
+
+### Stage 0 · Docs
+
+- [x] This section, and [FUTURE.md](FUTURE.md) for longer-term changes.
+- [x] Trim the technical design to decisions and invariants, and correct what had drifted (F22). `UI.fig` stays private.
+- [x] Remove the untracked `app/pnpm-workspace.yaml`: pnpm generated it, and its exclusions are no longer needed.
+
+### Stage 1 · Dev bridge (F8)
+
+The browser checks run against the real core, and the mock backend goes.
+
+- [ ] A development-only program, bound to `127.0.0.1` and never shipped, that exposes the real `Service`'s commands. `backend()` in `lib/api` calls it in a plain browser. Without the bridge running, the browser shows a clear error. If compiling all of Tauri for it is too slow, `Service` moves into its own small crate.
+- [ ] Named scenarios, such as an open conflict or an import preview, built on `tests/mock_event.rs`. A reset call loads one into a temporary `.lancelot` file.
+- [ ] Attachments served by the bridge, and the fake file dialogs moved into a small dev-only file.
+- [ ] Add the bridge to `.claude/launch.json`, and check every screen through it, including the `/design` pages if they rely on the mock.
+- [ ] Delete `app/src/lib/api/mock/`.
+
+**Exit:** the UI runs in a browser against real SQLite, and nothing imports the mock.
+
+### Stage 2 · Protect files
+
+- [ ] Re-imports no longer break earlier statement checkpoints: ticket income in a checkpoint comes from `tickets::figures_at` as of its date (F1).
+- [ ] Generated ticket entries are regenerated on open. A difference is written with change log entries, and a changed amount is an integrity warning, so the file no longer opens as damaged (F2).
+- [ ] `delete_import`, refused only while a cancellation still needs its tickets, and `delete_account` for accounts nothing refers to (F5).
+- [ ] Negative counts on bank accounts, with closing counts and checkpoints compared through one function. It uses the role check until Stage 5 (F6).
+- [ ] Errors appear where they occur: payouts and profitability computed in `recompute`, a negative opening count rejected, a receipt about to be lost shown in the import preview, and a distinct error for a file that is intact but inconsistent (F13).
+- [ ] A property test over imports and checkpoints, and all workspace tests on every push (F14).
+
+### Stage 3 · Remove code, no behaviour change
+
+In this order, so the round-trip check is there for the `persist` rewrite.
+
+- [ ] Each write checks one round trip, `Book::from_parts(read::parts(tx))? == next`, in place of the quick check. The `Book` built during the check on open is reused (F9).
+- [ ] A public `Store::change` and one generic `Service` helper replace the forwarding methods. Multi-step operations such as `mark_payouts_paid` and `set_counts` move into `Book` (F7).
+- [ ] `PRAGMA defer_foreign_keys = ON` in `persist`, with each table handled in one place by a small helper (F10).
+- [ ] One function for the money of a tier and count, and one for a refund, used by `sync_tickets`, the views and the figures (F11).
+- [ ] One error helper, a shared form stylesheet and one session method (F20).
+
+### Stage 4 · Decouple
+
+- [ ] `TxnKind::Refund`, so the ledger reads a kind, not an origin. `Book::open_items()` combines the items of each feature. `ticket_columns` and `drinks` move from `Event` to `Book`, and `Ledger::compute` is split by figure (F15).
+- [ ] `TxnView` says what the UI now infers: who, direction, whether a receipt is needed and the `Entry` to edit. A synchronous preview command gives fee and refund amounts (F12).
+
+### Stage 5 · Open the flows
+
+All schema changes of the refactoring land here, as one batch.
+
+- [ ] **Any account to any account (F3).** The Transfer form gets free From and To fields over assets, people and categories. So A → B: 50 € means A is owed 50 € and B owes 50 €, and B's later 50 € expense nets B to zero. The opening account stays reserved for opening entries, and generated ticket entries stay read-only. Expense and Income stay as forms with receipts and splits. `TxnKind` becomes only a label; stored data is checked for balance, at least two non-zero lines, known accounts and the opening rule.
+- [ ] **Roles go (F4).** A ticket account setting, a destination (asset or person) on manual sales and a net-movement flag on asset accounts replace `Role::Verein`, `CashBox` and `Opening`. The ticket category roles stay.
+- [ ] **Optional tickets.** A per-event switch in Settings. Off hides the page and the Overview block, and removes the ticket categories; it is refused while tiers, imports or sales exist. The ticket account is set next to the column mapping on the Tickets page and is needed only to import. Templates copy both.
+- [ ] **Optional drinks (F16).** `DrinkSettings` names the cost centre and the Pfand category, each optional, replacing `CostCentreRole` and `Role::Pfand`. Both are created by default and can be deleted.
+- [ ] **Cost centres in the sidebar.** The pages, a separator, a "Cost centres" label and one item per centre. Each centre gets a page built from existing components: income, expenses, result and tagged lines (R-CC-1). The drinks centre adds its products and the invoice check.
+- [ ] **Fields that do nothing (F17).** Hide the sale date input until it is read, remove `Line.memo`, add a notes input (R-TX-1), and plan M11 as a plain CSV import.
+- [ ] **Reopening** keeps the closing notes and prefills those that still match an open item (F18).
+- [ ] **Remove `sealed` and its triggers (F9).** Balance stays checked at construction, before each commit and on every load. The column-level SQL CHECKs stay.
+- [ ] Amend R-COR-2, R-TKT-6, R-TKT-7, R-ISO-3, R-CC-2 and R-STR-1 to match, and update the technical design.
+
+### Stage 6 · Freeze the format
+
+- [ ] Check in a sample `.lancelot` file with tickets, imports, a cancellation, a checkpoint, drinks and an attachment, with a test that it keeps opening (F14). From here on every schema change is a migration, and the file proves it.
+
+### After the next event
+
+- [ ] Decide whether a small change history view is worth having. If not, reduce R-TX-6. The log keeps being written until then (F21).
+
+---
+
 ## Phase 3
 
 - **M11 · Strichliste.** A `StrichlisteProvider` trait, a CSV reference provider, tally display with expected vs actual revenue and unpaid amounts, and a per-event toggle (R-STR-1 to R-STR-5).
@@ -284,11 +354,11 @@ Built in three steps, each in its own pull request.
 
 | What                                          | Needed by    | Owner  |
 | --------------------------------------------- | ------------ | ------ |
-| Date of the next event: sets the MVP deadline | M0           | you    |
+| Date of the next event: not soon, no deadline | M5           | you    |
 | Apple Developer account for signing           | after v0.1.0 | you    |
 | Sale date column in the ticket sheet          | M8           | Verein |
 | A real (anonymised) ticket sheet as a fixture | M7           | you    |
 
 ## Next step
 
-Run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows.
+Work through the [refactoring stages](#refactoring), starting with Stage 1. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
