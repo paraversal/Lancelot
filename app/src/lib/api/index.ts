@@ -16,7 +16,12 @@ import type { BlockerOverride } from './generated/BlockerOverride';
 import type { BudgetLineDraft } from './generated/BudgetLineDraft';
 import type { BudgetLineId } from './generated/BudgetLineId';
 import type { CostCentreId } from './generated/CostCentreId';
+import type { Cents } from './generated/Cents';
+import type { CopyChoice } from './generated/CopyChoice';
+import type { CopySummary } from './generated/CopySummary';
+import type { TemplateSummary } from './generated/TemplateSummary';
 import type { DrinkProductDraft } from './generated/DrinkProductDraft';
+import type { ReconciliationId } from './generated/ReconciliationId';
 import type { DrinkProductId } from './generated/DrinkProductId';
 import type { DrinkSettings } from './generated/DrinkSettings';
 import type { CancellationDraft } from './generated/CancellationDraft';
@@ -95,8 +100,14 @@ export const api = {
 	recentEvents: () => call<RecentEvent[]>('recent_events'),
 	forgetRecent: (path: string) => call<RecentEvent[]>('recent_forget', { path }),
 
-	createEvent: (path: string, details: EventDetails) =>
-		call<OpenEvent>('event_create', { path, details }),
+	/** With a template, the new event starts with that event's setup (R-EVT-3). */
+	createEvent: (path: string, details: EventDetails, template: string | null = null) =>
+		call<OpenEvent>('event_create', { path, details, template }),
+	templatePreview: (path: string) => call<TemplateSummary>('template_preview', { path }),
+	/** What copying everything from that event would add; changes nothing. */
+	copyPreview: (path: string) => call<CopySummary>('copy_preview', { path }),
+	copyFromEvent: (path: string, choice: CopyChoice) =>
+		call<OpenEvent>('copy_from_event', { path, choice }),
 	openEvent: (path: string) => call<OpenEvent>('event_open', { path }),
 	/** Closes the file and releases its lock; closing the event itself is `closeEvent`. */
 	closeFile: () => call<void>('file_close'),
@@ -130,6 +141,12 @@ export const api = {
 	/** Replaces both counts of an asset account; `null` removes one. */
 	setCounts: (account: AccountId, opening: CountInput | null, closing: CountInput | null) =>
 		call<OpenEvent>('counts_set', { account, opening, closing }),
+	/** What a statement shows on a date (R-ACC-4). For the Verein account: the net movement. */
+	addReconciliation: (account: AccountId, date: string, amount: Cents) =>
+		call<OpenEvent>('reconciliation_add', { account, date, amount }),
+	updateReconciliation: (id: ReconciliationId, date: string, amount: Cents) =>
+		call<OpenEvent>('reconciliation_update', { id, date, amount }),
+	deleteReconciliation: (id: ReconciliationId) => call<OpenEvent>('reconciliation_delete', { id }),
 	addPerson: (name: string) => call<Added>('person_add', { name }),
 	updatePerson: (id: AccountId, name: string, person: Person) =>
 		call<OpenEvent>('person_update', { id, name, person }),

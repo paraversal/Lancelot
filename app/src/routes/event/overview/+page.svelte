@@ -22,6 +22,7 @@
 	import { totalQuota } from '#lib/tickets.ts';
 	import ClosePanel from './ClosePanel.svelte';
 	import CountPanel from './CountPanel.svelte';
+	import StatementPanel from './StatementPanel.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
@@ -45,6 +46,7 @@
 	const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 	let counting = $state<number | null>(null);
+	let reconciling = $state<number | null>(null);
 	const a5 = $derived(level('A5'));
 	const countUp = isPlayful(level('D1'));
 	let closing = $state(false);
@@ -91,8 +93,23 @@
 	const assets = $derived(
 		snapshot.accounts
 			.filter((a) => a.kind === 'asset')
-			.map((a) => ({ account: a, cash: snapshot.cash.find((c) => c.account === a.id) ?? null }))
+			.map((a) => ({
+				account: a,
+				cash: snapshot.cash.find((c) => c.account === a.id) ?? null,
+				// A mismatch stays open whatever came after, so it shows first.
+				statement:
+					snapshot.reconciliations.findLast((r) => r.account === a.id && r.difference) ??
+					snapshot.reconciliations.findLast((r) => r.account === a.id) ??
+					null
+			}))
 	);
+
+	// One panel at a time.
+	function panel(which: 'count' | 'statement' | 'close', account: number | null = null) {
+		closing = which === 'close';
+		counting = which === 'count' ? account : null;
+		reconciling = which === 'statement' ? account : null;
+	}
 
 	function item(i: OpenItem) {
 		const go =
@@ -102,7 +119,9 @@
 					? () => goto(`/event/ledger?txn=${i.txn}`)
 					: i.type === 'ticketConflicts'
 						? () => goto('/event/tickets')
-						: () => (counting = i.account);
+						: i.type === 'reconciliationMismatch'
+							? () => panel('statement', i.account)
+							: () => panel('count', i.account);
 		return { ...describe(i, snapshot, format), go, key: JSON.stringify(i) };
 	}
 	const open = $derived(snapshot.openItems.map(item));
@@ -130,6 +149,7 @@
 			e.metaKey ||
 			e.ctrlKey ||
 			counting !== null ||
+			reconciling !== null ||
 			closing ||
 			closed
 		)
@@ -154,9 +174,7 @@
 				<Button icon="file" onclick={() => goto('/event/overview/report')}>Report</Button>
 				<Button onclick={exportCsv}>CSV</Button>
 				{#if !closed}
-					<Button icon="lock" onclick={() => ((closing = true), (counting = null))}
-						>Close event</Button
-					>
+					<Button icon="lock" onclick={() => panel('close')}>Close event</Button>
 					<Button kind="primary" icon="plus" shortcut="N" onclick={() => goto('/event/ledger?new')}
 						>New entry</Button
 					>
@@ -253,7 +271,7 @@
 			<section>
 				<h2>{closed ? 'Final balance' : 'Where the money is'}</h2>
 				<ul>
-					{#each assets as { account, cash } (account.id)}
+					{#each assets as { account, cash, statement } (account.id)}
 						<li>
 							<span class="name">
 								{account.name}
@@ -265,11 +283,21 @@
 								{:else if account.assetType === 'cash'}
 									<span class="note attention">not counted</span>
 								{/if}
+								{#if statement}
+									<span class:minus={!!statement.difference} class="note">
+										statement {formatDate(statement.date, format)}
+										{#if statement.difference}· {differenceText(
+												statement.difference,
+												format
+											)}{:else}✓{/if}
+									</span>
+								{/if}
 							</span>
 							{#if !closed && (account.assetType === 'cash' || cash)}
-								<Button size="sm" onclick={() => ((counting = account.id), (closing = false))}
-									>Count</Button
-								>
+								<Button size="sm" onclick={() => panel('count', account.id)}>Count</Button>
+							{/if}
+							{#if !closed}
+								<Button size="sm" onclick={() => panel('statement', account.id)}>Statement</Button>
 							{/if}
 							<span class="amount"
 								><MovingAmount value={account.balance} {format} level={a5} /></span
@@ -350,6 +378,10 @@
 	{:else if counting !== null && !closed}
 		{#key counting}
 			<CountPanel account={counting} onclose={() => (counting = null)} />
+		{/key}
+	{:else if reconciling !== null && !closed}
+		{#key reconciling}
+			<StatementPanel account={reconciling} onclose={() => (reconciling = null)} />
 		{/key}
 	{/if}
 </div>

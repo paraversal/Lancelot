@@ -177,6 +177,7 @@
     }
   ],
   "closingCounts": [],
+  "reconciliations": [],
   "openItems": [
     {
       "type": "closingCountMissing",

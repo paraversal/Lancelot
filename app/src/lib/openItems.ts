@@ -2,7 +2,7 @@
 import type { EventSnapshot } from './api/generated/EventSnapshot';
 import type { NumberFormat } from './api/generated/NumberFormat';
 import type { OpenItem } from './api/generated/OpenItem';
-import { differenceText } from './format';
+import { differenceText, formatDate } from './format';
 
 export interface ItemText {
 	text: string;
@@ -28,6 +28,14 @@ export function describe(item: OpenItem, snapshot: EventSnapshot, format: Number
 				text: `${name(item.account)}: ${differenceText(item.difference, format)}`,
 				amount: null
 			};
+		case 'reconciliationMismatch': {
+			const date = snapshot.reconciliations.find((r) => r.id === item.checkpoint)?.date;
+			const on = date ? `, ${formatDate(date, format)}` : '';
+			return {
+				text: `${name(item.account)}${on}: ${differenceText(item.difference, format)}`,
+				amount: null
+			};
+		}
 		case 'ticketConflicts':
 			return {
 				text: `${item.count} ticket ${item.count === 1 ? 'conflict' : 'conflicts'}`,

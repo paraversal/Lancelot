@@ -69,6 +69,12 @@ pub struct CostCentreId(#[ts(type = "number")] pub i64);
 #[serde(transparent)]
 pub struct DrinkProductId(#[ts(type = "number")] pub i64);
 
+/// Identifies a reconciliation checkpoint within one event (R-ACC-4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct ReconciliationId(#[ts(type = "number")] pub i64);
+
 /// See requirements §4.1 and the sign convention in `docs/technical-design.md` §3.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -297,6 +303,19 @@ pub struct Attachment {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 pub struct ClosingCount {
+    pub account: AccountId,
+    #[ts(type = "string")]
+    pub date: Date,
+    pub amount: Cents,
+}
+
+/// "The statement shows this on this date" for an asset account (R-ACC-4). For the Verein account
+/// the amount is the event's net movement up to the date, since its real balance is never entered
+/// (R-ISO-2). Either can be negative.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct Reconciliation {
+    pub id: ReconciliationId,
     pub account: AccountId,
     #[ts(type = "string")]
     pub date: Date,

@@ -25,7 +25,7 @@ use ts_rs::TS;
 
 pub use backup::{BackupPolicy, list as list_backups, taken_at as backup_time};
 
-use crate::book::{Book, Saved};
+use crate::book::{Book, CopyChoice, CopySummary, Saved};
 use crate::drinks::{DrinkProductDraft, DrinkSettings};
 use crate::entry::TxnDraft;
 use crate::error::DomainError;
@@ -33,7 +33,7 @@ use crate::integrity::{self, Depth, Report};
 use crate::ledger::BlockerOverride;
 use crate::model::{
     AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, CostCentreId,
-    DrinkProductId, EventDetails, Person, TxnId,
+    DrinkProductId, EventDetails, Person, ReconciliationId, TxnId,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, TierId};
 use crate::money::Cents;
@@ -152,10 +152,27 @@ impl Store {
         details: EventDetails,
         options: StoreOptions,
     ) -> Result<(Store, Report), StoreError> {
+        Store::create_with(path, Book::new(details)?, options)
+    }
+
+    /// Creates a new event file from a template (R-EVT-3).
+    pub fn create_from_template(
+        path: &Path,
+        details: EventDetails,
+        template: &Book,
+        options: StoreOptions,
+    ) -> Result<(Store, Report), StoreError> {
+        Store::create_with(path, Book::from_template(template, details)?, options)
+    }
+
+    fn create_with(
+        path: &Path,
+        book: Book,
+        options: StoreOptions,
+    ) -> Result<(Store, Report), StoreError> {
         if path.exists() {
             return Err(StoreError::AlreadyExists);
         }
-        let book = Book::new(details)?;
         let uuid = uuid::Uuid::new_v4().hyphenated().to_string();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("event");
         let tmp = path.with_file_name(format!(".{name}.{uuid}.tmp"));
@@ -714,6 +731,43 @@ impl Store {
         })
     }
 
+    /// Copies persons and budget lines from another event (R-ISO-4).
+    pub fn copy_from(
+        &mut self,
+        source: &Book,
+        choice: CopyChoice,
+    ) -> Result<CopySummary, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.copy_from(source, choice))
+    }
+
+    pub fn add_reconciliation(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<ReconciliationId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            b.add_reconciliation(account, date, amount)
+        })
+    }
+
+    pub fn update_reconciliation(
+        &mut self,
+        id: ReconciliationId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            b.update_reconciliation(id, date, amount)
+        })
+    }
+
+    pub fn delete_reconciliation(&mut self, id: ReconciliationId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            b.delete_reconciliation(id).map(|_| ())
+        })
+    }
+
     pub fn set_opening_count(
         &mut self,
         account: AccountId,
@@ -776,6 +830,57 @@ impl Store {
 
 /// Reads the UUID of an event file without opening it as a store, e.g. to list the backups of a
 /// file that is damaged. Fails while another store holds the file open.
+// `read_book` cannot migrate: it must not write to the other event's file.
+const _: () = assert!(
+    SCHEMA_VERSION == 1,
+    "read_book must migrate a copy of an older file"
+);
+
+/// Reads another event file without changing it or taking its lock (R-ISO-4). A file open
+/// elsewhere holds its lock and is refused as [`StoreError::AlreadyOpen`].
+pub fn read_book(path: &Path) -> Result<Book, StoreError> {
+    check_header(path)?;
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    conn.busy_timeout(std::time::Duration::ZERO)?;
+    let busy = |e: rusqlite::Error| match e.sqlite_error_code() {
+        Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked) => StoreError::AlreadyOpen,
+        _ => e.into(),
+    };
+    let app_id: i64 = conn
+        .pragma_query_value(None, "application_id", |r| r.get(0))
+        .map_err(busy)?;
+    let version: u32 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .map_err(busy)?;
+    if app_id != i64::from(APPLICATION_ID) || version == 0 {
+        return Err(StoreError::NotAnEventFile);
+    }
+    if version > SCHEMA_VERSION {
+        return Err(StoreError::NewerSchema {
+            found: version,
+            supported: SCHEMA_VERSION,
+        });
+    }
+    let parts = read::parts(&conn);
+    match parts
+        .map_err(|e| e.to_string())
+        .and_then(|p| Book::from_parts(p).map_err(|e| e.to_string()))
+    {
+        Ok(book) => Ok(book),
+        Err(reason) => {
+            let report = integrity::check(&conn, Depth::Quick)?;
+            Err(if report.has_errors() {
+                StoreError::Damaged(report)
+            } else {
+                StoreError::corrupt(reason)
+            })
+        }
+    }
+}
+
 pub fn event_uuid_of(path: &Path) -> Result<String, StoreError> {
     check_header(path)?;
     let conn = Connection::open_with_flags(

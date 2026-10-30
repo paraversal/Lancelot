@@ -17,7 +17,7 @@ use crate::drinks::DrinkProduct;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineId, CancellationId,
     ClosingCount, CostCentre, CostCentreId, DrinkProductId, Estimate, ImportId, ManualSaleId,
-    Origin, Person, TierId, Txn, TxnId,
+    Origin, Person, Reconciliation, ReconciliationId, TierId, Txn, TxnId,
 };
 use crate::tickets::{Cancellation, ManualSale, TicketImport, Tier};
 
@@ -554,6 +554,28 @@ pub(crate) fn persist(
         log.write("closing_count", id.0, &change)?;
     }
 
+    fn checkpoints(b: Option<&Book>) -> Vec<(ReconciliationId, &Reconciliation)> {
+        b.map(|b| b.reconciliations().map(|r| (r.id, r)).collect())
+            .unwrap_or_default()
+    }
+    // Deletions and moves first, so a checkpoint can take the date another one just left.
+    let changes = diff(checkpoints(before), checkpoints(Some(after)));
+    for (id, _) in changes
+        .iter()
+        .filter(|(_, c)| !matches!(c, Change::Create(_)))
+    {
+        conn.execute("DELETE FROM reconciliation WHERE id = ?1", [id.0])?;
+    }
+    for (id, change) in &changes {
+        if let Change::Create(r) | Change::Update(_, r) = change {
+            conn.execute(
+                "INSERT INTO reconciliation (id, account_id, date, amount) VALUES (?1, ?2, ?3, ?4)",
+                params![id.0, r.account.0, date_text(r.date), r.amount.get()],
+            )?;
+        }
+        log.write("reconciliation", id.0, change)?;
+    }
+
     let next = after.next_ids();
     if before.map(|b| b.next_ids()) != Some(next) {
         for (key, value) in [
@@ -567,6 +589,7 @@ pub(crate) fn persist(
             ("next_cancellation_id", next.cancellation),
             ("next_cost_centre_id", next.cost_centre),
             ("next_drink_product_id", next.drink_product),
+            ("next_reconciliation_id", next.reconciliation),
         ] {
             conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",

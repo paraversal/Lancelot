@@ -159,6 +159,14 @@ CREATE TABLE closing_count (           -- R-ISO-3; opening counts are 'opening' 
   amount     INTEGER NOT NULL CHECK (amount >= 0)
 ) STRICT;
 
+CREATE TABLE reconciliation (          -- R-ACC-4; the Verein account's amount is its net movement
+  id         INTEGER PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES account(id),
+  date       TEXT NOT NULL,
+  amount     INTEGER NOT NULL,
+  UNIQUE (account_id, date)
+) STRICT;
+
 CREATE TABLE attachment (
   id         INTEGER PRIMARY KEY,
   txn_id     INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
@@ -176,7 +184,7 @@ CREATE TABLE change_log (              -- R-TX-6
   at         TEXT NOT NULL,            -- RFC 3339 UTC
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line',
                                        -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation',
-                                       -- 'cost_centre','drink_product'
+                                       -- 'cost_centre','drink_product','reconciliation'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

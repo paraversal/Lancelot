@@ -12,7 +12,10 @@ import type { BlockerOverride } from '../generated/BlockerOverride';
 import type { BudgetLineDraft } from '../generated/BudgetLineDraft';
 import type { AccountKind } from '../generated/AccountKind';
 import type { AssetType } from '../generated/AssetType';
+import type { CopyChoice } from '../generated/CopyChoice';
+import type { CopySummary } from '../generated/CopySummary';
 import type { CountInput } from '../generated/CountInput';
+import type { PersonSummary } from '../generated/PersonSummary';
 import type { EventDetails } from '../generated/EventDetails';
 import type { EventSnapshot } from '../generated/EventSnapshot';
 import type { OpenEvent } from '../generated/OpenEvent';
@@ -435,6 +438,141 @@ function rebudget(s: EventSnapshot) {
 		s.budget.result[k] = totals.income[k] - totals.expense[k];
 	s.profitability = profitability(s);
 	reckonCostCentres(s);
+	reckonStatements(s);
+}
+
+function otherEvent(path: string): EventSnapshot {
+	if (path === LOCKED) fail('already_open', 'this event file is already open');
+	if (path === DAMAGED) fail('damaged', 'the event file is damaged and cannot be opened');
+	return example as EventSnapshot;
+}
+
+const NO_BALANCE: PersonSummary = {
+	advanced: 0,
+	held: 0,
+	reimbursed: 0,
+	repaid: 0,
+	settled: 0,
+	net: 0,
+	status: 'settled'
+};
+
+// A new event's setup from the example event, following the core's `Book::from_template`. Tiers
+// are left out: their figures come from the core.
+function fromTemplate(path: string): EventSnapshot {
+	const source = structuredClone(otherEvent(path));
+	const s = structuredClone(empty as EventSnapshot);
+	s.accounts = source.accounts.map((a) => ({ ...a, balance: 0 }));
+	s.persons = source.persons.map((p) => ({ ...p, summary: NO_BALANCE, entries: [] }));
+	s.costCentres = source.costCentres;
+	s.budgetLines = source.budgetLines.map((b) => ({ ...b, complete: false }));
+	s.budget.categories = source.budget.categories.map((c) => ({
+		...c,
+		actual: 0,
+		estimate: 0,
+		forecast: 0,
+		unbudgeted: 0
+	}));
+	s.drinkProducts = source.drinkProducts.map((p) => ({ ...p, taken: 0, returned: 0 }));
+	s.event.drinks = source.event.drinks;
+	s.openItems = s.openItems.filter((i) => i.type !== 'personBalance');
+	rebudget(s);
+	return s;
+}
+
+// Following the core's `Book::copy_from`, without its cost centres: the example's already exist.
+function copyInto(s: EventSnapshot, source: EventSnapshot, choice: CopyChoice): CopySummary {
+	const summary: CopySummary = {
+		personsAdded: 0,
+		personsSkipped: 0,
+		budgetLinesAdded: 0,
+		budgetLinesSkipped: 0,
+		categoriesAdded: 0,
+		costCentresAdded: 0
+	};
+	const lower = (t: string) => t.toLowerCase();
+	const nextAccount = () => Math.max(0, ...s.accounts.map((a) => a.id)) + 1;
+	if (choice.persons)
+		for (const p of source.persons) {
+			if (s.persons.some((o) => lower(o.name) === lower(p.name))) {
+				summary.personsSkipped++;
+				continue;
+			}
+			const id = nextAccount();
+			const account = source.accounts.find((a) => a.id === p.account)!;
+			s.accounts.push({ ...account, id, balance: 0 });
+			s.persons.push({ ...p, account: id, summary: NO_BALANCE, entries: [] });
+			summary.personsAdded++;
+		}
+	if (choice.budget) {
+		const here = s.budgetLines.map((b) => `${b.category}/${lower(b.description)}`);
+		for (const b of source.budgetLines) {
+			const from = source.accounts.find((a) => a.id === b.category)!;
+			let to = s.accounts.find((a) => a.kind === from.kind && lower(a.name) === lower(from.name));
+			if (!to) {
+				to = { ...from, id: nextAccount(), balance: 0 };
+				s.accounts.push(to);
+				s.budget.categories.push({
+					category: to.id,
+					estimate: 0,
+					actual: 0,
+					forecast: 0,
+					unbudgeted: 0
+				});
+				summary.categoriesAdded++;
+			}
+			if (here.includes(`${to.id}/${lower(b.description)}`)) {
+				summary.budgetLinesSkipped++;
+				continue;
+			}
+			s.budgetLines.push({
+				...b,
+				id: Math.max(0, ...s.budgetLines.map((l) => l.id)) + 1,
+				category: to.id,
+				complete: false
+			});
+			summary.budgetLinesAdded++;
+		}
+	}
+	rebudget(s);
+	return summary;
+}
+
+// Statements against the books, following the core's `ledger.rs` (R-ACC-4).
+function reckonStatements(s: EventSnapshot) {
+	s.reconciliations = s.reconciliations
+		.map((r) => {
+			const movement = s.accounts.find((a) => a.id === r.account)?.role === 'verein';
+			const computed = s.txns
+				.filter((t) => t.date <= r.date && !(movement && t.kind === 'opening'))
+				.flatMap((t) => t.lines)
+				.filter((l) => l.account === r.account)
+				.reduce((sum, l) => sum + l.amount, 0);
+			return { ...r, computed, difference: r.amount - computed, movement };
+		})
+		.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+	const tickets = s.openItems.filter((i) => i.type === 'ticketConflicts');
+	s.openItems = [
+		...s.openItems.filter(
+			(i) => i.type !== 'reconciliationMismatch' && i.type !== 'ticketConflicts'
+		),
+		...s.reconciliations
+			.filter((r) => r.difference !== 0)
+			.map((r) => ({
+				type: 'reconciliationMismatch' as const,
+				checkpoint: r.id,
+				account: r.account,
+				difference: r.difference
+			})),
+		...tickets
+	];
+}
+
+function checkCheckpoint(s: EventSnapshot, account: number, date: string, except: number | null) {
+	if (s.reconciliations.some((r) => r.account === account && r.date === date && r.id !== except))
+		fail('duplicate_checkpoint', 'this account already has a checkpoint on this date', {
+			field: 'date'
+		});
 }
 
 // Cost centres and Drinks, following the core's `budget.rs` and `drinks.rs`.
@@ -999,9 +1137,31 @@ const commands: Record<string, (a: Args) => unknown> = {
 		const path = a.path as string;
 		if (recent.some((r) => r.path === path))
 			fail('already_exists', 'a file with this name already exists');
-		const snapshot = structuredClone(empty as EventSnapshot);
+		const snapshot = a.template
+			? fromTemplate(a.template as string)
+			: structuredClone(empty as EventSnapshot);
 		snapshot.event = { ...snapshot.event, ...(a.details as EventDetails) };
 		return opened(path, snapshot);
+	},
+	template_preview: (a) => {
+		const source = otherEvent(a.path as string);
+		return {
+			name: source.event.name,
+			categories: source.accounts.filter((c) => c.kind === 'income' || c.kind === 'expense').length,
+			persons: source.persons.length,
+			budgetLines: source.budgetLines.length,
+			tiers: source.tickets.tiers.length,
+			drinkProducts: source.drinkProducts.length
+		};
+	},
+	copy_preview: (a) => {
+		if (!open) fail('no_event_open', 'no event is open');
+		const source = otherEvent(a.path as string);
+		return copyInto(structuredClone(open.snapshot), source, { persons: true, budget: true });
+	},
+	copy_from_event: (a) => {
+		const source = otherEvent(a.path as string);
+		return changed((s) => void copyInto(s, source, a.choice as CopyChoice));
 	},
 	event_open: (a) => {
 		const path = a.path as string;
@@ -1160,6 +1320,37 @@ const commands: Record<string, (a: Args) => unknown> = {
 		changed((s) => {
 			const category = s.accounts.find((c) => c.id === a.category);
 			if (category) category.costCentre = a.costCentre as number | null;
+		}),
+	reconciliation_add: (a) =>
+		changed((s) => {
+			const account = a.account as number;
+			const date = parseDate(a.date as string).date;
+			checkCheckpoint(s, account, date, null);
+			s.reconciliations.push({
+				id: Math.max(0, ...s.reconciliations.map((r) => r.id)) + 1,
+				account,
+				date,
+				amount: a.amount as number,
+				computed: 0,
+				difference: 0,
+				movement: false
+			});
+			reckonStatements(s);
+		}),
+	reconciliation_update: (a) =>
+		changed((s) => {
+			const r = s.reconciliations.find((r) => r.id === a.id);
+			if (!r) fail('unknown_reconciliation', 'unknown checkpoint');
+			const date = parseDate(a.date as string).date;
+			checkCheckpoint(s, r.account, date, r.id);
+			r.date = date;
+			r.amount = a.amount as number;
+			reckonStatements(s);
+		}),
+	reconciliation_delete: (a) =>
+		changed((s) => {
+			s.reconciliations = s.reconciliations.filter((r) => r.id !== a.id);
+			reckonStatements(s);
 		}),
 	drink_product_add: (a) =>
 		changed((s) => {

@@ -5,10 +5,10 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, CostCentreId,
-    DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails, ImportId, ImportPreview,
-    ManualSaleDraft, ManualSaleId, Parsed, Person, Resolution, TicketColumns, TierDraft, TierId,
-    TxnDraft, TxnId,
+    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
+    CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
+    ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId,
+    Resolution, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -68,8 +68,34 @@ pub async fn event_create(
     state: State<'_, AppState>,
     path: PathBuf,
     details: EventDetails,
+    template: Option<PathBuf>,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.create_event(&path, details))
+    with(&state, |s| match &template {
+        Some(template) => s.create_event_from(&path, details, template),
+        None => s.create_event(&path, details),
+    })
+}
+
+#[tauri::command]
+pub async fn template_preview(
+    state: State<'_, AppState>,
+    path: PathBuf,
+) -> Result<TemplateSummary> {
+    with(&state, |s| s.template_preview(&path))
+}
+
+#[tauri::command]
+pub async fn copy_preview(state: State<'_, AppState>, path: PathBuf) -> Result<CopySummary> {
+    with(&state, |s| s.copy_preview(&path))
+}
+
+#[tauri::command]
+pub async fn copy_from_event(
+    state: State<'_, AppState>,
+    path: PathBuf,
+    choice: CopyChoice,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.copy_from_event(&path, choice))
 }
 
 #[tauri::command]
@@ -217,6 +243,34 @@ pub async fn counts_set(
     closing: Option<CountInput>,
 ) -> Result<OpenEvent> {
     with(&state, |s| s.set_counts(account, opening, closing))
+}
+
+#[tauri::command]
+pub async fn reconciliation_add(
+    state: State<'_, AppState>,
+    account: AccountId,
+    date: String,
+    amount: Cents,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_reconciliation(account, &date, amount))
+}
+
+#[tauri::command]
+pub async fn reconciliation_update(
+    state: State<'_, AppState>,
+    id: ReconciliationId,
+    date: String,
+    amount: Cents,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_reconciliation(id, &date, amount))
+}
+
+#[tauri::command]
+pub async fn reconciliation_delete(
+    state: State<'_, AppState>,
+    id: ReconciliationId,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_reconciliation(id))
 }
 
 #[tauri::command]

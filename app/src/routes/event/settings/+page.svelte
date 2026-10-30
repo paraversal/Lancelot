@@ -4,7 +4,8 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError } from '#lib/api/index.ts';
-	import { chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
+	import { chooseEventFile, chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
+	import type { CopySummary } from '#lib/api/generated/CopySummary.ts';
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
 	import type { BackupInfo } from '#lib/api/generated/BackupInfo.ts';
 	import type { EventDetails } from '#lib/api/generated/EventDetails.ts';
@@ -192,6 +193,39 @@
 			const input = inputs[inputs.length - 1];
 			input?.focus();
 			input?.select();
+		});
+
+	// Copying from another event (R-ISO-4): what it would add, then what was chosen.
+	let source = $state<{ path: string; preview: CopySummary } | null>(null);
+	let copyPersons = $state(true);
+	let copyBudget = $state(true);
+	let copied = $state<string | null>(null);
+	const fileName = (path: string) => path.split('/').pop() ?? path;
+	const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+	const chooseSource = () =>
+		run(async () => {
+			copied = null;
+			const path = await chooseEventFile();
+			if (!path) return;
+			source = { path, preview: await api.copyPreview(path) };
+			copyPersons = source.preview.personsAdded > 0;
+			copyBudget = source.preview.budgetLinesAdded > 0;
+		});
+
+	const copyFrom = () =>
+		run(async () => {
+			if (!source) return;
+			const { path, preview } = source;
+			const persons = copyPersons;
+			const budget = copyBudget;
+			await session.change(() => api.copyFromEvent(path, { persons, budget }));
+			const added = [
+				persons ? counted(preview.personsAdded, 'person', 'people') : null,
+				budget ? counted(preview.budgetLinesAdded, 'budget line', 'budget lines') : null
+			].filter(Boolean);
+			copied = `Added ${added.join(' and ')}`;
+			source = null;
 		});
 
 	const issues = $derived(open.integrity.issues.length);
@@ -416,6 +450,56 @@
 				</div>
 			</section>
 
+			{#if !closed}
+				<section>
+					<h2>Copy from another event</h2>
+					{#if source}
+						<div class="line">
+							<span class="muted"><Icon name="file" /></span>
+							<span class="path">{fileName(source.path)}</span>
+							<Button size="sm" onclick={() => (source = null)}>Cancel</Button>
+						</div>
+						<label class="toggle">
+							<input type="checkbox" bind:checked={copyPersons} />
+							People
+							<span class="counts"
+								>{source.preview.personsAdded} new · {source.preview.personsSkipped} already here</span
+							>
+						</label>
+						<label class="toggle">
+							<input type="checkbox" bind:checked={copyBudget} />
+							Budget lines
+							<span class="counts"
+								>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped} already here{#if source.preview.categoriesAdded}
+									· {counted(
+										source.preview.categoriesAdded,
+										'new category',
+										'new categories'
+									)}{/if}{#if source.preview.costCentresAdded}
+									· {counted(
+										source.preview.costCentresAdded,
+										'new cost centre',
+										'new cost centres'
+									)}{/if}</span
+							>
+						</label>
+						<div>
+							<Button
+								size="sm"
+								kind="primary"
+								disabled={!copyPersons && !copyBudget}
+								onclick={copyFrom}>Copy</Button
+							>
+						</div>
+					{:else}
+						<div class="line">
+							<Button size="sm" onclick={chooseSource}>Choose event</Button>
+							{#if copied}<span class="muted">{copied}</span>{/if}
+						</div>
+					{/if}
+				</section>
+			{/if}
+
 			<section>
 				<h2>Backups</h2>
 				<div class="keep">
@@ -514,6 +598,11 @@
 		align-self: flex-start;
 		font-size: 13px;
 		cursor: pointer;
+	}
+
+	.counts {
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
 	}
 
 	.toggle input {

@@ -17,14 +17,18 @@ use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
 use crate::model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
     BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId, CostCentreRole,
-    DrinkProductId, Estimate, Event, EventDetails, Line, Person, Role, Txn, TxnId, TxnKind,
+    DrinkProductId, Estimate, Event, EventDetails, Line, Person, Reconciliation, ReconciliationId,
+    Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
 use crate::tickets::{Cancellation, ManualSale, TicketImport, Tickets, Tier};
 
 mod drinks;
+mod template;
 mod tickets;
+
+pub use template::{CopyChoice, CopySummary, TemplateSummary};
 
 /// The largest attachment Lancelot accepts. Phone photos and PDFs are far smaller; the limit
 /// only catches accidents.
@@ -50,6 +54,7 @@ pub struct Book {
     txns: BTreeMap<TxnId, Txn>,
     attachments: BTreeMap<AttachmentId, Attachment>,
     closing_counts: BTreeMap<AccountId, ClosingCount>,
+    reconciliations: BTreeMap<ReconciliationId, Reconciliation>,
     budget_lines: BTreeMap<BudgetLineId, BudgetLine>,
     tiers: BTreeMap<TierId, Tier>,
     imports: BTreeMap<ImportId, TicketImport>,
@@ -65,7 +70,7 @@ pub struct Book {
 }
 
 /// The ids the next new account, transaction, attachment, budget line, tier, import, manual
-/// sale, cancellation, cost centre and product get. Ids are never reused, so the change log stays unambiguous after deletions.
+/// sale, cancellation, cost centre, product and checkpoint get. Ids are never reused, so the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
@@ -78,6 +83,7 @@ pub struct NextIds {
     pub cancellation: i64,
     pub cost_centre: i64,
     pub drink_product: i64,
+    pub reconciliation: i64,
 }
 
 /// A book taken apart into its stored pieces. [`Book::from_parts`] checks them all.
@@ -89,6 +95,7 @@ pub struct BookParts {
     pub txns: Vec<Txn>,
     pub attachments: Vec<Attachment>,
     pub closing_counts: Vec<ClosingCount>,
+    pub reconciliations: Vec<Reconciliation>,
     pub budget_lines: Vec<BudgetLine>,
     pub tiers: Vec<Tier>,
     pub imports: Vec<TicketImport>,
@@ -134,6 +141,7 @@ impl Book {
             txns: BTreeMap::new(),
             attachments: BTreeMap::new(),
             closing_counts: BTreeMap::new(),
+            reconciliations: BTreeMap::new(),
             budget_lines: BTreeMap::new(),
             tiers: BTreeMap::new(),
             imports: BTreeMap::new(),
@@ -152,6 +160,7 @@ impl Book {
                 cancellation: 1,
                 cost_centre: 1,
                 drink_product: 1,
+                reconciliation: 1,
             },
             ledger: Ledger::default(),
             budget: Budget::default(),
@@ -286,6 +295,20 @@ impl Book {
             closing_counts.insert(c.account, c);
         }
 
+        let mut reconciliations = BTreeMap::new();
+        let mut checkpoints = BTreeSet::new();
+        for r in parts.reconciliations {
+            if accounts.get(&r.account).map(|a| a.kind) != Some(AccountKind::Asset)
+                || r.id.0 >= parts.next.reconciliation
+                || !checkpoints.insert((r.account, r.date))
+            {
+                return Err(bad(
+                    "checkpoint on an account that is not an asset, or twice",
+                ));
+            }
+            reconciliations.insert(r.id, r);
+        }
+
         let default = parts.event.default_reimbursement_account;
         if accounts.get(&default).map(|a| a.kind) != Some(AccountKind::Asset) {
             return Err(bad("default reimbursement account is not an asset"));
@@ -312,6 +335,7 @@ impl Book {
             txns,
             attachments,
             closing_counts,
+            reconciliations,
             budget_lines,
             tiers,
             imports,
@@ -396,6 +420,10 @@ impl Book {
 
     pub fn closing_count(&self, account: AccountId) -> Option<&ClosingCount> {
         self.closing_counts.get(&account)
+    }
+
+    pub fn reconciliations(&self) -> impl Iterator<Item = &Reconciliation> {
+        self.reconciliations.values()
     }
 
     pub fn next_ids(&self) -> NextIds {
@@ -740,6 +768,84 @@ impl Book {
         })
     }
 
+    // --- reconciliation ------------------------------------------------------------------
+
+    /// Records what a statement shows for an asset account on a date (R-ACC-4). A mismatch
+    /// becomes an open item.
+    pub fn add_reconciliation(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<ReconciliationId, DomainError> {
+        self.change(|book| {
+            match book.accounts.get(&account) {
+                None => {
+                    return Err(DomainError::UnknownAccount {
+                        field: "account".into(),
+                    });
+                }
+                Some(a) if a.kind != AccountKind::Asset => {
+                    return Err(DomainError::WrongAccountKind {
+                        field: "account".into(),
+                    });
+                }
+                Some(_) => {}
+            }
+            book.check_checkpoint_free(account, date, None)?;
+            let id = ReconciliationId(book.next.reconciliation);
+            book.next.reconciliation += 1;
+            book.reconciliations.insert(
+                id,
+                Reconciliation {
+                    id,
+                    account,
+                    date,
+                    amount,
+                },
+            );
+            Ok(id)
+        })
+    }
+
+    /// Corrects a checkpoint's date or amount. Its account stays.
+    pub fn update_reconciliation(
+        &mut self,
+        id: ReconciliationId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            let account = book
+                .reconciliations
+                .get(&id)
+                .ok_or(DomainError::UnknownReconciliation)?
+                .account;
+            book.check_checkpoint_free(account, date, Some(id))?;
+            book.reconciliations.insert(
+                id,
+                Reconciliation {
+                    id,
+                    account,
+                    date,
+                    amount,
+                },
+            );
+            Ok(())
+        })
+    }
+
+    pub fn delete_reconciliation(
+        &mut self,
+        id: ReconciliationId,
+    ) -> Result<Reconciliation, DomainError> {
+        self.change(|book| {
+            book.reconciliations
+                .remove(&id)
+                .ok_or(DomainError::UnknownReconciliation)
+        })
+    }
+
     // --- budget --------------------------------------------------------------------------
 
     /// Adds a budget line (R-BUD-1).
@@ -898,6 +1004,7 @@ impl Book {
             accounts: &self.accounts,
             txns: &self.txns,
             closing_counts: &self.closing_counts,
+            reconciliations: &self.reconciliations,
             with_attachments: &with_attachments,
             ticket_conflicts: self.tickets.conflict_count(),
         })?;
@@ -961,6 +1068,25 @@ impl Book {
             .filter(|t| t.kind == TxnKind::Opening && t.lines.iter().any(|l| l.account == account))
             .map(|t| t.id)
             .collect()
+    }
+
+    /// Two checkpoints on one date would be compared with the same figure.
+    fn check_checkpoint_free(
+        &self,
+        account: AccountId,
+        date: Date,
+        except: Option<ReconciliationId>,
+    ) -> Result<(), DomainError> {
+        let taken = self
+            .reconciliations
+            .values()
+            .any(|r| r.account == account && r.date == date && Some(r.id) != except);
+        if taken {
+            return Err(DomainError::DuplicateCheckpoint {
+                field: "date".into(),
+            });
+        }
+        Ok(())
     }
 
     /// A trimmed, non-empty name that no other account of the same kind uses (ignoring case).

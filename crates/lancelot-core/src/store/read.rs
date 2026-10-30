@@ -12,7 +12,8 @@ use crate::iban::validate_iban;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineDraft, BudgetLineId,
     CancellationId, ClosingCount, CostCentre, CostCentreId, DrinkProductId, Estimate, Event,
-    EventDetails, ImportId, Line, ManualSaleId, Origin, Person, TierId, Txn, TxnId,
+    EventDetails, ImportId, Line, ManualSaleId, Origin, Person, Reconciliation, ReconciliationId,
+    TierId, Txn, TxnId,
 };
 use crate::money::Cents;
 use crate::tickets::{
@@ -357,6 +358,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         txns: txns(conn)?,
         attachments,
         closing_counts,
+        reconciliations: reconciliations(conn)?,
         budget_lines,
         tiers,
         imports,
@@ -375,6 +377,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             cancellation: next_id(conn, "next_cancellation_id")?,
             cost_centre: next_id(conn, "next_cost_centre_id")?,
             drink_product: next_id(conn, "next_drink_product_id")?,
+            reconciliation: next_id(conn, "next_reconciliation_id")?,
         },
     })
 }
@@ -395,6 +398,30 @@ fn cost_centres(conn: &Connection) -> Result<Vec<CostCentre>, StoreError> {
             id: CostCentreId(id),
             name,
             role: role.as_deref().map(text_enum).transpose()?,
+        });
+    }
+    Ok(out)
+}
+
+fn reconciliations(conn: &Connection) -> Result<Vec<Reconciliation>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT id, account_id, date, amount FROM reconciliation ORDER BY id")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, i64>(3)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, account, date, amount) = row?;
+        out.push(Reconciliation {
+            id: ReconciliationId(id),
+            account: AccountId(account),
+            date: text_date(&date)?,
+            amount: cents(amount)?,
         });
     }
     Ok(out)

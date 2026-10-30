@@ -58,6 +58,10 @@ pub enum DomainError {
     CostCentreProtected,
     #[error("unknown product")]
     UnknownDrinkProduct,
+    #[error("unknown checkpoint")]
+    UnknownReconciliation,
+    #[error("this account already has a checkpoint on this date")]
+    DuplicateCheckpoint { field: String },
     #[error("more units returned than taken")]
     TooManyReturned,
     #[error("unknown ticket tier")]
@@ -125,6 +129,8 @@ impl DomainError {
             DomainError::WrongCostCentre { .. } => "wrong_cost_centre",
             DomainError::CostCentreProtected => "cost_centre_protected",
             DomainError::UnknownDrinkProduct => "unknown_drink_product",
+            DomainError::UnknownReconciliation => "unknown_reconciliation",
+            DomainError::DuplicateCheckpoint { .. } => "duplicate_checkpoint",
             DomainError::TooManyReturned => "too_many_returned",
             DomainError::UnknownTier => "unknown_tier",
             DomainError::TierInUse => "tier_in_use",
@@ -157,7 +163,8 @@ impl DomainError {
             | DomainError::DuplicateName { field }
             | DomainError::WrongBudgetLine { field }
             | DomainError::UnknownCostCentre { field }
-            | DomainError::WrongCostCentre { field } => Some(field),
+            | DomainError::WrongCostCentre { field }
+            | DomainError::DuplicateCheckpoint { field } => Some(field),
             DomainError::TooManyReturned => Some("returned"),
             DomainError::BudgetLineInUse => Some("category"),
             DomainError::SameAccount => Some("to"),

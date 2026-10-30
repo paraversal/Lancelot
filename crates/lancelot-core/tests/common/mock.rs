@@ -13,6 +13,7 @@ pub trait Target {
     /// A made-up receipt: a photo, or a PDF for invoices.
     fn attach(&mut self, txn: TxnId, pdf: bool);
     fn count(&mut self, account: AccountId, amount: Cents);
+    fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents);
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId;
     fn save_draft(&mut self, draft: TxnDraft) -> TxnId;
     fn product(&mut self, draft: DrinkProductDraft);
@@ -46,6 +47,9 @@ impl Target for Book {
     }
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
+    }
+    fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents) {
+        self.add_reconciliation(account, date, amount).unwrap();
     }
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
         self.add_budget_line(draft).unwrap()
@@ -81,6 +85,9 @@ impl Target for Store {
     }
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
+    }
+    fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents) {
+        self.add_reconciliation(account, date, amount).unwrap();
     }
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
         self.add_budget_line(draft).unwrap()
@@ -275,6 +282,11 @@ pub fn build(t: &mut impl Target) -> Mock {
 
     // Counted 410,00 € against 412,90 € in the books.
     t.count(cash, eur("410"));
+
+    // The Verein account's statement agrees with the books.
+    let verein = role(t.book(), Role::Verein);
+    let movement = t.book().ledger().balance(verein);
+    t.checkpoint(verein, june(30), movement);
 
     Mock {
         anna,

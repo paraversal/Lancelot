@@ -1016,6 +1016,17 @@
       "amount": 41000
     }
   ],
+  "reconciliations": [
+    {
+      "id": 1,
+      "account": 1,
+      "date": "2026-06-30",
+      "amount": 175700,
+      "computed": 175700,
+      "difference": 0,
+      "movement": true
+    }
+  ],
   "openItems": [
     {
       "type": "personBalance",

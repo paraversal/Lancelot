@@ -7,13 +7,13 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride,
-    BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId,
-    CostCentreId, DomainError, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
-    EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE, ManualSaleDraft, ManualSaleId,
-    Parsed, Person, Report, Resolution, Store, StoreOptions, TicketColumns, TierDraft, TierId,
-    TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount,
-    parse_date,
+    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride, Book,
+    BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents,
+    CopyChoice, CopySummary, CostCentreId, DomainError, DrinkProductDraft, DrinkProductId,
+    DrinkSettings, EventDetails, EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE,
+    ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId, Report, Resolution, Store,
+    StoreError, StoreOptions, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
+    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date, read_book,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -153,6 +153,53 @@ impl Service {
         self.close_file();
         let (store, integrity) = Store::create(path, details, self.options())?;
         self.adopt(store, integrity)
+    }
+
+    /// A new event with the setup of another one (R-EVT-3).
+    pub fn create_event_from(
+        &mut self,
+        path: &Path,
+        details: EventDetails,
+        template: &Path,
+    ) -> Result<OpenEvent> {
+        let template = self.other_event(template)?;
+        self.close_file();
+        let (store, integrity) =
+            Store::create_from_template(path, details, &template, self.options())?;
+        self.adopt(store, integrity)
+    }
+
+    /// Reads another event, which may be the file open here.
+    fn other_event(&self, path: &Path) -> Result<Book> {
+        match &self.open {
+            Some(o) if o.store.path() == path => Ok(o.store.book().clone()),
+            _ => Ok(read_book(path)?),
+        }
+    }
+
+    pub fn template_preview(&self, path: &Path) -> Result<TemplateSummary> {
+        Ok(self.other_event(path)?.template_summary())
+    }
+
+    /// What copying everything from another event would add to the open one; changes nothing.
+    pub fn copy_preview(&self, path: &Path) -> Result<CopySummary> {
+        let source = self.other_event(path)?;
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let choice = CopyChoice {
+            persons: true,
+            budget: true,
+        };
+        let summary = open.store.book().clone().copy_from(&source, choice);
+        summary.map_err(|e| StoreError::from(e).into())
+    }
+
+    /// Copies persons and budget lines from another event (R-ISO-4).
+    pub fn copy_from_event(&mut self, path: &Path, choice: CopyChoice) -> Result<OpenEvent> {
+        let source = self.other_event(path)?;
+        self.change(|s| {
+            s.copy_from(&source, choice)?;
+            Ok(())
+        })
     }
 
     pub fn open_event(&mut self, path: &Path) -> Result<OpenEvent> {
@@ -351,6 +398,33 @@ impl Service {
         };
         let (opening, closing) = (parse(opening, "opening")?, parse(closing, "closing")?);
         self.change(|s| Ok(s.set_counts(account, opening, closing)?))
+    }
+
+    pub fn add_reconciliation(
+        &mut self,
+        account: AccountId,
+        date: &str,
+        amount: Cents,
+    ) -> Result<OpenEvent> {
+        let date = parse_date(date)?;
+        self.change(|s| {
+            s.add_reconciliation(account, date, amount)?;
+            Ok(())
+        })
+    }
+
+    pub fn update_reconciliation(
+        &mut self,
+        id: ReconciliationId,
+        date: &str,
+        amount: Cents,
+    ) -> Result<OpenEvent> {
+        let date = parse_date(date)?;
+        self.change(|s| Ok(s.update_reconciliation(id, date, amount)?))
+    }
+
+    pub fn delete_reconciliation(&mut self, id: ReconciliationId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_reconciliation(id)?))
     }
 
     pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<OpenEvent> {
@@ -690,6 +764,74 @@ mod tests {
 
     fn service(dir: &TempDir) -> Service {
         Service::new(dir.path().join("data"))
+    }
+
+    #[test]
+    fn starts_from_a_template_and_copies_from_another_event() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let old = dir.path().join("old.lancelot");
+        s.create_event(&old, details("Old")).unwrap();
+        s.add_person("Kim").unwrap();
+        s.close_file();
+
+        let summary = s.template_preview(&old).unwrap();
+        assert_eq!((summary.name.as_str(), summary.persons), ("Old", 1));
+
+        let new = dir.path().join("new.lancelot");
+        let open = s.create_event_from(&new, details("New"), &old).unwrap();
+        assert_eq!(open.snapshot.event.details.name, "New");
+        assert_eq!(open.snapshot.persons.len(), 1);
+        s.close_file();
+
+        let third = dir.path().join("third.lancelot");
+        s.create_event(&third, details("Third")).unwrap();
+        let preview = s.copy_preview(&old).unwrap();
+        assert_eq!(preview.persons_added, 1);
+        assert_eq!(s.current().unwrap().snapshot.persons.len(), 0);
+
+        let choice = CopyChoice {
+            persons: true,
+            budget: false,
+        };
+        let copied = s.copy_from_event(&old, choice).unwrap();
+        assert_eq!(copied.snapshot.persons[0].name, "Kim");
+        assert_eq!(s.copy_preview(&old).unwrap().persons_skipped, 1);
+
+        // The file open here is read from memory: its lock would refuse a second reader.
+        assert_eq!(s.template_preview(&third).unwrap().name, "Third");
+    }
+
+    #[test]
+    fn reconciles_a_statement() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let open = s
+            .create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        let verein = open.snapshot.event.default_reimbursement_account;
+        let amount = lancelot_core::parse_amount("12,00", lancelot_core::NumberFormat::De, true)
+            .unwrap()
+            .cents;
+
+        let open = s.add_reconciliation(verein, "2026-06-30", amount).unwrap();
+        let r = open.snapshot.reconciliations[0];
+        assert_eq!((r.movement, r.difference), (true, amount));
+        let err = s
+            .add_reconciliation(verein, "2026-06-30", amount)
+            .unwrap_err();
+        assert_eq!(err.code, "duplicate_checkpoint");
+        let err = s
+            .add_reconciliation(verein, "nonsense", amount)
+            .unwrap_err();
+        assert_ne!(err.code, "duplicate_checkpoint");
+
+        let open = s
+            .update_reconciliation(r.id, "2026-07-01", lancelot_core::Cents::ZERO)
+            .unwrap();
+        assert!(open.snapshot.reconciliations[0].difference.is_zero());
+        let open = s.delete_reconciliation(r.id).unwrap();
+        assert!(open.snapshot.reconciliations.is_empty());
     }
 
     #[test]
