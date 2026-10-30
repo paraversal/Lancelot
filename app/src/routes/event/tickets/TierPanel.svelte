@@ -14,7 +14,8 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, feePerTicket, parseCount, parseFee } from '#lib/tickets.ts';
+	import { feeInput, parseCount, parseFee } from '#lib/tickets.ts';
+	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let {
 		id,
@@ -50,7 +51,10 @@
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
 	const feeBp = $derived(parseFee(fee));
-	const perTicket = $derived(price !== null && feeBp ? feePerTicket(price, feeBp) : null);
+	const share = ticketShare(() =>
+		price !== null && feeBp ? { price, bp: feeBp, count: 1 } : null
+	);
+	const perTicket = $derived(share.current?.part ?? null);
 	const fieldError = (field: string) => (error?.field?.startsWith(field) ? error.message : null);
 	const inUse = $derived(
 		!!tier &&

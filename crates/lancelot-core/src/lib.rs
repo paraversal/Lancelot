@@ -34,20 +34,21 @@ pub use date::{DateError, format_date, parse_date};
 pub use drinks::{
     DrinkProduct, DrinkProductDraft, DrinkProductFigures, DrinkSettings, Drinks, InvoiceCheck,
 };
-pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, txn_amount};
+pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, build_lines, entry_of, txn_amount};
 pub use error::DomainError;
 pub use export::transactions_csv;
 pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};
 pub use ledger::{
-    BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, OpeningCount, PersonEntry,
-    PersonStatus, PersonSummary, PersonTotals, ReconciliationStatus,
+    CashStatus, Ledger, MoneyLocation, OpeningCount, PersonEntry, PersonStatus, PersonSummary,
+    PersonTotals, ReconciliationStatus,
 };
 pub use model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre, CostCentreId,
-    CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, ImportId, Line, ManualSaleId,
-    Origin, Person, Reconciliation, ReconciliationId, Role, TierId, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
+    BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre,
+    CostCentreId, CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, Flow, ImportId,
+    Line, ManualSaleId, OpenItem, Origin, Person, Reconciliation, ReconciliationId, Role, TierId,
+    Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
@@ -61,8 +62,8 @@ pub use store::{
 pub use tickets::{
     Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
     ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict,
-    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketTotals, Tickets,
-    Tier, TierDraft,
+    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketShare,
+    TicketTotals, Tickets, Tier, TierDraft, ticket_share,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

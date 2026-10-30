@@ -30,7 +30,7 @@ fn sheet(book: &Book, name: &str, rows: &[(&str, &str)]) -> Sheet {
     for (order, tier) in rows {
         text.push_str(&format!("{order},{tier}\n"));
     }
-    read_sheet(name, text.as_bytes(), &book.event().ticket_columns).unwrap()
+    read_sheet(name, text.as_bytes(), book.ticket_columns()).unwrap()
 }
 
 fn import(book: &mut Book, day: u8, rows: &[(&str, &str)]) -> ImportId {
@@ -339,7 +339,6 @@ fn there_is_no_break_even_without_a_budget_or_after_closing() {
     let (mut budgeted, _, _) = with_budget(&[]);
     assert!(budgeted.profitability().is_some());
     let accepted = budgeted
-        .ledger()
         .open_items()
         .into_iter()
         .map(|item| BlockerOverride {

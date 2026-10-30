@@ -27,10 +27,10 @@ pub fn transactions_csv(book: &Book, format: NumberFormat) -> String {
     let mut txns: Vec<&Txn> = book.txns().collect();
     txns.sort_by_key(|t| (t.date, t.id));
     for t in txns {
-        let receipt = match t.kind {
-            TxnKind::Expense if book.attachments_of(t.id).next().is_some() => "yes",
-            TxnKind::Expense => "no",
-            _ => "",
+        let receipt = match (t.kind.needs_receipt(), book.attachments_of(t.id).next()) {
+            (true, Some(_)) => "yes",
+            (true, None) => "no",
+            (false, _) => "",
         };
         for line in &t.lines {
             let account = book.account(line.account);
@@ -65,6 +65,7 @@ fn type_label(book: &Book, t: &Txn) -> &'static str {
         TxnKind::Income => "Income",
         TxnKind::Transfer => "Transfer",
         TxnKind::Opening => "Opening count",
+        TxnKind::Refund => "Refund",
         // A reimbursement pays the person: their line is positive.
         TxnKind::Settle => {
             let to_person = t.lines.iter().any(|l| {

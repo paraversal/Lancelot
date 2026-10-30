@@ -8,25 +8,29 @@ use ts_rs::TS;
 
 use crate::book::Book;
 use crate::budget::Budget;
-use crate::drinks::{DrinkProduct, Drinks};
-use crate::entry::txn_amount;
+use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
+use crate::entry::{Entry, entry_of, txn_amount};
 use crate::ledger::{
-    CashStatus, MoneyLocation, OpenItem, PersonEntry, PersonSummary, PersonTotals,
-    ReconciliationStatus,
+    CashStatus, MoneyLocation, PersonEntry, PersonSummary, PersonTotals, ReconciliationStatus,
 };
 use crate::model::{
-    Account, AccountId, Attachment, BudgetLine, ClosingCount, CostCentre, Event, Person, Txn,
+    Account, AccountId, Attachment, BudgetLine, ClosingCount, CostCentre, Event, Flow, OpenItem,
+    Person, Txn,
 };
 use crate::money::Cents;
 use crate::payout::Payouts;
 use crate::sales::Profitability;
-use crate::tickets::Tickets;
+use crate::tickets::{TicketColumns, Tickets};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct EventSnapshot {
     pub event: Event,
+    /// The columns read from the ticket sheet (R-TKT-3).
+    pub ticket_columns: TicketColumns,
+    /// The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
+    pub drink_settings: DrinkSettings,
     /// All accounts and categories, in creation order, each with its displayed balance.
     pub accounts: Vec<AccountView>,
     pub persons: Vec<PersonView>,
@@ -81,12 +85,19 @@ pub struct PersonView {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct TxnView {
     #[serde(flatten)]
     pub txn: Txn,
     /// What the transaction moves: the receipt total, the transfer or settle amount.
     pub amount: Cents,
     pub attachments: Vec<Attachment>,
+    /// What the form shows. Generated entries show in the same form, read-only.
+    pub entry: Option<Entry>,
+    /// Who paid or received: the payer, the destination, the person settling.
+    pub who: Option<AccountId>,
+    pub flow: Flow,
+    pub needs_receipt: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
@@ -119,16 +130,25 @@ impl EventSnapshot {
             .collect();
         let mut txns: Vec<TxnView> = book
             .txns()
-            .map(|t| TxnView {
-                amount: txn_amount(&t.lines),
-                txn: t.clone(),
-                attachments: book.attachments_of(t.id).cloned().collect(),
+            .map(|t| {
+                let entry = entry_of(t, book.account_map());
+                TxnView {
+                    amount: txn_amount(&t.lines),
+                    txn: t.clone(),
+                    attachments: book.attachments_of(t.id).cloned().collect(),
+                    who: entry.as_ref().map(Entry::who),
+                    entry,
+                    flow: t.kind.flow(),
+                    needs_receipt: t.kind.needs_receipt(),
+                }
             })
             .collect();
         txns.sort_by_key(|t| (t.txn.date, t.txn.id));
 
         EventSnapshot {
             event: book.event().clone(),
+            ticket_columns: book.ticket_columns().clone(),
+            drink_settings: book.drink_settings().clone(),
             accounts,
             persons,
             person_totals: ledger.person_totals(),
@@ -142,7 +162,7 @@ impl EventSnapshot {
             cash: ledger.cash().to_vec(),
             closing_counts: book.closing_counts().cloned().collect(),
             reconciliations: ledger.reconciliations().to_vec(),
-            open_items: ledger.open_items(),
+            open_items: book.open_items(),
             payouts: book.payouts().clone(),
             budget_lines: book.budget_lines().cloned().collect(),
             budget: book.budget().clone(),

@@ -8,8 +8,8 @@ use lancelot_core::{
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
     CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
     ImportDeletion, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person,
-    ReconciliationId, Resolution, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft,
-    TxnId,
+    ReconciliationId, Resolution, TemplateSummary, TicketColumns, TicketShare, TierDraft, TierId,
+    TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -158,6 +158,16 @@ pub async fn amount_parse(
     allow_negative: bool,
 ) -> Result<Parsed> {
     with(&state, |s| s.parse_amount(&input, allow_negative))
+}
+
+#[tauri::command]
+pub async fn ticket_share(
+    state: State<'_, AppState>,
+    price: Cents,
+    bp: u32,
+    count: u32,
+) -> Result<TicketShare> {
+    with(&state, |s| s.ticket_share(price, bp, count))
 }
 
 #[tauri::command]

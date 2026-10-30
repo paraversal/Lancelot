@@ -29,8 +29,7 @@ use crate::book::{Book, Saved};
 use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Report};
-use crate::ledger::BlockerOverride;
-use crate::model::{AttachmentId, EventDetails, ImportId, TxnId};
+use crate::model::{AttachmentId, BlockerOverride, EventDetails, ImportId, TxnId};
 use crate::sheet::read_sheet;
 use crate::tickets::ImportPreview;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
@@ -392,7 +391,7 @@ impl Store {
         data: &[u8],
         date: Date,
     ) -> Result<ImportPreview, StoreError> {
-        let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
+        let sheet = read_sheet(filename, data, self.book.ticket_columns())?;
         Ok(self.book.preview_import(&sheet, date))
     }
 
@@ -404,7 +403,7 @@ impl Store {
         data: &[u8],
         date: Date,
     ) -> Result<ImportId, StoreError> {
-        let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
+        let sheet = read_sheet(filename, data, self.book.ticket_columns())?;
         let now = (self.options.clock)();
         self.change(|b| b.import_tickets(&sheet, date, now))
     }

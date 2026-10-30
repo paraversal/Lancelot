@@ -14,7 +14,7 @@
 	let { onclose }: { onclose: () => void } = $props();
 
 	const format = $derived(session.format);
-	const settings = $derived(session.event!.snapshot.event.drinks);
+	const settings = $derived(session.event!.snapshot.drinkSettings);
 
 	let supplier = $state<string | null>(null);
 	let pricePerStrich = $state<Cents | null>(null);

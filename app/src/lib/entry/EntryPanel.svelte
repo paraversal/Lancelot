@@ -77,11 +77,12 @@
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
-	// Ticket income comes from the Tickets page and cannot be changed here (R-TKT-6).
+	// Ticket income comes from the Tickets page and cannot be changed here (R-TKT-6), and an
+	// opening count from the Overview (R-ISO-3). A form can only save what it can show.
 	const origin = $derived(txn?.origin ?? { type: 'manual' as const });
-	const locked = $derived(session.closed || origin.type !== 'manual');
+	const elsewhere = $derived(!!txn && (txn.kind === 'opening' || !txn.entry));
+	const locked = $derived(session.closed || origin.type !== 'manual' || elsewhere);
 	const byId = $derived(new Map(snapshot.accounts.map((a) => [a.id, a])));
-	const kindOf = (id: AccountId | null) => (id === null ? undefined : byId.get(id)?.kind);
 
 	// --- state, filled from the transaction being edited --------------------------------
 	let kind = $state<Kind>('expense');
@@ -111,37 +112,32 @@
 			description = null;
 			return;
 		}
-		const category = (id: AccountId) => kindOf(id) === 'income' || kindOf(id) === 'expense';
-		kind = t.kind === 'opening' ? 'transfer' : t.kind;
+		const e = t.entry;
+		kind = !e || e.type === 'opening' ? 'transfer' : e.type;
 		amount = t.amount;
 		date = t.date;
 		counterparty = t.counterparty;
 		description = t.description || null;
-		const cats = t.lines.filter((l) => category(l.account));
-		lines = cats.map((l) => ({
-			account: l.account,
-			amount: Math.abs(l.amount),
-			budgetLine: l.budgetLine,
-			costCentre: l.costCentre
-		}));
-		if (!lines.length) lines = [{ account: null, amount: null }];
-		const parties = t.lines.filter((l) => !category(l.account));
-		if (t.kind === 'expense') party = parties.find((l) => l.amount < 0)?.account ?? null;
-		// A ticket refund is negative income: it is paid, not received (R-TKT-15).
-		if (t.kind === 'income')
-			party =
-				parties.find((l) => (t.origin.type === 'ticketRefund' ? l.amount < 0 : l.amount > 0))
-					?.account ?? null;
-		if (t.kind === 'transfer' || t.kind === 'opening') {
-			party = parties.find((l) => l.amount < 0)?.account ?? null;
-			other = parties.find((l) => l.amount > 0)?.account ?? null;
+		lines = [{ account: null, amount: null }];
+		if (e?.type === 'expense' || e?.type === 'income') {
+			party = e.type === 'expense' ? e.payer : e.destination;
+			lines = e.lines.map((l) => ({
+				account: l.account,
+				amount: l.amount,
+				budgetLine: l.budgetLine,
+				costCentre: l.costCentre
+			}));
 		}
-		if (t.kind === 'settle') {
-			const person = parties.find((l) => kindOf(l.account) === 'person');
-			party = person?.account ?? null;
-			other = parties.find((l) => kindOf(l.account) === 'asset')?.account ?? null;
-			direction = (person?.amount ?? 0) > 0 ? 'reimburse' : 'repay';
+		if (e?.type === 'transfer') {
+			party = e.from;
+			other = e.to;
 		}
+		if (e?.type === 'settle') {
+			party = e.person;
+			other = e.account;
+			direction = e.direction;
+		}
+		if (e?.type === 'opening') other = e.account;
 	}
 
 	// --- options ----------------------------------------------------------------------
@@ -193,7 +189,7 @@
 		const category = snapshot.accounts.find(
 			(a) => a.kind === 'expense' && a.costCentre === centre && a.role !== 'pfand'
 		);
-		counterparty = snapshot.event.drinks.supplier;
+		counterparty = snapshot.drinkSettings.supplier;
 		party = snapshot.event.defaultReimbursementAccount;
 		amount = snapshot.drinks.cost || null;
 		if (category) lines = [{ account: category.id, amount: null, costCentre: centre }];
@@ -308,7 +304,7 @@
 
 	const fieldError = (name: string) => (error?.field === name ? error.message : null);
 	const partyLabel = $derived(
-		origin.type === 'ticketRefund'
+		txn?.kind === 'refund'
 			? 'Paid by'
 			: { expense: 'Paid by', income: 'Received by', transfer: 'From', settle: 'Person' }[kind]
 	);
@@ -593,6 +589,10 @@
 			>
 		{:else if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
+		{:else if elsewhere}
+			<span class="closed"><Icon name="lock" size={14} />Opening count</span>
+			<span class="grow"></span>
+			<Button size="sm" onclick={() => goto('/event/overview')}>Overview</Button>
 		{:else if confirming}
 			<div class="confirm">
 				<strong>Delete this entry?</strong>

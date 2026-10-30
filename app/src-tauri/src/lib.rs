@@ -124,6 +124,7 @@ pub fn run() {
             commands::backups_list,
             commands::backup_restore,
             commands::amount_parse,
+            commands::ticket_share,
             commands::date_parse,
             commands::txn_save,
             commands::txn_delete,

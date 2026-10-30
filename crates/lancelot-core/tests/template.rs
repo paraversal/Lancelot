@@ -44,7 +44,7 @@ fn last_year() -> Book {
         aliases: vec!["Normal".into()],
     };
     book.add_tier(tier).unwrap();
-    let open = book.ledger().open_items();
+    let open = book.open_items();
     let overrides = open
         .into_iter()
         .map(|item| BlockerOverride {
@@ -68,7 +68,7 @@ fn a_template_keeps_the_setup_and_none_of_the_money() {
         book.event().default_reimbursement_account,
         source.event().default_reimbursement_account
     );
-    assert_eq!(book.event().drinks, source.event().drinks);
+    assert_eq!(book.drink_settings(), source.drink_settings());
 
     assert_eq!(book.accounts().count(), source.accounts().count());
     assert_eq!(book.persons().count(), source.persons().count());

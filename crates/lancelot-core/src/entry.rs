@@ -101,6 +101,74 @@ impl Entry {
             Entry::Opening { .. } => TxnKind::Opening,
         }
     }
+
+    /// Who paid or received: the payer, the destination, the source, the person settling, the
+    /// account counted.
+    pub fn who(&self) -> AccountId {
+        match self {
+            Entry::Expense { payer, .. } => *payer,
+            Entry::Income { destination, .. } => *destination,
+            Entry::Transfer { from, .. } => *from,
+            Entry::Settle { person, .. } => *person,
+            Entry::Opening { account, .. } => *account,
+        }
+    }
+}
+
+/// The form a stored transaction shows in: the reverse of [`build_lines`] for typed-in entries.
+/// Generated income and refunds show as income, with their fee lines among the splits and the
+/// refund's payer as the destination; they cannot be saved. `None` for lines no form can show.
+pub fn entry_of(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> Option<Entry> {
+    let kind = |l: &Line| accounts.get(&l.account).map(|a| a.kind);
+    let splits = |lines: &[Line]| {
+        lines
+            .iter()
+            .map(|l| SplitLine {
+                account: l.account,
+                amount: l.amount.abs(),
+                memo: l.memo.clone(),
+                budget_line: l.budget_line,
+                cost_centre: l.cost_centre,
+            })
+            .collect()
+    };
+    Some(match (txn.kind, txn.lines.as_slice()) {
+        (TxnKind::Expense, [payer, lines @ ..]) => Entry::Expense {
+            payer: payer.account,
+            lines: splits(lines),
+        },
+        (TxnKind::Income, [lines @ .., destination]) => Entry::Income {
+            destination: destination.account,
+            lines: splits(lines),
+        },
+        (TxnKind::Refund, [lines @ .., payer]) => Entry::Income {
+            destination: payer.account,
+            lines: splits(lines),
+        },
+        (TxnKind::Transfer, [from, to]) => Entry::Transfer {
+            from: from.account,
+            to: to.account,
+            amount: to.amount,
+        },
+        (TxnKind::Settle, [out, into]) => {
+            let (person, account, direction) = if kind(into) == Some(AccountKind::Person) {
+                (into, out, SettleDirection::Reimburse)
+            } else {
+                (out, into, SettleDirection::Repay)
+            };
+            Entry::Settle {
+                person: person.account,
+                account: account.account,
+                amount: into.amount,
+                direction,
+            }
+        }
+        (TxnKind::Opening, [_, account]) => Entry::Opening {
+            account: account.account,
+            amount: account.amount,
+        },
+        _ => return None,
+    })
 }
 
 /// The amount a transaction moves: the sum of its incoming lines. For an expense that is the
@@ -199,7 +267,7 @@ pub fn txn_follows_rules(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> 
     if let Origin::TicketRefund { .. } = txn.origin {
         return match lines.as_slice() {
             [income, payer] => {
-                txn.kind == TxnKind::Income
+                txn.kind == TxnKind::Refund
                     && kind(income) == Some(AccountKind::Income)
                     && income.amount.is_positive()
                     && matches!(kind(payer), Some(AccountKind::Asset | AccountKind::Person))
@@ -270,6 +338,8 @@ pub fn lines_follow_rules(
             lines.len() == 2 && (kinds == [Person, Asset] || kinds == [Asset, Person])
         }
         TxnKind::Opening => lines.len() == 2 && is(0, &[Opening], false) && is(1, &[Asset], true),
+        // Only generated: see [`txn_follows_rules`].
+        TxnKind::Refund => false,
     }
 }
 
@@ -486,6 +556,20 @@ mod tests {
                 field: "destination".into()
             }
         );
+    }
+
+    #[test]
+    fn only_tickets_make_a_refund() {
+        let lines = build_lines(
+            &Entry::Income {
+                destination: CASH,
+                lines: vec![s(TICKETS, 100)],
+            },
+            &accounts(),
+        )
+        .unwrap();
+        assert!(lines_follow_rules(TxnKind::Income, &lines, &accounts()));
+        assert!(!lines_follow_rules(TxnKind::Refund, &lines, &accounts()));
     }
 
     #[test]

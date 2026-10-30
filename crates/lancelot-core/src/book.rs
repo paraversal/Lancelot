@@ -13,18 +13,18 @@ use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
 use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, txn_amount, txn_follows_rules};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
-use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
+use crate::ledger::{Ledger, LedgerInput};
 use crate::model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId, CostCentreRole,
-    DrinkProductId, Estimate, Event, EventDetails, Line, Person, Reconciliation, ReconciliationId,
-    Role, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
+    BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId,
+    CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, Line, OpenItem, Person,
+    Reconciliation, ReconciliationId, Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
 use crate::sales::Profitability;
-use crate::tickets::{Cancellation, ManualSale, TicketImport, Tickets, Tier};
+use crate::tickets::{Cancellation, ManualSale, TicketColumns, TicketImport, Tickets, Tier};
 
 mod drinks;
 mod template;
@@ -51,6 +51,8 @@ const OPENING_DESCRIPTION: &str = "Opening count";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Book {
     event: Event,
+    ticket_columns: TicketColumns,
+    drink_settings: DrinkSettings,
     accounts: BTreeMap<AccountId, Account>,
     persons: BTreeMap<AccountId, Person>,
     txns: BTreeMap<TxnId, Txn>,
@@ -95,6 +97,8 @@ pub struct NextIds {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BookParts {
     pub event: Event,
+    pub ticket_columns: TicketColumns,
+    pub drink_settings: DrinkSettings,
     pub accounts: Vec<Account>,
     pub persons: Vec<(AccountId, Person)>,
     pub txns: Vec<Txn>,
@@ -138,9 +142,9 @@ impl Book {
                 closed_at: None,
                 default_reimbursement_account: AccountId(1),
                 closing_overrides: Vec::new(),
-                ticket_columns: Default::default(),
-                drinks: DrinkSettings::default(),
             },
+            ticket_columns: TicketColumns::default(),
+            drink_settings: DrinkSettings::default(),
             accounts: BTreeMap::new(),
             persons: BTreeMap::new(),
             txns: BTreeMap::new(),
@@ -331,7 +335,9 @@ impl Book {
         }
 
         let drink_products = drinks::check_products(parts.drink_products, &parts.next)?;
-        if drinks::clean_settings(parts.event.drinks.clone()).as_ref() != Ok(&parts.event.drinks) {
+        if drinks::clean_settings(parts.drink_settings.clone()).as_ref()
+            != Ok(&parts.drink_settings)
+        {
             return Err(bad("drink settings are invalid"));
         }
 
@@ -346,6 +352,8 @@ impl Book {
 
         let book = Book {
             event: parts.event,
+            ticket_columns: parts.ticket_columns,
+            drink_settings: parts.drink_settings,
             accounts,
             persons,
             txns,
@@ -412,12 +420,33 @@ impl Book {
 
     // --- reading -------------------------------------------------------------------------
 
+    /// What keeps the event from being closed: the ledger's items, then the tickets' (R-SET-5).
+    pub fn open_items(&self) -> Vec<OpenItem> {
+        let mut items = self.ledger.open_items();
+        items.extend(self.tickets.open_item());
+        items
+    }
+
+    /// The columns read from the ticket sheet (R-TKT-3).
+    pub fn ticket_columns(&self) -> &TicketColumns {
+        &self.ticket_columns
+    }
+
+    /// The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
+    pub fn drink_settings(&self) -> &DrinkSettings {
+        &self.drink_settings
+    }
+
     pub fn event(&self) -> &Event {
         &self.event
     }
 
     pub fn accounts(&self) -> impl Iterator<Item = &Account> {
         self.accounts.values()
+    }
+
+    pub(crate) fn account_map(&self) -> &BTreeMap<AccountId, Account> {
+        &self.accounts
     }
 
     pub fn account(&self, id: AccountId) -> Option<&Account> {
@@ -1042,7 +1071,7 @@ impl Book {
         if overrides.iter().any(|o| o.note.trim().is_empty()) {
             return Err(DomainError::MissingNote);
         }
-        let open = self.ledger.open_items();
+        let open = self.open_items();
         let blockers: Vec<_> = open
             .iter()
             .filter(|item| !overrides.iter().any(|o| &o.item == *item))
@@ -1165,7 +1194,6 @@ impl Book {
             closing_counts: &self.closing_counts,
             reconciliations: &self.reconciliations,
             with_attachments: &with_attachments,
-            ticket_conflicts: self.tickets.conflict_count(),
             sheet_income: &crate::tickets::sheet_income(
                 &self.tiers,
                 &self.imports,
@@ -1181,7 +1209,7 @@ impl Book {
         )?;
         self.drinks = Drinks::compute(
             &self.drink_products,
-            &self.event.drinks,
+            &self.drink_settings,
             &self.accounts,
             &self.cost_centres,
             &self.txns,

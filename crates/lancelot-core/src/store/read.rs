@@ -212,11 +212,10 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         closed_at: closed_at.as_deref().map(text_timestamp).transpose()?,
         default_reimbursement_account: AccountId(default_account),
         closing_overrides: serde_json::from_str(&overrides)?,
-        ticket_columns: columns,
-        drinks: DrinkSettings {
-            supplier,
-            price_per_strich: price_per_strich.map(cents).transpose()?,
-        },
+    };
+    let drink_settings = DrinkSettings {
+        supplier,
+        price_per_strich: price_per_strich.map(cents).transpose()?,
     };
 
     let mut stmt = conn.prepare(
@@ -352,6 +351,8 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let cancellations = cancellations(conn)?;
 
     Ok(BookParts {
+        ticket_columns: columns,
+        drink_settings,
         event,
         accounts: accounts(conn)?.into_values().collect(),
         persons,

@@ -73,11 +73,10 @@
 		[...person.entries].reverse().map((e) => {
 			const txn = snapshot.txns.find((t) => t.id === e.txn);
 			let title = txn?.description || txn?.counterparty || '';
-			if (txn?.kind === 'settle') {
-				const account = txn.lines
-					.map((l) => snapshot.accounts.find((a) => a.id === l.account))
-					.find((a) => a?.kind === 'asset');
-				title = `${e.effect < 0 ? 'Reimbursed' : 'Paid back'} · ${account?.name ?? ''}`;
+			if (txn?.entry?.type === 'settle') {
+				const { account, direction } = txn.entry;
+				const name = snapshot.accounts.find((a) => a.id === account)?.name ?? '';
+				title = `${direction === 'reimburse' ? 'Reimbursed' : 'Paid back'} · ${name}`;
 			}
 			return { ...e, title, date: txn?.date ?? '', settle: txn?.kind === 'settle' };
 		})

@@ -164,6 +164,18 @@ fn an_error_keeps_its_code_and_field() {
 }
 
 #[test]
+fn a_form_previews_a_fee_or_refund_by_the_core_rule() {
+    let (_dir, mut bridge) = bridge();
+    let (status, share) = invoke(
+        &mut bridge,
+        "ticket_share",
+        json!({ "price": 1850, "bp": 250, "count": 2 }),
+    );
+    assert_eq!(status, 200, "{share}");
+    assert_eq!(share, json!({ "part": 92, "rest": 3608 }));
+}
+
+#[test]
 fn a_chosen_sheet_and_receipt_are_real_files() {
     let (_dir, mut bridge) = bridge();
     reset(&mut bridge, "example");

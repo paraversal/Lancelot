@@ -18,7 +18,7 @@ fn fixture(name: &str) -> (String, Vec<u8>) {
 
 fn sheet(book: &Book, name: &str) -> Sheet {
     let (name, data) = fixture(name);
-    read_sheet(&name, &data, &book.event().ticket_columns).unwrap()
+    read_sheet(&name, &data, book.ticket_columns()).unwrap()
 }
 
 fn tier(name: &str, price: &str, fee_bp: u32) -> TierDraft {
@@ -340,7 +340,7 @@ fn the_columns_can_be_renamed() {
     .unwrap();
     let (name, data) = fixture("import-1.ods");
     assert_eq!(
-        read_sheet(&name, &data, &book.event().ticket_columns),
+        read_sheet(&name, &data, book.ticket_columns()),
         Err(DomainError::MissingColumn {
             column: "Kategorie".into()
         })
@@ -360,7 +360,6 @@ fn the_columns_can_be_renamed() {
 fn a_closed_event_takes_no_imports() {
     let (mut book, _) = with_tiers();
     let accepted = book
-        .ledger()
         .open_items()
         .into_iter()
         .map(|item| BlockerOverride {
@@ -704,6 +703,8 @@ mod properties {
             // What a file would hold loads back as the same book.
             let parts = BookParts {
                 event: book.event().clone(),
+                ticket_columns: book.ticket_columns().clone(),
+                drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
                 txns: book.txns().cloned().collect(),
@@ -732,7 +733,7 @@ fn csv_sheet(book: &Book, name: &str, rows: &[(&str, &str)]) -> Sheet {
     for (order, tier) in rows {
         text.push_str(&format!("{order},{tier}\n"));
     }
-    read_sheet(name, text.as_bytes(), &book.event().ticket_columns).unwrap()
+    read_sheet(name, text.as_bytes(), book.ticket_columns()).unwrap()
 }
 
 fn import_rows(book: &mut Book, day: u8, rows: &[(&str, &str)]) {
@@ -796,7 +797,7 @@ fn a_removal_is_a_conflict_and_not_sold_until_resolved() {
     assert_eq!((figures.sheet, figures.sold, figures.unresolved), (1, 1, 2));
     assert_eq!(figures.net, eur("31,20"));
     assert_eq!(
-        book.ledger().open_items().last(),
+        book.open_items().last(),
         Some(&OpenItem::TicketConflicts { count: 1 })
     );
 }
@@ -875,10 +876,56 @@ fn a_refund_keeps_the_ticket_sold_and_books_negative_income() {
     let txn = book.txn(view.txn.unwrap()).unwrap();
     assert_eq!(txn.date, june(20));
     assert_eq!(txn.description, "Refund 2 × Regular");
-    assert_eq!(txn.kind, TxnKind::Income);
+    assert_eq!(txn.kind, TxnKind::Refund);
     // Generated: not to be changed by hand, and not a missing receipt.
     assert_eq!(book.delete_txn(txn.id), Err(DomainError::GeneratedTxn));
     assert!(book.ledger().missing_receipts().is_empty());
+}
+
+#[test]
+fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
+    let (mut book, t) = with_tiers();
+    import_rows(&mut book, 1, TWO_REGULAR);
+    import_rows(&mut book, 2, ONE_LEFT);
+    book.resolve_conflict("4711", t.regular, refund(2, 5000))
+        .unwrap();
+    let snapshot = EventSnapshot::new(&book);
+    let view = snapshot
+        .txns
+        .iter()
+        .find(|v| matches!(v.txn.origin, Origin::TicketRefund { .. }))
+        .unwrap();
+    assert_eq!(view.txn.kind, TxnKind::Refund);
+    assert_eq!(view.flow, Flow::Out);
+    assert!(!view.needs_receipt);
+    assert_eq!(view.who, Some(role(&book, Role::Verein)));
+    // Ticket income stays income, and shows with its fee among the splits.
+    let income = snapshot
+        .txns
+        .iter()
+        .find(|v| matches!(v.txn.origin, Origin::TicketImport { .. }))
+        .unwrap();
+    assert_eq!(income.txn.kind, TxnKind::Income);
+    let Some(Entry::Income { destination, lines }) = &income.entry else {
+        panic!("{:?}", income.entry);
+    };
+    assert_eq!(*destination, role(&book, Role::Verein));
+    assert_eq!(lines[0].amount, income.amount);
+    assert_eq!(lines.len(), 2);
+}
+
+#[test]
+fn a_share_rounds_on_each_ticket_like_the_tier() {
+    let share = |price, bp, count| {
+        let s = ticket_share(Cents::new(price).unwrap(), bp, count).unwrap();
+        (s.part.get(), s.rest.get())
+    };
+    assert_eq!(share(25, 5_000, 1), (13, 12));
+    assert_eq!(share(3_200, 250, 1), (80, 3_120));
+    assert_eq!(share(1_850, 250, 1), (46, 1_804)); // 46,25 ct
+    assert_eq!(share(1_000, 25, 1), (3, 997)); // 2,5 ct
+    assert_eq!(share(1_850, 250, 3), (138, 5_412));
+    assert_eq!(share(3_200, 0, 4), (0, 12_800));
 }
 
 #[test]
@@ -1317,6 +1364,8 @@ mod conflict_properties {
 
             let parts = BookParts {
                 event: book.event().clone(),
+                ticket_columns: book.ticket_columns().clone(),
+                drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
                 txns: book.txns().cloned().collect(),

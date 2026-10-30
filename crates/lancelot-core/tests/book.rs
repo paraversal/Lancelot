@@ -359,7 +359,7 @@ fn closing_counts_show_the_difference() {
         (cash, eur("412,90"), None)
     );
     assert_eq!(
-        book.ledger().open_items(),
+        book.open_items(),
         vec![OpenItem::ClosingCountMissing { account: cash }]
     );
 
@@ -367,7 +367,7 @@ fn closing_counts_show_the_difference() {
     let status = book.ledger().cash()[0];
     assert_eq!(status.difference, Some(eur("-2,90")));
     assert_eq!(
-        book.ledger().open_items(),
+        book.open_items(),
         vec![OpenItem::CashDifference {
             account: cash,
             difference: eur("-2,90")
@@ -376,7 +376,7 @@ fn closing_counts_show_the_difference() {
 
     book.set_closing_count(cash, june(14), eur("412,90"))
         .unwrap();
-    assert!(book.ledger().open_items().is_empty());
+    assert!(book.open_items().is_empty());
 
     // Other asset accounts appear once they have a count; they never need one.
     assert_eq!(book.ledger().cash().len(), 1);
@@ -538,7 +538,6 @@ fn asset_accounts_are_bank_or_cash() {
     // Every cash account needs a closing count; bank accounts don't.
     let cash = role(&book, Role::CashBox);
     let missing: Vec<_> = book
-        .ledger()
         .open_items()
         .into_iter()
         .filter(|i| matches!(i, OpenItem::ClosingCountMissing { .. }))

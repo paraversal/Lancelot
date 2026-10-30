@@ -15,7 +15,9 @@ use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::error::DomainError;
-use crate::model::{AccountId, CancellationId, ImportId, ManualSaleId, Origin, TierId, TxnId};
+use crate::model::{
+    AccountId, CancellationId, ImportId, ManualSaleId, OpenItem, Origin, TierId, TxnId,
+};
 use crate::money::{BP_FULL, Cents, MoneyError, percent_bp, try_sum};
 use crate::sales::{SalesPoint, sales_over_time};
 use crate::sheet::{RowProblem, Sheet};
@@ -73,23 +75,39 @@ pub struct TicketMoney {
     pub net: Cents,
 }
 
+/// A percentage of `count` tickets and what remains of their price: a fee or a refund.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct TicketShare {
+    pub part: Cents,
+    pub rest: Cents,
+}
+
+/// The one rule for a fee or refund (R-COR-6): rounded half-up to the cent on each ticket
+/// (R-TKT-10, R-TKT-15). The forms preview it through a command.
+pub fn ticket_share(price: Cents, bp: u32, count: u32) -> Result<TicketShare, MoneyError> {
+    let count = i64::from(count);
+    let part = percent_bp(price, bp)?.checked_mul(count)?;
+    Ok(TicketShare {
+        part,
+        rest: price.checked_mul(count)?.checked_sub(part)?,
+    })
+}
+
 impl Tier {
-    /// The money of `count` tickets (R-COR-6). The fee is rounded half-up to the cent on each
-    /// ticket (R-TKT-10). Every figure and generated entry of a ticket comes from here.
+    /// The money of `count` tickets. Every figure and generated entry of a ticket comes from here.
     pub fn money(&self, count: u32) -> Result<TicketMoney, MoneyError> {
-        let count = i64::from(count);
-        let gross = self.draft.price.checked_mul(count)?;
-        let fees = percent_bp(self.draft.price, self.draft.fee_bp)?.checked_mul(count)?;
+        let share = ticket_share(self.draft.price, self.draft.fee_bp, count)?;
         Ok(TicketMoney {
-            gross,
-            fees,
-            net: gross.checked_sub(fees)?,
+            gross: self.draft.price.checked_mul(i64::from(count))?,
+            fees: share.part,
+            net: share.rest,
         })
     }
 
-    /// The refund on `count` tickets, rounded half-up to the cent on each ticket.
+    /// The refund on `count` tickets.
     pub fn refund(&self, refund_bp: u32, count: u32) -> Result<Cents, MoneyError> {
-        percent_bp(self.draft.price, refund_bp)?.checked_mul(i64::from(count))
+        Ok(ticket_share(self.draft.price, refund_bp, count)?.part)
     }
 
     /// Whether `name` from the sheet means this tier: its name or one of its aliases,
@@ -731,6 +749,12 @@ impl Tickets {
     /// Conflicts per order and tier: what the navigation badge and the open item count.
     pub fn conflict_count(&self) -> u32 {
         self.conflicts.iter().map(|c| c.removed.len() as u32).sum()
+    }
+
+    /// What the tickets keep open when closing the event (R-TKT-16).
+    pub fn open_item(&self) -> Option<OpenItem> {
+        let count = self.conflict_count();
+        (count > 0).then_some(OpenItem::TicketConflicts { count })
     }
 
     pub(crate) fn compute(

@@ -36,7 +36,7 @@
 	const format = $derived(session.format);
 	const tiers = $derived(snapshot.tickets.tiers);
 	const imports = $derived(snapshot.tickets.imports);
-	const columns = $derived(snapshot.event.ticketColumns);
+	const columns = $derived(snapshot.ticketColumns);
 
 	let path = $state<string | null>(null);
 	const today = new Date().toISOString().slice(0, 10);

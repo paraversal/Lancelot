@@ -181,6 +181,34 @@ pub enum TxnKind {
     Settle,
     /// An opening count, e.g. the cash box at the start.
     Opening,
+    /// A ticket refund: negative income, always generated (R-TKT-15).
+    Refund,
+}
+
+/// Which way a transaction moves the event's money.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "lowercase")]
+pub enum Flow {
+    In,
+    Out,
+    /// Between the event's own accounts and people.
+    Moved,
+}
+
+impl TxnKind {
+    pub fn flow(self) -> Flow {
+        match self {
+            TxnKind::Income => Flow::In,
+            TxnKind::Expense | TxnKind::Refund => Flow::Out,
+            TxnKind::Transfer | TxnKind::Settle | TxnKind::Opening => Flow::Moved,
+        }
+    }
+
+    /// Whether the transaction should have a receipt attached (R-ATT-4).
+    pub fn needs_receipt(self) -> bool {
+        self == TxnKind::Expense
+    }
 }
 
 /// One leg of a transaction. Money leaving an account is negative, money arriving positive.
@@ -273,11 +301,41 @@ pub struct Event {
     /// Where reimbursements come from by default. Initially the Verein account.
     pub default_reimbursement_account: AccountId,
     /// Open items that were explicitly accepted when the event was closed (R-SET-7).
-    pub closing_overrides: Vec<crate::ledger::BlockerOverride>,
-    /// The columns read from the ticket sheet (R-TKT-3).
-    pub ticket_columns: crate::tickets::TicketColumns,
-    /// The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
-    pub drinks: crate::drinks::DrinkSettings,
+    pub closing_overrides: Vec<BlockerOverride>,
+}
+
+/// Something that keeps the event from being closed (R-SET-5).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum OpenItem {
+    /// A person the event owes money to, or who owes the event.
+    PersonBalance { person: AccountId, net: Cents },
+    /// An expense without an attachment (R-ATT-4).
+    MissingReceipt { txn: TxnId },
+    /// A cash account has no closing count yet.
+    ClosingCountMissing { account: AccountId },
+    /// The closing count differs from the computed balance.
+    CashDifference {
+        account: AccountId,
+        difference: Cents,
+    },
+    /// A statement differs from the books on its date (R-ACC-4).
+    ReconciliationMismatch {
+        checkpoint: ReconciliationId,
+        account: AccountId,
+        difference: Cents,
+    },
+    /// Tickets removed from the sheet that have no resolution yet (R-TKT-16), per order and tier.
+    TicketConflicts { count: u32 },
+}
+
+/// An open item explicitly accepted when closing the event (R-SET-7).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct BlockerOverride {
+    pub item: OpenItem,
+    pub note: String,
 }
 
 /// A file attached to a transaction, e.g. a receipt (R-ATT-1). The bytes live only in the

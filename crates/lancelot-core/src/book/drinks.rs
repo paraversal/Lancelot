@@ -141,7 +141,7 @@ impl Book {
 
     pub fn set_drink_settings(&mut self, settings: DrinkSettings) -> Result<(), DomainError> {
         self.change(|book| {
-            book.event.drinks = clean_settings(settings)?;
+            book.drink_settings = clean_settings(settings)?;
             Ok(())
         })
     }

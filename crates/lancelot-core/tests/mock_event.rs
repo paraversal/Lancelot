@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
 use common::mock::{self, Mock};
 use common::*;
 use lancelot_core::*;
@@ -80,7 +82,7 @@ fn where_the_money_is_reconciles_to_the_result() {
 #[test]
 fn open_items_are_the_unsettled_people_a_receipt_and_the_cash_box() {
     let (book, m) = mock_event();
-    let open = book.ledger().open_items();
+    let open = book.open_items();
     assert_eq!(
         open,
         vec![
@@ -111,7 +113,7 @@ fn the_snapshot_carries_every_figure_in_ui_form() {
     let snapshot = EventSnapshot::new(&book);
     assert_eq!(snapshot.totals.result, eur("2.027,50"));
     assert_eq!(snapshot.persons.len(), 4);
-    assert_eq!(snapshot.open_items, book.ledger().open_items());
+    assert_eq!(snapshot.open_items, book.open_items());
     assert!(
         snapshot
             .txns
@@ -148,6 +150,24 @@ fn export_the_snapshot_for_the_ui() {
     let mut json = serde_json::to_string_pretty(&EventSnapshot::new(&book)).unwrap();
     json.push('\n');
     std::fs::write(dir.join("example-event.json"), json).unwrap();
+}
+
+/// What the app edits is what is stored: a typed-in entry rebuilds exactly its lines.
+#[test]
+fn every_entry_of_the_example_shows_in_the_form_that_made_it() {
+    let (book, _) = mock_event();
+    let accounts: BTreeMap<_, _> = book.accounts().map(|a| (a.id, a.clone())).collect();
+    let snapshot = EventSnapshot::new(&book);
+    assert!(!snapshot.txns.is_empty());
+    for view in &snapshot.txns {
+        let entry = view
+            .entry
+            .as_ref()
+            .expect("the example's entries have forms");
+        assert_eq!(entry.kind(), view.txn.kind);
+        assert_eq!(build_lines(entry, &accounts).unwrap(), view.txn.lines);
+        assert_eq!(view.who, Some(entry.who()));
+    }
 }
 
 #[test]

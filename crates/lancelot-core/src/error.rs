@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 
-use crate::ledger::OpenItem;
+use crate::model::OpenItem;
 use crate::money::MoneyError;
 
 #[derive(Clone, Debug, PartialEq, Eq, Error)]

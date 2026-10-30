@@ -44,6 +44,7 @@ import type { Report } from './generated/Report';
 import type { Resolution } from './generated/Resolution';
 import type { SavedTxn } from './generated/SavedTxn';
 import type { TicketColumns } from './generated/TicketColumns';
+import type { TicketShare } from './generated/TicketShare';
 import type { TierDraft } from './generated/TierDraft';
 import type { TierId } from './generated/TierId';
 import type { TxnDraft } from './generated/TxnDraft';
@@ -128,6 +129,9 @@ export const api = {
 	restoreBackup: (event: string, backup: string, target: string) =>
 		call<OpenEvent>('backup_restore', { event, backup, target }),
 
+	/** A percentage of `count` tickets by the core's rule; changes nothing. */
+	ticketShare: (price: Cents, bp: number, count: number) =>
+		call<TicketShare>('ticket_share', { price, bp, count }),
 	parseAmount: (input: string, allowNegative: boolean) =>
 		call<Parsed>('amount_parse', { input, allowNegative }),
 	parseDate: (input: string) => call<ParsedDate>('date_parse', { input }),

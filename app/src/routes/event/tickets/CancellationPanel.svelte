@@ -18,7 +18,8 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, parseCount, parseFee, refundPerTicket } from '#lib/tickets.ts';
+	import { feeInput, parseCount, parseFee } from '#lib/tickets.ts';
+	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let {
 		id,
@@ -88,11 +89,12 @@
 
 	const n = $derived(parseCount(count));
 	const bp = $derived(percent.trim() ? parseFee(percent) : null);
-	const refund = $derived(
+	const share = ticketShare(() =>
 		bp !== null && n !== null && !Number.isNaN(n)
-			? refundPerTicket(tiers.find((t) => t.id === tierId)?.price ?? 0, bp) * n
+			? { price: tiers.find((t) => t.id === tierId)?.price ?? 0, bp, count: n }
 			: null
 	);
+	const refund = $derived(share.current?.part ?? null);
 	const fieldError = (field: string) => (error?.field === field ? error.message : null);
 
 	async function save() {

@@ -232,11 +232,13 @@ pub(crate) fn persist<'a>(
         },
     )?;
 
-    // The event row.
+    // The event row, which also holds the sheet's columns and the drink settings.
     let event = after.event();
-    if before.map(|b| b.event()) != Some(event) {
+    let row = |b: &'a Book| (b.event(), b.ticket_columns(), b.drink_settings());
+    if before.map(row) != Some(row(after)) {
         let d = &event.details;
-        let columns = &event.ticket_columns;
+        let columns = after.ticket_columns();
+        let drinks = after.drink_settings();
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
                                 default_reimbursement_account_id, closing_overrides,
@@ -265,8 +267,8 @@ pub(crate) fn persist<'a>(
                 columns.tier,
                 columns.order,
                 columns.sale_date,
-                event.drinks.supplier,
-                event.drinks.price_per_strich.map(|p| p.get()),
+                drinks.supplier,
+                drinks.price_per_strich.map(|p| p.get()),
             ],
         )?;
         match before.map(|b| b.event()) {
@@ -276,8 +278,21 @@ pub(crate) fn persist<'a>(
                 let op = if event.is_closed() { "close" } else { "reopen" };
                 log.raw("event", 1, op, Some(json(b)?), Some(json(event)?))?;
             }
-            Some(b) => log.write("event", 1, &Change::Update(b, event))?,
+            Some(b) if b != event => log.write("event", 1, &Change::Update(b, event))?,
+            Some(_) => {}
         }
+        setting(
+            log,
+            "ticket_columns",
+            before.map(Book::ticket_columns),
+            columns,
+        )?;
+        setting(
+            log,
+            "drink_settings",
+            before.map(Book::drink_settings),
+            drinks,
+        )?;
     }
 
     saved(
@@ -609,6 +624,20 @@ pub(crate) fn persist<'a>(
         }
     }
     Ok(())
+}
+
+/// Logs one of the settings stored on the event row, when it changed.
+fn setting<V: Serialize + PartialEq>(
+    log: &Log<'_>,
+    entity: &str,
+    before: Option<&V>,
+    after: &V,
+) -> Result<(), StoreError> {
+    match before {
+        None => log.write(entity, 1, &Change::Create(after)),
+        Some(b) if b != after => log.write(entity, 1, &Change::Update(b, after)),
+        Some(_) => Ok(()),
+    }
 }
 
 fn write_lines(conn: &Connection, t: &Txn) -> Result<(), StoreError> {

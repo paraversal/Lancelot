@@ -16,7 +16,8 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, formatFee, parseCount, parseFee, refundPerTicket } from '#lib/tickets.ts';
+	import { feeInput, formatFee, parseCount, parseFee } from '#lib/tickets.ts';
+	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let { conflict, removed }: { conflict: OrderConflict; removed: RemovedTickets } = $props();
 
@@ -60,12 +61,11 @@
 	const n = $derived(parseCount(count));
 	const bp = $derived(percent.trim() ? parseFee(percent) : null);
 	const price = $derived(tier?.price ?? 0);
-	const refund = $derived(
-		bp !== null && n !== null && !Number.isNaN(n) ? refundPerTicket(price, bp) * n : null
+	const share = ticketShare(() =>
+		bp !== null && n !== null && !Number.isNaN(n) ? { price, bp, count: n } : null
 	);
-	const keep = $derived(
-		n !== null && !Number.isNaN(n) && refund !== null ? price * n - refund : null
-	);
+	const refund = $derived(share.current?.part ?? null);
+	const keep = $derived(share.current?.rest ?? null);
 
 	async function resolve(resolution: Resolution) {
 		error = null;

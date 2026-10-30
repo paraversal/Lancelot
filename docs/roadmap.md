@@ -316,12 +316,12 @@ In this order, so the round-trip check is there for the `persist` rewrite.
 
 ### Stage 4 · Decouple
 
-- [ ] `TxnKind::Refund`, so the ledger reads a kind, not an origin. `Book::open_items()` combines the items of each feature. `ticket_columns` and `drinks` move from `Event` to `Book`, and `Ledger::compute` is split by figure (F15).
-- [ ] `TxnView` says what the UI now infers: who, direction, whether a receipt is needed and the `Entry` to edit. A synchronous preview command gives fee and refund amounts (F12).
+- [x] `TxnKind::Refund`, so the ledger reads a kind, not an origin. This adds one value to the `txn.kind` CHECK. `Book::open_items()` combines the items of each feature. `ticket_columns` and `drink_settings` move from `Event` to `Book` and are logged on their own; the columns stay on the event row. `Ledger::compute` is split by figure (F15).
+- [x] `TxnView` says what the UI inferred: who, the flow, whether a receipt is needed and the `Entry` for the form. An opening count opens read-only and leads to the Overview, where it was already edited, because saving it as a transfer always failed. The `ticket_share` command previews fee and refund amounts by the core's rule (F12).
 
 ### Stage 5 · Open the flows
 
-All schema changes of the refactoring land here, as one batch.
+The remaining schema changes of the refactoring land here, as one batch.
 
 - [ ] **Any account to any account (F3).** The Transfer form gets free From and To fields over assets, people and categories. So A → B: 50 € means A is owed 50 € and B owes 50 €, and B's later 50 € expense nets B to zero. The opening account stays reserved for opening entries, and generated ticket entries stay read-only. Expense and Income stay as forms with receipts and splits. `TxnKind` becomes only a label; stored data is checked for balance, at least two non-zero lines, known accounts and the opening rule.
 - [ ] **Roles go (F4).** A ticket account setting, a destination (asset or person) on manual sales and a net-movement flag on asset accounts replace `Role::Verein`, `CashBox` and `Opening`. The ticket category roles stay.
@@ -364,4 +364,4 @@ All schema changes of the refactoring land here, as one batch.
 
 ## Next step
 
-Work through the [refactoring stages](#refactoring), starting with Stage 4. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
+Work through the [refactoring stages](#refactoring), starting with Stage 5. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).

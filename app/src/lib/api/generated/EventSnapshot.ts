@@ -6,6 +6,7 @@ import type { CashStatus } from "./CashStatus";
 import type { ClosingCount } from "./ClosingCount";
 import type { CostCentre } from "./CostCentre";
 import type { DrinkProduct } from "./DrinkProduct";
+import type { DrinkSettings } from "./DrinkSettings";
 import type { Drinks } from "./Drinks";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
@@ -15,11 +16,20 @@ import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
 import type { Profitability } from "./Profitability";
 import type { ReconciliationStatus } from "./ReconciliationStatus";
+import type { TicketColumns } from "./TicketColumns";
 import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
 
 export type EventSnapshot = { event: Event, 
+/**
+ * The columns read from the ticket sheet (R-TKT-3).
+ */
+ticketColumns: TicketColumns, 
+/**
+ * The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
+ */
+drinkSettings: DrinkSettings, 
 /**
  * All accounts and categories, in creation order, each with its displayed balance.
  */

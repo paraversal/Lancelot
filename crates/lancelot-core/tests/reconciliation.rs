@@ -117,7 +117,7 @@ fn a_mismatch_is_an_open_item_until_the_books_agree() {
         account: verein,
         difference: eur("100"),
     };
-    assert!(book.ledger().open_items().contains(&expected));
+    assert!(book.open_items().contains(&expected));
 
     income_on(&mut book, verein, 10, "100");
     assert!(
@@ -138,7 +138,6 @@ fn an_earlier_mismatch_stays_open_after_a_later_match() {
     book.add_reconciliation(verein, june(30), eur("100"))
         .unwrap();
     let mismatches = book
-        .ledger()
         .open_items()
         .into_iter()
         .filter(|i| matches!(i, OpenItem::ReconciliationMismatch { .. }))

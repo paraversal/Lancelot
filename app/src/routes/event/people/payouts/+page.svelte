@@ -38,13 +38,14 @@
 				.filter((a) => a?.kind === 'expense' || a?.kind === 'income')
 				.map((a) => a!.name)
 				.join(', ');
-			const asset = (txn?.lines ?? [])
-				.map((l) => snapshot.accounts.find((a) => a.id === l.account))
-				.find((a) => a?.kind === 'asset')?.name;
+			const entry = txn?.entry;
 			const title =
-				txn?.kind === 'settle'
-					? `${e.effect < 0 ? 'Reimbursed' : 'Paid back'} · ${asset ?? ''}`
-					: txn?.description || txn?.counterparty || categories || (asset ? `Into ${asset}` : '');
+				entry?.type === 'settle'
+					? `${entry.direction === 'reimburse' ? 'Reimbursed' : 'Paid back'} · ${accountName(entry.account)}`
+					: txn?.description ||
+						txn?.counterparty ||
+						categories ||
+						(entry?.type === 'transfer' ? `Into ${accountName(entry.to)}` : '');
 			return { ...e, date: txn?.date ?? '', title };
 		});
 	}

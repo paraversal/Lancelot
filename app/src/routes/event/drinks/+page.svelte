@@ -15,7 +15,7 @@
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
-	const settings = $derived(snapshot.event.drinks);
+	const settings = $derived(snapshot.drinkSettings);
 	const drinks = $derived(snapshot.drinks);
 	const centre = $derived(snapshot.costCentres.find((c) => c.role === 'drinks'));
 	const pnl = $derived(snapshot.budget.costCentres.find((c) => c.costCentre === centre?.id));

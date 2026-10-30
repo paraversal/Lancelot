@@ -7,11 +7,11 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, CopyChoice, CopySummary,
+    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
     DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
     MAX_ATTACHMENT_SIZE, Parsed, Report, Store, StoreError, StoreOptions, TemplateSummary,
-    TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount,
-    parse_date, read_book,
+    TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
+    parse_amount, parse_date, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -517,6 +517,11 @@ impl Service {
             self.file.settings.number_format,
             allow_negative,
         )?)
+    }
+
+    /// The fee or refund a form is about to save, by the core's rule.
+    pub fn ticket_share(&self, price: Cents, bp: u32, count: u32) -> Result<TicketShare> {
+        ticket_share(price, bp, count).map_err(|e| DomainError::from(e).into())
     }
 
     pub fn parse_date(&self, input: &str) -> Result<ParsedDate> {
@@ -1092,7 +1097,7 @@ mod tests {
                 })
             })
             .unwrap();
-        assert_eq!(open.snapshot.event.ticket_columns.tier, "Kategorie");
+        assert_eq!(open.snapshot.ticket_columns.tier, "Kategorie");
         assert!(s.preview_tickets(&sheet, june(9)).is_err());
     }
 

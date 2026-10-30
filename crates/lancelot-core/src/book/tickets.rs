@@ -137,7 +137,7 @@ impl Book {
                     field: "saleDate".into(),
                 });
             }
-            book.event.ticket_columns = TicketColumns {
+            book.ticket_columns = TicketColumns {
                 tier,
                 order,
                 sale_date,
@@ -573,7 +573,10 @@ impl Book {
                 id,
                 Txn {
                     id,
-                    kind: TxnKind::Income,
+                    kind: match origin {
+                        Origin::TicketRefund { .. } => TxnKind::Refund,
+                        _ => TxnKind::Income,
+                    },
                     date,
                     description,
                     counterparty: None,

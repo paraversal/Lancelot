@@ -49,7 +49,7 @@ CREATE TABLE person (                  -- 1:1 extension of an account of kind 'p
 
 CREATE TABLE txn (
   id           INTEGER PRIMARY KEY,
-  kind         TEXT NOT NULL CHECK (kind IN ('expense','income','transfer','settle','opening')),
+  kind         TEXT NOT NULL CHECK (kind IN ('expense','income','transfer','settle','opening','refund')),
   date         TEXT NOT NULL,          -- ISO date
   description  TEXT NOT NULL DEFAULT '',
   counterparty TEXT,
@@ -184,7 +184,8 @@ CREATE TABLE change_log (              -- R-TX-6
   at         TEXT NOT NULL,            -- RFC 3339 UTC
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line',
                                        -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation',
-                                       -- 'cost_centre','drink_product','reconciliation'
+                                       -- 'cost_centre','drink_product','reconciliation',
+                                       -- 'ticket_columns','drink_settings'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

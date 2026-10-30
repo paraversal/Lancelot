@@ -395,7 +395,7 @@ fn everything_survives_saving_and_reopening() {
         Cents::ZERO
     );
     assert_eq!(
-        store.book().event().drinks.price_per_strich,
+        store.book().drink_settings().price_per_strich,
         Some(eur("1,50"))
     );
 }
