@@ -55,7 +55,7 @@ jobs:
       - run: pnpm build
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      # cargo test regenerates the TypeScript types and the UI mock's example event;
+      # cargo test regenerates the TypeScript types and the UI's example event;
       # the committed ones must match.
       - name: Generated UI files are up to date
         # Windows checkouts may convert line endings; Linux and macOS cover this.
@@ -63,6 +63,6 @@ jobs:
         shell: bash
         working-directory: .
         run: |
-          git diff --exit-code -- app/src/lib/api/generated app/src/lib/api/mock/*.json
-          test -z "$(git status --porcelain -- app/src/lib/api/generated app/src/lib/api/mock)"
+          git diff --exit-code -- app/src/lib/api/generated app/src/lib/api/fixtures/*.json
+          test -z "$(git status --porcelain -- app/src/lib/api/generated app/src/lib/api/fixtures)"
       - run: pnpm tauri build --debug --no-bundle

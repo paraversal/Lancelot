@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 
 pub mod mock;
+// Needs proptest. The dev bridge includes this file for the example event, without it.
+#[cfg(test)]
 pub mod world;
 
 use lancelot_core::*;

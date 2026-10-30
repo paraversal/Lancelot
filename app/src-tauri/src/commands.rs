@@ -13,12 +13,11 @@ use lancelot_core::{
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::api::{
+use lancelot_service::api::{
     Added, ApiError, AppInfo, BackupInfo, CheckedIban, CountInput, OpenEvent, ParsedDate,
     RecentEvent, SavedTxn,
 };
-use crate::service::Service;
-use crate::settings::AppSettings;
+use lancelot_service::{AppSettings, Service};
 
 pub struct AppState(pub Mutex<Service>);
 

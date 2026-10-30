@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { EventSnapshot } from './api/generated/EventSnapshot';
-import example from './api/mock/example-event.json';
+import example from './api/fixtures/example-event.json';
 import { byCategory, byDay, counts, matches, rows } from './ledger';
 
 // The example event from the mockups, exported by the Rust tests.

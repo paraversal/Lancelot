@@ -4,8 +4,22 @@
     {
       "name": "ui",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "app", "dev"],
+      "runtimeArgs": [
+        "--dir",
+        "app",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "bridge",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "-p",
+        "lancelot-bridge"
+      ],
+      "port": 5174
     }
   ]
 }

@@ -19,9 +19,11 @@ Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's ex
 Cargo.toml                 workspace
 crates/lancelot-core/      domain, storage, import, reports (no Tauri dependency)
 app/                       SvelteKit SPA (adapter-static, TypeScript)
+crates/lancelot-service/   commands on the open event, settings, API types (no Tauri dependency)
+crates/lancelot-bridge/    development only: the commands over local HTTP for a plain browser
 app/src-tauri/             Tauri 2 shell: commands, dialogs, drag-and-drop
 docs/                      requirements, roadmap, design, technical design
-fixtures/                  sample .lancelot events, ticket sheets (.ods), Strichliste CSVs
+fixtures/                  ticket sheets (.ods), receipts, format cases; sample events and Strichliste CSVs later
 ```
 
 ---
@@ -282,15 +284,16 @@ From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm)
 
 ### Stage 1 · Dev bridge (F8)
 
-The browser checks run against the real core, and the mock backend goes.
+The browser checks run against the real core, and the mock backend is gone.
 
-- [ ] A development-only program, bound to `127.0.0.1` and never shipped, that exposes the real `Service`'s commands. `backend()` in `lib/api` calls it in a plain browser. Without the bridge running, the browser shows a clear error. If compiling all of Tauri for it is too slow, `Service` moves into its own small crate.
-- [ ] Named scenarios, such as an open conflict or an import preview, built on `tests/mock_event.rs`. A reset call loads one into a temporary `.lancelot` file.
-- [ ] Attachments served by the bridge, and the fake file dialogs moved into a small dev-only file.
-- [ ] Add the bridge to `.claude/launch.json`, and check every screen through it, including the `/design` pages if they rely on the mock.
-- [ ] Delete `app/src/lib/api/mock/`.
+- [x] `crates/lancelot-bridge`, development only and bound to `127.0.0.1`, exposes the real `Service`'s commands. `backend()` in `lib/api` calls it in a plain browser, and without it the browser shows how to start it. `Service` moved to `crates/lancelot-service`, so the bridge needs no Tauri.
+- [x] The scenarios `start`, `example`, `empty`, `conflict` and `closed`, built on the core's example event, with a damaged and a locked file among the recent events.
+- [x] Attachments served by the bridge, with real receipt files in `fixtures/receipts`. The dialogs' stand-ins in `lib/api/dev.ts`.
+- [x] The bridge in `.claude/launch.json`, and every screen and `/design` checked through it.
+- [x] `app/src/lib/api/mock/` deleted. The example event the UI tests use is now in `lib/api/fixtures`.
+- [x] The service and bridge tests run on every push, which covers the shell tests of F14.
 
-**Exit:** the UI runs in a browser against real SQLite, and nothing imports the mock.
+**Exit:** the UI runs in a browser against real SQLite, and nothing imports the mock. ✓
 
 ### Stage 2 · Protect files
 
@@ -299,7 +302,7 @@ The browser checks run against the real core, and the mock backend goes.
 - [ ] `delete_import`, refused only while a cancellation still needs its tickets, and `delete_account` for accounts nothing refers to (F5).
 - [ ] Negative counts on bank accounts, with closing counts and checkpoints compared through one function. It uses the role check until Stage 5 (F6).
 - [ ] Errors appear where they occur: payouts and profitability computed in `recompute`, a negative opening count rejected, a receipt about to be lost shown in the import preview, and a distinct error for a file that is intact but inconsistent (F13).
-- [ ] A property test over imports and checkpoints, and all workspace tests on every push (F14).
+- [ ] A property test over imports and checkpoints (F14).
 
 ### Stage 3 · Remove code, no behaviour change
 
@@ -361,4 +364,4 @@ All schema changes of the refactoring land here, as one batch.
 
 ## Next step
 
-Work through the [refactoring stages](#refactoring), starting with Stage 1. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
+Work through the [refactoring stages](#refactoring), starting with Stage 2. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).

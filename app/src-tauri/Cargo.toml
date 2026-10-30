@@ -16,18 +16,12 @@ tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
 lancelot-core.workspace = true
+lancelot-service.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sys-locale = "0.3"
 tauri = { version = "2.12.5", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
-time.workspace = true
-ts-rs.workspace = true
-
-[dev-dependencies]
-rusqlite.workspace = true
-tempfile.workspace = true
 
 [lints]
 workspace = true

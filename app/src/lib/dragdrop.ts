@@ -1,5 +1,5 @@
 // Files dragged onto the window (R-ATT-5). In the app, Tauri reports the paths; in a plain
-// browser during development, the file names stand in for paths (the mock never reads them).
+// browser during development, the dev bridge keeps the files and gives their paths.
 import { isTauri } from '@tauri-apps/api/core';
 
 export interface DropHandlers {
@@ -43,7 +43,8 @@ export function onFileDrop(handlers: DropHandlers): () => void {
 	const drop = (e: DragEvent) => {
 		if (!files(e)) return;
 		e.preventDefault();
-		handlers.drop([...(e.dataTransfer?.files ?? [])].map((f) => f.name));
+		const dropped = [...(e.dataTransfer?.files ?? [])];
+		import('./api/dev').then(({ upload }) => Promise.all(dropped.map(upload))).then(handlers.drop);
 	};
 	window.addEventListener('dragover', over);
 	window.addEventListener('dragleave', leave);

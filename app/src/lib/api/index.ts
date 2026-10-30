@@ -69,10 +69,10 @@ function isErrorData(value: unknown): value is ApiErrorData {
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
-/** Tauri's invoke in the app; in a plain browser during development, the mock backend. */
+/** Tauri's invoke in the app; in a plain browser during development, the dev bridge. */
 async function backend(): Promise<Invoke> {
 	if (isTauri()) return tauriInvoke;
-	if (import.meta.env.DEV) return (await import('./mock')).invoke;
+	if (import.meta.env.DEV) return (await import('./dev')).invoke;
 	throw new ApiError({
 		code: 'internal',
 		message: 'not running in Lancelot',
@@ -211,5 +211,5 @@ export const api = {
 /** Where the webview loads an attachment from, for previews (`lancelot://` in the app). */
 export async function attachmentUrl(attachment: Attachment): Promise<string> {
 	if (isTauri()) return convertFileSrc(`attachment/${attachment.id}`, 'lancelot');
-	return (await import('./mock')).attachmentUrl(attachment);
+	return (await import('./dev')).attachmentUrl(attachment.id);
 }

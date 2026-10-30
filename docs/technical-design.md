@@ -11,7 +11,7 @@ Status: v0.2. It implements [requirements v0.9](requirements.md) and follows the
                 │ EventSnapshot (JSON)          │ commands (invoke)
 ┌───────────────┴───────────── app/src-tauri/ ──▼────────────────────────┐
 │ Tauri 2 shell: command handlers, file dialogs, drag-and-drop,          │
-│ attachment protocol, app settings, window ↔ open event                 │
+│ attachment protocol. crates/lancelot-service: app settings, open event │
 └───────────────▲───────────────────────────────┬────────────────────────┘
                 │                               │
 ┌───────────────┴──────────── crates/lancelot-core/ ─▼───────────────────┐
@@ -168,7 +168,7 @@ Unit tests for every module, property tests with `proptest` for the money invari
 
 ## 5. IPC contract
 
-- **Commands** are Tauri `#[command]`s in `app/src-tauri/src/commands.rs`. They only lock the app state and call `service.rs`, which does the work and is tested without Tauri. Each returns `Result<T, ApiError>`, where `ApiError = { code, message, field?, report? }`: `field` names the input for domain errors, and `report` carries the integrity report of a damaged file.
+- **Commands** are Tauri `#[command]`s in `app/src-tauri/src/commands.rs`. They only lock the app state and call `Service` in `crates/lancelot-service`, which does the work and has no Tauri dependency, so it is tested without it. Each returns `Result<T, ApiError>`, where `ApiError = { code, message, field?, report? }`: `field` names the input for domain errors, and `report` carries the integrity report of a damaged file.
 - **Every event command returns a fresh `OpenEvent`**: `{ revision, path, fileName, snapshot, integrity, backupError }`. The `snapshot` (`EventSnapshot` in the core) holds every figure the UI shows. At ≈100 transactions it is a few tens of kilobytes. In return, the UI never has to patch state or derive anything about money. `revision` grows with every change, so a late response cannot overwrite a newer one.
 - **Types** for everything that crosses the boundary are generated from Rust with `ts-rs` into `app/src/lib/api/generated/`, one file per type, whenever `cargo test` runs. The files are checked in; CI fails if they differ from what the Rust types produce. `Cents`, ids and counts are mapped to `number`, dates and timestamps to `string`.
 - **One window holds one open event.** Opening or creating another closes the current one first, which releases its lock.
@@ -179,7 +179,10 @@ Unit tests for every module, property tests with `proptest` for the money invari
 
 **Saving edits.** Fields save when they are left (blur or Enter). Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
 
-**Development mock.** In a plain browser (`pnpm dev`), `lib/api` uses `lib/api/mock` instead of Tauri: the example event and an empty one, exported as JSON by `crates/lancelot-core/tests/mock_event.rs`, plus rough stand-ins for the commands and dialogs. It is loaded only in development and never in the app.
+**Dev bridge.** In a plain browser (`pnpm dev`), `lib/api/dev.ts` sends the commands to `crates/lancelot-bridge`, through Vite's proxy at `/__bridge`, instead of Tauri. The bridge runs the real `Service` on real event files in a temporary folder, on `127.0.0.1:5174`, so screens are checked against the real core and nothing about money is imitated. It is never part of the app, and adding a command to the app means one line in its `commands.rs`, which a test enforces. Start it with `cargo run -p lancelot-bridge`, or the `bridge` entry in `.claude/launch.json`.
+- **Scenarios:** `POST /__bridge/reset/<name>`, with the header `X-Lancelot-Bridge`, starts over from `start` (the default, nothing open), `example`, `empty`, `conflict` or `closed`. The recent events always include a damaged file and one that is already open. Reload the page afterwards. Add a scenario in `scenarios.rs`.
+- **Stand-ins:** the native dialogs never ask. Open gives the example event, a save gives a new path in the folder, receipts come from `fixtures/receipts` and sheets from `fixtures/tickets` in turn. Files dropped onto the page are uploaded to the folder. Opening an attachment in its app and revealing a file in Finder do nothing.
+- **Guard:** a POST without that header is refused, so other pages open in the browser cannot call commands that write files.
 
 **Attachments** are served through a custom URI scheme, `lancelot://localhost/attachment/<id>` (built with `convertFileSrc`), registered in `app/src-tauri/src/lib.rs`. `<img>` and `<iframe>` load them directly, without base64 over IPC; WebKit shows images, PDFs and HEIC itself. *Open* writes the file to a temporary folder under its own name and opens it with the system's default app.
 

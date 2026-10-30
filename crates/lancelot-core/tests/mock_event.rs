@@ -138,20 +138,16 @@ fn the_snapshot_carries_every_figure_in_ui_form() {
     assert_eq!(json["openItems"][3]["type"], "missingReceipt");
 }
 
-/// Writes the example event and an empty one as JSON for the UI's development mock backend
-/// (`app/src/lib/api/mock`), like ts-rs writes the types. CI checks that they are up to date.
+/// Writes the example event as JSON for the UI's tests and the `/design` page
+/// (`app/src/lib/api/fixtures`), like ts-rs writes the types. CI checks that it is up to date.
 #[test]
-fn export_snapshots_for_the_ui_mock() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src/lib/api/mock");
+fn export_the_snapshot_for_the_ui() {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src/lib/api/fixtures");
     let (book, _) = mock_event();
-    for (name, snapshot) in [
-        ("example-event.json", EventSnapshot::new(&book)),
-        ("empty-event.json", EventSnapshot::new(&new_book())),
-    ] {
-        let mut json = serde_json::to_string_pretty(&snapshot).unwrap();
-        json.push('\n');
-        std::fs::write(dir.join(name), json).unwrap();
-    }
+    let mut json = serde_json::to_string_pretty(&EventSnapshot::new(&book)).unwrap();
+    json.push('\n');
+    std::fs::write(dir.join("example-event.json"), json).unwrap();
 }
 
 #[test]

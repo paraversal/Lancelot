@@ -1,10 +1,7 @@
 //! Tauri shell: command handlers, dialogs and the window ↔ open-event mapping.
 //! No money logic lives here; everything goes through `lancelot_core`.
 
-mod api;
 mod commands;
-mod service;
-mod settings;
 
 use std::sync::Mutex;
 
@@ -12,7 +9,7 @@ use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
 use tauri::{App, Emitter, Manager};
 
 use commands::AppState;
-use service::Service;
+use lancelot_service::Service;
 
 fn attachment_response(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Vec<u8>> {
     use tauri::http::{Response, StatusCode, header};

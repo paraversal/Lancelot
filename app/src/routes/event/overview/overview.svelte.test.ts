@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EventSnapshot } from '#lib/api/generated/EventSnapshot.ts';
-import example from '#lib/api/mock/example-event.json';
+import example from '#lib/api/fixtures/example-event.json';
 import { session } from '#lib/state/session.svelte.ts';
 import Overview from './+page.svelte';
 

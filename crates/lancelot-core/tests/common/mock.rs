@@ -77,9 +77,15 @@ impl Target for Store {
     }
     fn attach(&mut self, txn: TxnId, pdf: bool) {
         let (name, bytes): (&str, &[u8]) = if pdf {
-            ("invoice.pdf", b"%PDF-1.7\n an invoice")
+            (
+                "invoice.pdf",
+                include_bytes!("../../../../fixtures/receipts/invoice.pdf"),
+            )
         } else {
-            ("receipt.jpg", b"\xFF\xD8\xFF\xE0 a receipt")
+            (
+                "receipt.jpg",
+                include_bytes!("../../../../fixtures/receipts/receipt.jpg"),
+            )
         };
         self.add_attachment(txn, name, bytes).unwrap();
     }
