@@ -8,7 +8,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::ledger::Ledger;
-use crate::model::{Account, AccountId, AccountKind, BudgetLine, BudgetLineId, Txn, TxnId};
+use crate::model::{Account, AccountId, AccountKind, BudgetLine, BudgetLineId, Role, Txn, TxnId};
 use crate::money::{Cents, MoneyError};
 
 /// Estimate, actual and forecast of a budget line, a category or a total. All three are
@@ -75,10 +75,11 @@ impl Budget {
         let mut lines = Vec::new();
         let mut per_category: BTreeMap<AccountId, (Figures, Cents)> = BTreeMap::new();
         for b in budget_lines.values() {
-            let kind = accounts.get(&b.draft.category).map(|a| a.kind);
+            let category = accounts.get(&b.draft.category);
+            let kind = category.map(|a| a.kind);
             let estimate = b.draft.estimate.total()?;
             let actual = linked.get(&b.id).copied().unwrap_or_default();
-            let forecast = if b.draft.complete {
+            let forecast = if b.draft.complete || category.is_some_and(follows_the_tickets) {
                 actual
             } else if kind == Some(AccountKind::Income) {
                 // Cautious on both sides: income counts with the smaller figure.
@@ -146,6 +147,15 @@ impl Budget {
     pub fn category(&self, id: AccountId) -> Option<&CategoryFigures> {
         self.categories.iter().find(|c| c.category == id)
     }
+}
+
+/// The ticket categories are generated from what was sold (R-TKT-6, R-TKT-15). Their forecast is
+/// what is booked: an estimate on top would count the same money twice.
+fn follows_the_tickets(account: &Account) -> bool {
+    matches!(
+        account.role,
+        Some(Role::Tickets | Role::TicketFees | Role::TicketRefunds)
+    )
 }
 
 fn add(a: Figures, b: Figures) -> Result<Figures, MoneyError> {

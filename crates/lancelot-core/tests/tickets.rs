@@ -138,7 +138,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
     let regular_txn = income_of(&book, t.regular).unwrap().id;
 
     // R-TKT-5: the preview, per tier and per order (R-TKT-12).
-    let preview = book.preview_import(&sheet(&book, "import-2.ods"));
+    let preview = book.preview_import(&sheet(&book, "import-2.ods"), june(20));
     assert_eq!(preview.previous, Some(first));
     assert!(!preview.same_file);
     assert_eq!(preview.tickets, 8);
@@ -189,7 +189,10 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
     assert_eq!(imports[0].import.date, june(1));
 
     // The same file again is flagged.
-    assert!(book.preview_import(&sheet(&book, "import-2.ods")).same_file);
+    assert!(
+        book.preview_import(&sheet(&book, "import-2.ods"), june(20))
+            .same_file
+    );
 }
 
 #[test]
@@ -197,7 +200,7 @@ fn unknown_tiers_block_the_import_until_they_are_mapped() {
     let (mut book, t) = with_tiers();
     import(&mut book, "import-2.ods", 8);
     let s = sheet(&book, "import-3.ods");
-    let preview = book.preview_import(&s);
+    let preview = book.preview_import(&s, june(20));
     assert_eq!(preview.unknown.len(), 1);
     assert_eq!(
         (preview.unknown[0].name.as_str(), preview.unknown[0].rows),
@@ -218,7 +221,7 @@ fn unknown_tiers_block_the_import_until_they_are_mapped() {
     let mut supporter = book.tier(t.supporter).unwrap().draft.clone();
     supporter.aliases.push("soli-ticket".into());
     book.update_tier(t.supporter, supporter).unwrap();
-    assert!(book.preview_import(&s).unknown.is_empty());
+    assert!(book.preview_import(&s, june(20)).unknown.is_empty());
     book.import_tickets(&s, june(9), now()).unwrap();
     assert_eq!(sold(&book, t.supporter).sheet, 4);
 }
@@ -388,7 +391,7 @@ fn tickets_survive_saving_and_reopening() {
     let (name, data) = fixture("import-1.ods");
     let first = store.import_tickets(&name, &data, june(1)).unwrap();
     let (name, data) = fixture("import-2.ods");
-    let preview = store.preview_ticket_import(&name, &data).unwrap();
+    let preview = store.preview_ticket_import(&name, &data, june(1)).unwrap();
     assert_eq!(preview.removed.len(), 2);
     store.import_tickets(&name, &data, june(8)).unwrap();
     store.set_import_date(first, june(2)).unwrap();

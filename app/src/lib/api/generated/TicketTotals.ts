@@ -22,6 +22,11 @@ manual: number,
  */
 sold: number, 
 /**
+ * Places taken against the quota: sold minus every cancelled ticket, also the ones still
+ * in the sheet or on a manual sale.
+ */
+places: number, 
+/**
  * Removed from the sheet without a resolution: not sold for now (R-TKT-16).
  */
 unresolved: number, 

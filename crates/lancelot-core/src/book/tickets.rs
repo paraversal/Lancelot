@@ -11,6 +11,7 @@ use crate::model::{
     TierId, Txn, TxnId, TxnKind,
 };
 use crate::money::{BP_FULL, percent_bp};
+use crate::sales::Profitability;
 use crate::sheet::Sheet;
 use crate::tickets::{
     self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportPreview,
@@ -39,9 +40,9 @@ impl Book {
         self.imports.values()
     }
 
-    /// The import the ticket income comes from.
+    /// The import the ticket income comes from: the one with the latest date.
     pub fn latest_import(&self) -> Option<&TicketImport> {
-        self.imports.values().next_back()
+        tickets::by_date(&self.imports).last().copied()
     }
 
     pub fn manual_sales(&self) -> impl Iterator<Item = &ManualSale> {
@@ -56,6 +57,16 @@ impl Book {
     /// Ticket figures, always up to date.
     pub fn tickets(&self) -> &Tickets {
         &self.tickets
+    }
+
+    /// The projected result and break-even (R-TKT-9), once there is a budget and while the event
+    /// is open.
+    pub fn profitability(&self) -> Option<Profitability> {
+        if self.budget_lines.is_empty() || self.event.closed_at.is_some() {
+            return None;
+        }
+        // Differences of figures the budget already checked: cannot overflow.
+        Profitability::compute(&self.tickets, &self.budget).ok()
     }
 
     // --- tiers and settings --------------------------------------------------------------
@@ -139,12 +150,17 @@ impl Book {
 
     // --- imports -------------------------------------------------------------------------
 
-    /// What importing `sheet` would change, compared with the latest import (R-TKT-5).
-    pub fn preview_import(&self, sheet: &Sheet) -> ImportPreview {
-        tickets::preview(sheet, &self.tiers, self.latest_import())
+    /// What importing `sheet` dated `date` would change, compared with the import before that
+    /// date (R-TKT-5). Dated before the latest import, it does not become the current sheet.
+    pub fn preview_import(&self, sheet: &Sheet, date: Date) -> ImportPreview {
+        let imports = tickets::by_date(&self.imports);
+        let previous = imports.iter().rev().find(|i| i.date <= date).copied();
+        let current = imports.last().is_none_or(|i| i.date <= date);
+        tickets::preview(sheet, &self.tiers, previous, current)
     }
 
-    /// Imports a ticket sheet as the new current snapshot, dated `date` (R-TKT-5, R-TKT-8).
+    /// Imports a ticket sheet as a snapshot dated `date`, the current one unless an import is
+    /// dated later (R-TKT-5, R-TKT-8).
     /// Tier names that match no tier block it (R-TKT-4). The ticket income is regenerated
     /// from it (R-TKT-6).
     pub fn import_tickets(
@@ -178,6 +194,7 @@ impl Book {
     }
 
     /// Changes the day an import stands for, e.g. for a file imported after the fact (R-TKT-8).
+    /// This can change which import is current, and with it the income and the conflicts.
     pub fn set_import_date(&mut self, id: ImportId, date: Date) -> Result<(), DomainError> {
         self.change(|book| {
             let import = book
@@ -340,7 +357,7 @@ impl Book {
                     field: "count".into(),
                 });
             }
-            let open = tickets::reckon(&book.imports, &book.cancellations)
+            let open = tickets::reckon(&tickets::by_date(&book.imports), &book.cancellations, None)
                 .unresolved
                 .get(&(order.to_owned(), tier))
                 .map_or(0, |(count, _)| *count);
@@ -421,7 +438,8 @@ impl Book {
         if let Some(latest) = self.latest_import() {
             let date = latest.date;
             let mut counts = latest.counts();
-            let reckoning = tickets::reckon(&self.imports, &self.cancellations);
+            let reckoning =
+                tickets::reckon(&tickets::by_date(&self.imports), &self.cancellations, None);
             for (tier, cancelled) in reckoning.cancelled {
                 *counts.entry(tier).or_insert(0) += cancelled;
             }

@@ -397,11 +397,15 @@ function rebudget(s: EventSnapshot) {
 		const estimate =
 			b.estimate.type === 'amount' ? b.estimate.amount : b.estimate.quantity * b.estimate.unitPrice;
 		const actual = linked.get(b.id) ?? 0;
-		const forecast = b.complete
-			? actual
-			: kindOf(b.category) === 'income'
-				? Math.min(estimate, actual)
-				: Math.max(estimate, actual);
+		// The ticket categories follow what was sold: see the core's `follows_the_tickets`.
+		const role = s.accounts.find((a) => a.id === b.category)?.role;
+		const generated = role === 'tickets' || role === 'ticket_fees' || role === 'ticket_refunds';
+		const forecast =
+			b.complete || generated
+				? actual
+				: kindOf(b.category) === 'income'
+					? Math.min(estimate, actual)
+					: Math.max(estimate, actual);
 		return { line: b.id, estimate, actual, forecast };
 	});
 	const zero = () => ({ estimate: 0, actual: 0, forecast: 0 });
@@ -426,6 +430,7 @@ function rebudget(s: EventSnapshot) {
 	s.budget.expense = totals.expense;
 	for (const k of ['estimate', 'actual', 'forecast'] as const)
 		s.budget.result[k] = totals.income[k] - totals.expense[k];
+	s.profitability = profitability(s);
 }
 
 // Tickets in the mock. The ticket sheets are made up: each "file" is a list of (order, tier)
@@ -477,11 +482,15 @@ function readSheet(s: EventSnapshot, path: string) {
 	return { filename, sha256, sheet, orders, unknown };
 }
 
-function previewTickets(path: string): ImportPreview {
+function previewTickets(path: string, date: string): ImportPreview {
 	const s = open!.snapshot;
 	const { filename, sha256, sheet, orders, unknown } = readSheet(s, path);
+	// The imports are kept in date order; this one comes after those up to its date.
+	const previous = s.tickets.imports.filter((i) => i.date <= date).at(-1);
 	const latest = s.tickets.imports.at(-1);
-	const before = latest ? (importOrders.get(latest.id) ?? new Map()) : new Map<string, number>();
+	const before = previous
+		? (importOrders.get(previous.id) ?? new Map())
+		: new Map<string, number>();
 	const tiers = new Map<
 		number,
 		{ before: number; after: number; added: number; removed: number }
@@ -502,8 +511,9 @@ function previewTickets(path: string): ImportPreview {
 	return {
 		filename,
 		sha256,
-		sameFile: latest?.sha256 === sha256,
-		previous: latest?.id ?? null,
+		sameFile: previous?.sha256 === sha256,
+		previous: previous?.id ?? null,
+		current: !latest || latest.date <= date,
 		tickets: [...orders.values()].reduce((t, n) => t + n, 0),
 		unknown,
 		problems: sheet.problems.map((row, i) => ({
@@ -551,9 +561,9 @@ function checkSale(s: EventSnapshot, d: ManualSaleDraft): ManualSaleDraft {
 }
 
 /** The core's `reckon`: what left the sheet, set against the resolutions, and the conflicts. */
-function reckon(s: EventSnapshot) {
+function reckon(s: EventSnapshot, imports = s.tickets.imports, until: string | null = null) {
 	const seen = new Map<string, { most: number; now: number; since: number }>();
-	for (const i of s.tickets.imports) {
+	for (const i of imports) {
 		const orders = importOrders.get(i.id) ?? new Map<string, number>();
 		for (const [key, v] of seen) {
 			const now = orders.get(key) ?? 0;
@@ -570,12 +580,19 @@ function reckon(s: EventSnapshot) {
 	const left = new Map([...seen].map(([key, v]) => [key, v.most - v.now]));
 	const gone = new Map<number, number>();
 	const cancelled = new Map<number, number>();
+	const freed = new Map<number, number>();
+	const inSheet = new Map([...seen].map(([key, v]) => [key, v.now]));
 	for (const c of s.tickets.cancellations) {
 		const key = `${c.order}|${c.tier}`;
 		const count = c.order !== null ? Math.min(c.gone, left.get(key) ?? 0) : 0;
 		if (c.order !== null) left.set(key, (left.get(key) ?? 0) - count);
 		gone.set(c.id, count);
 		if (c.terms && count) cancelled.set(c.tier, (cancelled.get(c.tier) ?? 0) + count);
+		if (c.terms && (until === null || c.terms.date <= until)) {
+			const staying = c.order !== null ? Math.min(c.count - count, inSheet.get(key) ?? 0) : c.count;
+			if (c.order !== null) inSheet.set(key, (inSheet.get(key) ?? 0) - staying);
+			freed.set(c.tier, (freed.get(c.tier) ?? 0) + count + staying);
+		}
 	}
 	const conflicts = new Map<string, EventSnapshot['tickets']['conflicts'][number]>();
 	const unresolved = new Map<number, number>();
@@ -596,17 +613,114 @@ function reckon(s: EventSnapshot) {
 		conflict.removed.push({ tier, count, since: seen.get(key)!.since, matches });
 		conflicts.set(order, conflict);
 	}
-	return { gone, cancelled, unresolved, conflicts: [...conflicts.values()] };
+	return { gone, cancelled, freed, unresolved, conflicts: [...conflicts.values()] };
 }
 
-function retickets(s: EventSnapshot) {
-	const latest = s.tickets.imports.at(-1);
+type TicketFigures = Pick<
+	EventSnapshot['tickets']['total'],
+	keyof EventSnapshot['tickets']['total']
+>;
+
+/** The core's `figures_at`: tickets and money per tier and in total, at one moment. */
+function figuresAt(
+	s: EventSnapshot,
+	imports: EventSnapshot['tickets']['imports'],
+	until: string | null
+) {
+	const latest = imports.at(-1);
 	const sheet = new Map<number, number>();
 	for (const [key, n] of latest ? (importOrders.get(latest.id) ?? []) : []) {
 		const tier = Number(key.split('|')[1]);
 		sheet.set(tier, (sheet.get(tier) ?? 0) + n);
 	}
+	const byThen = (date: string) => until === null || date <= until;
 	const fee = (t: { price: number; feeBp: number }) => Math.round((t.price * t.feeBp) / 10_000);
+	const reckoning = reckon(s, imports, until);
+	const tiers = s.tickets.tiers.map((t) => {
+		const fromSheet = sheet.get(t.id) ?? 0;
+		const manual = s.tickets.manualSales
+			.filter((m) => m.tier === t.id && byThen(m.date))
+			.reduce((n, m) => n + m.count, 0);
+		const cancelled = reckoning.cancelled.get(t.id) ?? 0;
+		const sold = fromSheet + cancelled + manual;
+		const gross = t.price * sold;
+		const fees = fee(t) * (fromSheet + cancelled);
+		const refunds = s.tickets.cancellations
+			.filter((c) => c.tier === t.id && c.terms && byThen(c.terms.date))
+			.reduce((n, c) => n + c.refund, 0);
+		const figures: TicketFigures = {
+			sheet: fromSheet,
+			cancelled,
+			manual,
+			sold,
+			places: Math.max(0, sold - (reckoning.freed.get(t.id) ?? 0)),
+			unresolved: reckoning.unresolved.get(t.id) ?? 0,
+			gross,
+			fees,
+			refunds,
+			net: gross - fees - refunds
+		};
+		return { tier: t.id, ...figures };
+	});
+	const total: TicketFigures = {
+		sheet: 0,
+		cancelled: 0,
+		manual: 0,
+		sold: 0,
+		places: 0,
+		unresolved: 0,
+		gross: 0,
+		fees: 0,
+		refunds: 0,
+		net: 0
+	};
+	for (const t of tiers)
+		for (const k of Object.keys(total) as (keyof TicketFigures)[]) total[k] += t[k];
+	return { tiers, total };
+}
+
+/** The core's `sales_over_time`: one point per import, and a last one for what came after. */
+function salesOverTime(s: EventSnapshot): EventSnapshot['tickets']['sales'] {
+	const imports = s.tickets.imports;
+	const points: EventSnapshot['tickets']['sales'] = imports.map((i, n) => ({
+		date: i.date,
+		import: i.id,
+		...figuresAt(s, imports.slice(0, n + 1), i.date)
+	}));
+	const dates = [
+		...s.tickets.manualSales.map((m) => m.date),
+		...s.tickets.cancellations.flatMap((c) => (c.terms ? [c.terms.date] : []))
+	].sort();
+	const last = dates.at(-1);
+	if (last && (!imports.length || imports.at(-1)!.date < last))
+		points.push({ date: last, import: null, ...figuresAt(s, imports, last) });
+	return points;
+}
+
+/** The core's `Profitability::compute`, or null without a budget or once closed. */
+function profitability(s: EventSnapshot): EventSnapshot['profitability'] {
+	if (!s.budgetLines.length || s.event.closedAt) return null;
+	const projected = s.budget.result.forecast;
+	const gap = Math.max(0, -projected);
+	const { sold, net } = s.tickets.total;
+	return {
+		projected,
+		gap,
+		tickets: sold > 0 && net > 0 ? Math.ceil((gap * sold) / net) : null,
+		tiers: !gap
+			? []
+			: s.tickets.tiers.flatMap((t) => {
+					const netPrice = t.price - Math.round((t.price * t.feeBp) / 10_000);
+					if (netPrice <= 0) return [];
+					const left = t.quota === null ? null : Math.max(0, t.quota - t.places);
+					return [{ tier: t.id, netPrice, tickets: Math.ceil(gap / netPrice), left }];
+				})
+	};
+}
+
+function retickets(s: EventSnapshot) {
+	s.tickets.imports.sort((a, b) => (a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1));
+	const latest = s.tickets.imports.at(-1);
 	const reckoning = reckon(s);
 	const priceOf = (tier: number) => s.tickets.tiers.find((t) => t.id === tier)?.price ?? 0;
 	const roleOf = (r: string) => s.accounts.find((a) => a.role === r)?.id;
@@ -621,44 +735,14 @@ function retickets(s: EventSnapshot) {
 	const conflictLines = reckoning.conflicts.reduce((n, c) => n + c.removed.length, 0);
 	s.openItems = s.openItems.filter((i) => i.type !== 'ticketConflicts');
 	if (conflictLines) s.openItems.push({ type: 'ticketConflicts', count: conflictLines });
-	s.tickets.tiers = s.tickets.tiers.map((t) => {
-		const fromSheet = sheet.get(t.id) ?? 0;
-		const manual = s.tickets.manualSales
-			.filter((m) => m.tier === t.id)
-			.reduce((n, m) => n + m.count, 0);
-		const cancelled = reckoning.cancelled.get(t.id) ?? 0;
-		const gross = t.price * (fromSheet + cancelled + manual);
-		const fees = fee(t) * (fromSheet + cancelled);
-		const refunds = s.tickets.cancellations
-			.filter((c) => c.tier === t.id)
-			.reduce((n, c) => n + c.refund, 0);
-		return {
-			...t,
-			sheet: fromSheet,
-			cancelled,
-			manual,
-			sold: fromSheet + cancelled + manual,
-			unresolved: reckoning.unresolved.get(t.id) ?? 0,
-			gross,
-			fees,
-			refunds,
-			net: gross - fees - refunds
-		};
+	const now = figuresAt(s, s.tickets.imports, null);
+	s.tickets.tiers = s.tickets.tiers.map((t, i) => {
+		const { tier: _, ...figures } = now.tiers[i];
+		return { ...t, ...figures };
 	});
-	const total = {
-		sheet: 0,
-		cancelled: 0,
-		manual: 0,
-		sold: 0,
-		unresolved: 0,
-		gross: 0,
-		fees: 0,
-		refunds: 0,
-		net: 0
-	};
-	for (const t of s.tickets.tiers)
-		for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += t[k];
-	s.tickets.total = total;
+	s.tickets.total = now.total;
+	s.tickets.sales = salesOverTime(s);
+	s.profitability = profitability(s);
 	for (const m of s.tickets.manualSales)
 		m.gross = (s.tickets.tiers.find((t) => t.id === m.tier)?.price ?? 0) * m.count;
 	s.tickets.manualSales.sort((a, b) =>
@@ -957,6 +1041,7 @@ const commands: Record<string, (a: Args) => unknown> = {
 				cancelled: 0,
 				manual: 0,
 				sold: 0,
+				places: 0,
 				unresolved: 0,
 				gross: 0,
 				fees: 0,
@@ -997,7 +1082,7 @@ const commands: Record<string, (a: Args) => unknown> = {
 		}),
 	tickets_preview: (a) => {
 		if (!open) fail('no_event_open', 'no event is open');
-		return previewTickets(a.path as string);
+		return previewTickets(a.path as string, a.date as string);
 	},
 	tickets_import: (a) =>
 		changed((s) => {

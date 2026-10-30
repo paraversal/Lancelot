@@ -271,6 +271,7 @@
       "cancelled": 0,
       "manual": 0,
       "sold": 0,
+      "places": 0,
       "unresolved": 0,
       "gross": 0,
       "fees": 0,
@@ -280,6 +281,8 @@
     "imports": [],
     "manualSales": [],
     "conflicts": [],
-    "cancellations": []
-  }
+    "cancellations": [],
+    "sales": []
+  },
+  "profitability": null
 }

@@ -1261,6 +1261,7 @@
       "cancelled": 0,
       "manual": 0,
       "sold": 0,
+      "places": 0,
       "unresolved": 0,
       "gross": 0,
       "fees": 0,
@@ -1270,6 +1271,13 @@
     "imports": [],
     "manualSales": [],
     "conflicts": [],
-    "cancellations": []
+    "cancellations": [],
+    "sales": []
+  },
+  "profitability": {
+    "projected": 176500,
+    "gap": 0,
+    "tickets": null,
+    "tiers": []
   }
 }

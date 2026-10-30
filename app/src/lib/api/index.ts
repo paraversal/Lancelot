@@ -143,7 +143,8 @@ export const api = {
 	deleteTier: (id: TierId) => call<OpenEvent>('tier_delete', { id }),
 	setTicketColumns: (columns: TicketColumns) => call<OpenEvent>('ticket_columns_set', { columns }),
 	/** Reads a ticket sheet (path) with the event's columns; changes nothing. */
-	previewTickets: (path: string) => call<ImportPreview>('tickets_preview', { path }),
+	previewTickets: (path: string, date: string) =>
+		call<ImportPreview>('tickets_preview', { path, date }),
 	/** Imports the sheet the preview read: `sha256` is the preview's, so a changed file fails. */
 	importTickets: (path: string, date: string, sha256: string) =>
 		call<OpenEvent>('tickets_import', { path, date, sha256 }),

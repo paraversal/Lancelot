@@ -5,6 +5,6 @@
  */
 export type TicketColumns = { tier: string, order: string, 
 /**
- * Not read yet: the statistics switch to sale dates once the sheet has them (R-TKT-8).
+ * Not read yet: the sales over time switch to sale dates once the sheet has them (R-TKT-8).
  */
 saleDate: string | null, };

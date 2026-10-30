@@ -183,14 +183,14 @@
 						<span class="num fee">{formatFee(t.feeBp, format)}</span>
 						<span class="sold">
 							<span class="count">
-								<strong>{t.sold}</strong>{#if t.quota !== null}<span class="quota">
+								<strong>{t.places}</strong>{#if t.quota !== null}<span class="quota">
 										/ {t.quota}</span
 									>{/if}
 							</span>
 							{#if t.quota !== null}
-								<span class="bar" class:over={t.sold > t.quota}>
+								<span class="bar" class:over={t.places > t.quota}>
 									<span
-										style:width="{Math.min(100, (t.sold / t.quota) * 100)}%"
+										style:width="{Math.min(100, (t.places / t.quota) * 100)}%"
 										style:background={tierColor(i)}
 									></span>
 								</span>

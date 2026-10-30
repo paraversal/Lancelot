@@ -443,9 +443,10 @@ impl Store {
         &self,
         filename: &str,
         data: &[u8],
+        date: Date,
     ) -> Result<ImportPreview, StoreError> {
         let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
-        Ok(self.book.preview_import(&sheet))
+        Ok(self.book.preview_import(&sheet, date))
     }
 
     /// Imports a ticket sheet as the snapshot of `date`. Only the configured columns are kept,

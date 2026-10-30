@@ -10,13 +10,18 @@ import type { UnknownTier } from "./UnknownTier";
  */
 export type ImportPreview = { filename: string, sha256: string, 
 /**
- * The same file as the latest import.
+ * The same file as the import the changes are counted from.
  */
 sameFile: boolean, 
 /**
- * The import the changes are counted from.
+ * The import the changes are counted from: the latest one up to the snapshot date.
  */
 previous: ImportId | null, 
+/**
+ * Whether it becomes the sheet the income comes from. If an import is dated later, that one
+ * stays current and this one only adds to the sales over time.
+ */
+current: boolean, 
 /**
  * Tickets in the sheet that belong to a known tier.
  */

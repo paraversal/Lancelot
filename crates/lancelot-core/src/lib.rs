@@ -17,6 +17,7 @@ pub mod ledger;
 pub mod model;
 pub mod money;
 pub mod payout;
+pub mod sales;
 pub mod sheet;
 pub mod snapshot;
 pub mod store;
@@ -42,6 +43,7 @@ pub use model::{
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
+pub use sales::{Profitability, SalesPoint, TierBreakEven, TierSales};
 pub use sheet::{Problem, RowProblem, Sheet, SheetRow, read_sheet};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
