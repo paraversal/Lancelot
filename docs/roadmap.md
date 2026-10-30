@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is under way: its core and the Tickets page are done. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -254,7 +254,7 @@ Built in three steps, each in its own pull request.
 
 **M8c · Overview**
 
-- [ ] The ticket block on the Overview, with the break-even under the forecast.
+- [x] The ticket block on the Overview: places against the quota, leading to the Tickets page. The break-even stands under the forecast while there is a gap, with the places left when they fall short (R-TKT-9).
 
 ### M9 · Cost centres and Drinks
 
@@ -291,4 +291,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M8c: the ticket block on the Overview. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
+M9: cost centres and Drinks. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
