@@ -1023,6 +1023,7 @@
       "date": "2026-06-30",
       "amount": 175700,
       "computed": 175700,
+      "fromSheet": 0,
       "difference": 0,
       "movement": true
     }

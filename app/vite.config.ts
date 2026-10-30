@@ -1,3 +1,4 @@
+import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -23,7 +24,7 @@ export default defineConfig({
 		// A plain browser talks to the dev bridge (crates/lancelot-bridge); see lib/api/dev.ts.
 		proxy: {
 			'/__bridge': {
-				target: 'http://127.0.0.1:5174',
+				target: `http://127.0.0.1:${loadEnv('', '.', 'LANCELOT_').LANCELOT_BRIDGE_PORT ?? 5174}`,
 				rewrite: (path) => path.replace(/^\/__bridge/, '')
 			}
 		}

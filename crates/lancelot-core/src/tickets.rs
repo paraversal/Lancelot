@@ -282,6 +282,23 @@ pub struct ImportPreview {
     pub tiers: Vec<TierChange>,
     /// Orders with fewer tickets of a tier than before (R-TKT-12).
     pub removed: Vec<OrderChange>,
+    /// Receipts on generated income that would go with it, by file name.
+    pub receipts_lost: Vec<String>,
+}
+
+/// What deleting an import would change. It goes back to the sheets that are left.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportDeletion {
+    pub sold_before: u32,
+    pub sold_after: u32,
+    pub net_before: Cents,
+    pub net_after: Cents,
+    pub conflicts_before: u32,
+    pub conflicts_after: u32,
+    /// Receipts on generated income that would go with it, by file name.
+    pub receipts_lost: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -364,6 +381,7 @@ pub(crate) fn preview(
         problems: sheet.problems.clone(),
         tiers: changes.into_values().collect(),
         removed,
+        receipts_lost: Vec::new(),
     }
 }
 
@@ -853,6 +871,29 @@ pub(crate) fn figures_at(
         net: sum(|t| t.net)?,
     };
     Ok((figures, total))
+}
+
+/// What the sheets had brought in, net of fees, from each import on: oldest first, by the import's
+/// date. Refunds are apart, with their own dates.
+pub(crate) fn sheet_income(
+    tiers: &BTreeMap<TierId, Tier>,
+    imports: &BTreeMap<ImportId, TicketImport>,
+    cancellations: &BTreeMap<CancellationId, Cancellation>,
+) -> Result<Vec<(Date, Cents)>, DomainError> {
+    let imports = by_date(imports);
+    (0..imports.len())
+        .map(|i| {
+            let date = imports[i].date;
+            let (_, total) = figures_at(
+                tiers,
+                &imports[..=i],
+                &BTreeMap::new(),
+                cancellations,
+                Some(date),
+            )?;
+            Ok((date, total.gross.checked_sub(total.fees)?))
+        })
+        .collect()
 }
 
 /// Who pays a refund nobody chose a payer for: whoever received the money (R-TKT-15).

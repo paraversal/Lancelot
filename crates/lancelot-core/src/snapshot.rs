@@ -18,7 +18,7 @@ use crate::model::{
     Account, AccountId, Attachment, BudgetLine, ClosingCount, CostCentre, Event, Person, Txn,
 };
 use crate::money::Cents;
-use crate::payout::{Payouts, payouts};
+use crate::payout::Payouts;
 use crate::sales::Profitability;
 use crate::tickets::Tickets;
 
@@ -143,8 +143,7 @@ impl EventSnapshot {
             closing_counts: book.closing_counts().cloned().collect(),
             reconciliations: ledger.reconciliations().to_vec(),
             open_items: ledger.open_items(),
-            // Sums of person balances that the ledger already checked: cannot overflow.
-            payouts: payouts(book).unwrap_or_default(),
+            payouts: book.payouts().clone(),
             budget_lines: book.budget_lines().cloned().collect(),
             budget: book.budget().clone(),
             tickets: book.tickets().clone(),

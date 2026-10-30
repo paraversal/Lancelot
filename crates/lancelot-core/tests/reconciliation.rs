@@ -256,3 +256,196 @@ fn checkpoints_survive_the_file_and_are_logged() {
     assert_eq!(reopened.book(), &book);
     assert_eq!(reopened.book().reconciliations().count(), 2);
 }
+
+fn tiers(book: &mut Book) {
+    for (name, price, fee_bp) in [("Early Bird", "25", 0), ("Regular", "32", 250)] {
+        book.add_tier(TierDraft {
+            name: name.into(),
+            price: eur(price),
+            fee_bp,
+            quota: None,
+            aliases: Vec::new(),
+        })
+        .unwrap();
+    }
+}
+
+/// A sheet: (order number, whether the ticket is Regular).
+fn sheet(rows: &[(u8, bool)], n: usize) -> Sheet {
+    Sheet {
+        filename: format!("sheet-{n}.csv"),
+        sha256: format!("{n}"),
+        rows: rows
+            .iter()
+            .enumerate()
+            .map(|(i, (order, regular))| SheetRow {
+                row: u32::try_from(i).unwrap() + 2,
+                order: order.to_string(),
+                tier: if *regular { "Regular" } else { "Early Bird" }.to_owned(),
+            })
+            .collect(),
+        problems: Vec::new(),
+    }
+}
+
+#[test]
+fn a_re_import_leaves_an_earlier_checkpoint_as_it_was() {
+    let mut book = new_book();
+    tiers(&mut book);
+    let verein = role(&book, Role::Verein);
+    book.import_tickets(&sheet(&[(1, false), (2, false)], 1), june(1), now())
+        .unwrap();
+    let id = book.add_reconciliation(verein, june(5), eur("50")).unwrap();
+    assert!(status(&book, id).difference.is_zero());
+
+    book.import_tickets(
+        &sheet(&[(1, false), (2, false), (3, false)], 2),
+        june(10),
+        now(),
+    )
+    .unwrap();
+    let r = status(&book, id);
+    assert_eq!((r.computed, r.from_sheet), (eur("50"), eur("50")));
+    assert!(r.difference.is_zero(), "still what the statement showed");
+    assert_eq!(book.ledger().balance(verein), eur("75"));
+
+    // A statement after the new sheet sees it, and one before any sheet sees nothing.
+    let later = book
+        .add_reconciliation(verein, june(12), eur("75"))
+        .unwrap();
+    assert!(status(&book, later).difference.is_zero());
+    let earlier = book.add_reconciliation(verein, june(1).previous_day().unwrap(), Cents::ZERO);
+    assert!(status(&book, earlier.unwrap()).difference.is_zero());
+}
+
+#[test]
+fn a_closing_count_and_a_statement_of_the_same_figure_agree() {
+    let mut book = new_book();
+    tiers(&mut book);
+    let verein = role(&book, Role::Verein);
+    book.set_opening_count(verein, june(1), eur("5000"))
+        .unwrap();
+    let kitchen = expense(&book, "Kitchen");
+    let entry = Entry::Expense {
+        payer: verein,
+        lines: vec![split(kitchen, "100")],
+    };
+    book.save_txn(&draft("Food", entry), None).unwrap();
+
+    let id = book
+        .add_reconciliation(verein, june(30), eur("-100"))
+        .unwrap();
+    book.set_closing_count(verein, june(30), eur("-100"))
+        .unwrap();
+    assert!(status(&book, id).difference.is_zero());
+    let cash = book.ledger().cash();
+    let count = cash.iter().find(|c| c.account == verein).unwrap();
+    assert_eq!(count.difference, Some(Cents::ZERO));
+}
+
+#[test]
+fn a_negative_count_survives_the_file_and_a_negative_opening_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("count.lancelot");
+    let details = new_book().event().details.clone();
+    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let verein = role(store.book(), Role::Verein);
+    let cash = role(store.book(), Role::CashBox);
+    store
+        .set_counts(verein, None, Some((june(30), eur("-100"))))
+        .unwrap();
+    assert_eq!(
+        store
+            .set_counts(cash, Some((june(1), eur("-5"))), None)
+            .unwrap_err()
+            .code(),
+        "negative_amount"
+    );
+    let expected = store.book().clone();
+    drop(store);
+    let (store, _) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert_eq!(store.book(), &expected);
+}
+
+mod properties {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    fn csv(rows: &[(u8, bool)]) -> String {
+        let mut csv = String::from("Order ID;Ticket\n");
+        for (order, regular) in rows {
+            let tier = if *regular { "Regular" } else { "Early Bird" };
+            csv.push_str(&format!("{order};{tier}\n"));
+        }
+        csv
+    }
+
+    fn rows() -> impl Strategy<Value = Vec<(u8, bool)>> {
+        prop::collection::vec((0u8..8, any::<bool>()), 0..12)
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(48))]
+
+        /// Later sheets never change what an earlier statement compares with, a statement after
+        /// the last sheet compares with the books, and deleting a sheet takes back all of it.
+        #[test]
+        fn sheets_and_checkpoints_get_along(
+            sheets in prop::collection::vec((rows(), 1u8..28), 1..5),
+            checkpoint_day in 1u8..28,
+        ) {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("p.lancelot");
+            let details = new_book().event().details.clone();
+            let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+            for (name, price, fee_bp) in [("Early Bird", "25", 0), ("Regular", "32", 250)] {
+                store.add_tier(TierDraft {
+                    name: name.into(),
+                    price: eur(price),
+                    fee_bp,
+                    quota: None,
+                    aliases: Vec::new(),
+                }).unwrap();
+            }
+            let verein = role(store.book(), Role::Verein);
+            let id = store.add_reconciliation(verein, june(checkpoint_day), Cents::ZERO).unwrap();
+
+            for (n, (rows, day)) in sheets.iter().enumerate() {
+                let before = store.book().clone();
+                let figure = status(&before, id).computed;
+                let import = store
+                    .import_tickets(&format!("sheet-{n}.csv"), csv(rows).as_bytes(), june(*day))
+                    .unwrap();
+                if june(*day) > june(checkpoint_day) {
+                    prop_assert_eq!(status(store.book(), id).computed, figure);
+                }
+                prop_assert_eq!(raw_sum(store.book()), 0);
+
+                // Taking every other sheet back gives the figures it had.
+                if n % 2 == 1 {
+                    store.delete_import(import).unwrap();
+                    prop_assert_eq!(status(store.book(), id).computed, figure);
+                    prop_assert_eq!(store.book().tickets().total, before.tickets().total);
+                    prop_assert_eq!(
+                        store.book().ledger().balance(verein),
+                        before.ledger().balance(verein)
+                    );
+                }
+            }
+
+            // A statement after every sheet compares with the whole balance.
+            let final_id = store.add_reconciliation(verein, june(28), Cents::ZERO).unwrap();
+            prop_assert_eq!(
+                status(store.book(), final_id).computed,
+                store.book().ledger().balance(verein)
+            );
+
+            let expected = store.book().clone();
+            drop(store);
+            let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+            prop_assert!(!report.has_errors(), "{:?}", report);
+            prop_assert_eq!(store.book(), &expected);
+        }
+    }
+}

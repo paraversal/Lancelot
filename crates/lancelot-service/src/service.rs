@@ -10,10 +10,11 @@ use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride, Book,
     BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents,
     CopyChoice, CopySummary, CostCentreId, DomainError, DrinkProductDraft, DrinkProductId,
-    DrinkSettings, EventDetails, EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE,
-    ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId, Report, Resolution, Store,
-    StoreError, StoreOptions, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
-    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date, read_book,
+    DrinkSettings, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
+    MAX_ATTACHMENT_SIZE, ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId, Report,
+    Resolution, Store, StoreError, StoreOptions, TemplateSummary, TicketColumns, TierDraft, TierId,
+    TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount,
+    parse_date, read_book,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -563,6 +564,20 @@ impl Service {
             s.import_tickets(&name, &data, date)?;
             Ok(())
         })
+    }
+
+    /// What deleting an import would change; changes nothing.
+    pub fn preview_delete_import(&self, id: ImportId) -> Result<ImportDeletion> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        Ok(open.store.book().preview_delete_import(id)?)
+    }
+
+    pub fn delete_import(&mut self, id: ImportId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_import(id)?))
+    }
+
+    pub fn delete_account(&mut self, id: AccountId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_account(id)?))
     }
 
     pub fn set_import_date(&mut self, id: ImportId, date: time::Date) -> Result<OpenEvent> {

@@ -390,8 +390,24 @@ fn closing_counts_show_the_difference() {
         book.set_closing_count(cash, june(14), eur("-1"))
             .unwrap_err()
             .code(),
-        "negative_amount"
+        "negative_cash_count"
     );
+    // A bank account can end below zero: it holds only the event's net movement (R-ISO-2).
+    book.set_closing_count(verein, june(14), eur("-100"))
+        .unwrap();
+    let counted = book.ledger().cash().iter().find(|c| c.account == verein);
+    assert_eq!(
+        counted.unwrap().difference,
+        Some(eur("-100")),
+        "nothing has moved on the Verein account yet"
+    );
+    assert_eq!(
+        book.set_asset_type(verein, AssetType::Cash)
+            .unwrap_err()
+            .code(),
+        "negative_cash_count"
+    );
+    book.clear_closing_count(verein).unwrap();
     let food = expense(&book, "Kitchen");
     assert_eq!(
         book.set_closing_count(food, june(14), eur("1"))

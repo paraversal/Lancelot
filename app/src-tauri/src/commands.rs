@@ -7,8 +7,9 @@ use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
     CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
-    ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId,
-    Resolution, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
+    ImportDeletion, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person,
+    ReconciliationId, Resolution, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft,
+    TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -437,6 +438,24 @@ pub async fn import_set_date(
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
     with(&state, |s| s.set_import_date(id, date))
+}
+
+#[tauri::command]
+pub async fn import_delete_preview(
+    state: State<'_, AppState>,
+    id: ImportId,
+) -> Result<ImportDeletion> {
+    with(&state, |s| s.preview_delete_import(id))
+}
+
+#[tauri::command]
+pub async fn import_delete(state: State<'_, AppState>, id: ImportId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_import(id))
+}
+
+#[tauri::command]
+pub async fn account_delete(state: State<'_, AppState>, id: AccountId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_account(id))
 }
 
 #[tauri::command]

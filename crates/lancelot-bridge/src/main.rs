@@ -3,7 +3,8 @@
 use lancelot_bridge::{Bridge, Response};
 use tiny_http::{Header, Method, Server};
 
-const ADDRESS: &str = "127.0.0.1:5174";
+/// Another port lets a second bridge run beside this one, with vite.config.ts told the same.
+const PORT_VARIABLE: &str = "LANCELOT_BRIDGE_PORT";
 /// Sent by `app/src/lib/api/dev.ts`. Other pages open in the browser cannot set it without a
 /// preflight, which this server never answers, so they cannot call commands that write files.
 const GUARD: &str = "x-lancelot-bridge";
@@ -13,11 +14,12 @@ fn header(name: &str, value: &str) -> Option<Header> {
 }
 
 fn main() {
-    let server = Server::http(ADDRESS).expect("the bridge's port is taken");
-    let dir = std::env::temp_dir().join("lancelot-bridge");
+    let port = std::env::var(PORT_VARIABLE).unwrap_or_else(|_| "5174".to_owned());
+    let server = Server::http(format!("127.0.0.1:{port}")).expect("the bridge's port is taken");
+    let dir = std::env::temp_dir().join(format!("lancelot-bridge-{port}"));
     let mut bridge = Bridge::new(&dir).expect("the example files could not be created");
     println!(
-        "Lancelot dev bridge on http://{ADDRESS}, files in {}",
+        "Lancelot dev bridge on http://127.0.0.1:{port}, files in {}",
         dir.display()
     );
 

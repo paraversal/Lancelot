@@ -60,9 +60,9 @@ pub use store::{
 };
 pub use tickets::{
     Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
-    ConflictMatch, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict, RefundTerms,
-    RemovedTickets, Resolution, TicketColumns, TicketImport, TicketTotals, Tickets, Tier,
-    TierDraft,
+    ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict,
+    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketTotals, Tickets,
+    Tier, TierDraft,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

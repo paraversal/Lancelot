@@ -41,4 +41,8 @@ tiers: Array<TierChange>,
 /**
  * Orders with fewer tickets of a tier than before (R-TKT-12).
  */
-removed: Array<OrderChange>, };
+removed: Array<OrderChange>, 
+/**
+ * Receipts on generated income that would go with it, by file name.
+ */
+receiptsLost: Array<string>, };

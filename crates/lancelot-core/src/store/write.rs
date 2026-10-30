@@ -373,7 +373,10 @@ pub(crate) fn persist(
                     params![id.0, date_text(i.date)],
                 )?;
             }
-            Change::Delete(_) => continue,
+            // Its rows go with it.
+            Change::Delete(_) => {
+                conn.execute("DELETE FROM ticket_import WHERE id = ?1", [id.0])?;
+            }
         }
         log.write("ticket_import", id.0, change)?;
     }

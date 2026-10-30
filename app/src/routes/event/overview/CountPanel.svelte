@@ -18,7 +18,12 @@
 	const format = $derived(session.format);
 	const name = $derived(snapshot.accounts.find((a) => a.id === account)?.name ?? '');
 	const status = $derived(snapshot.cash.find((c) => c.account === account) ?? null);
-	const balance = $derived(snapshot.accounts.find((a) => a.id === account)?.balance ?? 0);
+	const details = $derived(snapshot.accounts.find((a) => a.id === account));
+	const balance = $derived(details?.balance ?? 0);
+	// A bank account can end below zero, and the Verein account holds only the event's net movement
+	// (R-ISO-2), so it has no opening count to enter.
+	const bank = $derived(details?.assetType === 'bank');
+	const movement = $derived(details?.role === 'verein');
 	const today = new Date().toISOString().slice(0, 10);
 
 	// Read once: the panel edits its own copy until Save.
@@ -32,7 +37,9 @@
 	let error = $state<string | null>(null);
 
 	// The books as they will be with the opening count typed so far.
-	const computed = $derived(balance - (status?.opening?.amount ?? 0) + (opening ?? 0));
+	const computed = $derived(
+		balance - (status?.opening?.amount ?? 0) + (movement ? 0 : (opening ?? 0))
+	);
 	const difference = $derived(closing === null ? null : closing - computed);
 
 	async function save() {
@@ -62,25 +69,25 @@
 />
 
 <Panel title={name} {onclose}>
-	<div class="group">
-		<h3>Opening count</h3>
-		<div class="pair">
-			<DateField
-				label="Date"
-				value={openingDate}
-				{format}
-				oninput={(v) => v && (openingDate = v)}
-				oncommit={(v) => (openingDate = v)}
-			/>
-			<AmountField
-				label="Amount"
-				value={opening}
-				{format}
-				oninput={(v) => (opening = v)}
-				oncommit={(v) => (opening = v)}
-			/>
-		</div>
-	</div>
+	{#if !movement}<div class="group">
+			<h3>Opening count</h3>
+			<div class="pair">
+				<DateField
+					label="Date"
+					value={openingDate}
+					{format}
+					oninput={(v) => v && (openingDate = v)}
+					oncommit={(v) => (openingDate = v)}
+				/>
+				<AmountField
+					label="Amount"
+					value={opening}
+					{format}
+					oninput={(v) => (opening = v)}
+					oncommit={(v) => (opening = v)}
+				/>
+			</div>
+		</div>{/if}
 	<div class="group">
 		<h3>Closing count</h3>
 		<div class="pair">
@@ -92,9 +99,10 @@
 				oncommit={(v) => (closingDate = v)}
 			/>
 			<AmountField
-				label="Amount"
+				label={movement ? 'Net movement' : 'Amount'}
 				value={closing}
 				{format}
+				allowNegative={bank}
 				autofocus
 				oninput={(v) => (closing = v)}
 				oncommit={(v) => (closing = v)}

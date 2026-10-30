@@ -297,12 +297,12 @@ The browser checks run against the real core, and the mock backend is gone.
 
 ### Stage 2 · Protect files
 
-- [ ] Re-imports no longer break earlier statement checkpoints: ticket income in a checkpoint comes from `tickets::figures_at` as of its date (F1).
-- [ ] Generated ticket entries are regenerated on open. A difference is written with change log entries, and a changed amount is an integrity warning, so the file no longer opens as damaged (F2).
-- [ ] `delete_import`, refused only while a cancellation still needs its tickets, and `delete_account` for accounts nothing refers to (F5).
-- [ ] Negative counts on bank accounts, with closing counts and checkpoints compared through one function. It uses the role check until Stage 5 (F6).
-- [ ] Errors appear where they occur: payouts and profitability computed in `recompute`, a negative opening count rejected, a receipt about to be lost shown in the import preview, and a distinct error for a file that is intact but inconsistent (F13).
-- [ ] A property test over imports and checkpoints (F14).
+- [x] Re-imports no longer break earlier statement checkpoints: ticket income in a checkpoint comes from the sheets known by its date, and the Statement panel shows that part (F1).
+- [x] Generated ticket entries are regenerated on open. A difference is written with change log entries, and changed money is an integrity warning, so the file no longer opens as damaged (F2).
+- [x] `delete_import`, refused only while a cancellation still needs its tickets and with a preview of what it changes, and `delete_account` for accounts and people nothing refers to, in the Imports panel, Settings and the person panel (F5).
+- [x] Negative counts on bank accounts, with closing counts and checkpoints compared through one function. It uses the role check until Stage 5. Every asset account now has Count on the Overview (F6, R-ISO-3).
+- [x] Errors appear where they occur: payouts and profitability computed in `recompute`, a negative opening count rejected, a receipt about to be lost shown in the import preview, and `inconsistent` for a file that is intact but fails the rules (F13).
+- [x] A property test over imports, checkpoints and deleting a sheet, ending with a reopened file (F14).
 
 ### Stage 3 · Remove code, no behaviour change
 
@@ -364,4 +364,4 @@ All schema changes of the refactoring land here, as one batch.
 
 ## Next step
 
-Work through the [refactoring stages](#refactoring), starting with Stage 2. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
+Work through the [refactoring stages](#refactoring), starting with Stage 3. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).

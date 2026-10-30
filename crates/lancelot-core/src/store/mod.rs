@@ -67,6 +67,8 @@ pub enum StoreError {
     IntegrityFailed(Report),
     #[error("the event file is damaged: {0}")]
     Corrupt(String),
+    #[error("this event file is intact, but what it holds does not fit together")]
+    Inconsistent(Report),
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
@@ -91,6 +93,7 @@ impl StoreError {
             StoreError::Damaged(_) => "damaged",
             StoreError::IntegrityFailed(_) => "integrity_failed",
             StoreError::Corrupt(_) => "corrupt",
+            StoreError::Inconsistent(_) => "inconsistent",
             StoreError::Sqlite(_) => "sqlite",
             StoreError::Json(_) => "json",
             StoreError::Io(_) => "io",
@@ -263,17 +266,37 @@ impl Store {
             migrate(&mut conn, version)?;
         }
 
-        let report = integrity::check(&conn, Depth::Full)?;
-        let book = match read::parts(&conn)
+        let mut report = integrity::check(&conn, Depth::Full)?;
+        let (stored, book) = match read::parts(&conn)
             .map_err(|e| e.to_string())
-            .and_then(|p| Book::from_parts(p).map_err(|e| e.to_string()))
+            .and_then(|p| Book::load(p).map_err(|e| e.to_string()))
         {
-            Ok(book) => book,
-            Err(_) if report.has_errors() => return Err(StoreError::Damaged(report)),
-            Err(reason) => return Err(StoreError::corrupt(reason)),
+            Ok(loaded) => loaded,
+            Err(reason) => return Err(unloadable(report, reason)),
         };
         if version == SCHEMA_VERSION {
             backup(&conn)?;
+        }
+        // The tickets are the source of truth: bring the generated entries in line with them, with
+        // the backup above taken first. A changed wording is not worth a word; changed money is.
+        let (changed, moved) = book.regenerated(&stored);
+        if changed {
+            let tx = conn.transaction()?;
+            write::persist(&tx, Some(&stored), &book, &BTreeMap::new(), now)?;
+            let check = integrity::check(&tx, Depth::Quick)?;
+            if check.has_errors() {
+                return Err(StoreError::IntegrityFailed(check));
+            }
+            tx.commit()?;
+        }
+        if moved > 0 {
+            report.warning(
+                "ticket_income_regenerated",
+                format!(
+                    "{moved} ticket {} did not match the tickets and were recalculated",
+                    if moved == 1 { "entry" } else { "entries" }
+                ),
+            );
         }
         let store = Store {
             conn,
@@ -489,6 +512,14 @@ impl Store {
 
     pub fn add_tier(&mut self, draft: TierDraft) -> Result<TierId, StoreError> {
         self.apply(&BTreeMap::new(), |b| b.add_tier(draft))
+    }
+
+    pub fn delete_import(&mut self, id: ImportId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_import(id).map(|_| ()))
+    }
+
+    pub fn delete_account(&mut self, id: AccountId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_account(id).map(|_| ()))
     }
 
     pub fn update_tier(&mut self, id: TierId, draft: TierDraft) -> Result<(), StoreError> {
@@ -719,6 +750,11 @@ impl Store {
                 });
             }
             match opening {
+                Some((_, amount)) if amount.is_negative() => {
+                    return Err(DomainError::NegativeAmount {
+                        field: "opening".into(),
+                    });
+                }
                 Some((date, amount)) if amount.is_positive() => {
                     b.set_opening_count(account, date, amount)?;
                 }
@@ -870,14 +906,18 @@ pub fn read_book(path: &Path) -> Result<Book, StoreError> {
         .and_then(|p| Book::from_parts(p).map_err(|e| e.to_string()))
     {
         Ok(book) => Ok(book),
-        Err(reason) => {
-            let report = integrity::check(&conn, Depth::Quick)?;
-            Err(if report.has_errors() {
-                StoreError::Damaged(report)
-            } else {
-                StoreError::corrupt(reason)
-            })
-        }
+        Err(reason) => Err(unloadable(integrity::check(&conn, Depth::Quick)?, reason)),
+    }
+}
+
+/// Why a file does not load: physical damage, or an intact file whose contents fail the rules.
+fn unloadable(report: Report, reason: String) -> StoreError {
+    if report.is_damaged() {
+        StoreError::Damaged(report)
+    } else if report.has_errors() {
+        StoreError::Inconsistent(report)
+    } else {
+        StoreError::corrupt(reason)
     }
 }
 

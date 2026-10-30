@@ -22,6 +22,8 @@ use crate::model::{
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
+use crate::payout::{Payouts, payouts};
+use crate::sales::Profitability;
 use crate::tickets::{Cancellation, ManualSale, TicketImport, Tickets, Tier};
 
 mod drinks;
@@ -67,6 +69,9 @@ pub struct Book {
     budget: Budget,
     tickets: Tickets,
     drinks: Drinks,
+    payouts: Payouts,
+    /// Regardless of whether the event is closed: see [`Book::profitability`].
+    profitability: Option<Profitability>,
 }
 
 /// The ids the next new account, transaction, attachment, budget line, tier, import, manual
@@ -166,6 +171,8 @@ impl Book {
             budget: Budget::default(),
             tickets: Tickets::default(),
             drinks: Drinks::default(),
+            payouts: Payouts::default(),
+            profitability: None,
         };
         let drinks = book.insert_cost_centre("Drinks", Some(CostCentreRole::Drinks));
         let verein = book.insert_account(AccountKind::Asset, "Verein account", Some(Role::Verein));
@@ -192,6 +199,11 @@ impl Book {
     /// Rebuilds a book from stored pieces, checking everything a hand-edited or damaged
     /// file could get wrong: roles, kinds, names, transaction shapes, references and ids.
     pub fn from_parts(parts: BookParts) -> Result<Book, DomainError> {
+        Ok(Book::load(parts)?.1)
+    }
+
+    /// Checks everything in the parts and builds the book as stored, without its derived figures.
+    fn stored(parts: BookParts) -> Result<Book, DomainError> {
         let bad = |reason: &str| DomainError::Inconsistent {
             reason: reason.to_owned(),
         };
@@ -287,10 +299,14 @@ impl Book {
 
         let mut closing_counts = BTreeMap::new();
         for c in parts.closing_counts {
-            if accounts.get(&c.account).map(|a| a.kind) != Some(AccountKind::Asset)
-                || c.amount.is_negative()
+            let account = accounts.get(&c.account);
+            if account.map(|a| a.kind) != Some(AccountKind::Asset)
+                || (c.amount.is_negative()
+                    && account.and_then(|a| a.asset_type) != Some(AssetType::Bank))
             {
-                return Err(bad("closing count on an account that is not an asset"));
+                return Err(bad(
+                    "closing count on an account that is not an asset, or a negative count of cash",
+                ));
             }
             closing_counts.insert(c.account, c);
         }
@@ -328,7 +344,7 @@ impl Book {
             &accounts,
         )?;
 
-        let mut book = Book {
+        let book = Book {
             event: parts.event,
             accounts,
             persons,
@@ -348,15 +364,50 @@ impl Book {
             budget: Budget::default(),
             tickets: Tickets::default(),
             drinks: Drinks::default(),
+            payouts: Payouts::default(),
+            profitability: None,
         };
-        // The ticket income must be exactly what the tickets generate.
-        let mut regenerated = book.clone();
-        regenerated.sync_tickets()?;
-        if regenerated.txns != book.txns || regenerated.accounts != book.accounts {
-            return Err(bad("ticket income differs from the tickets"));
-        }
-        book.recompute()?;
         Ok(book)
+    }
+
+    /// The book as it is stored, and as it is once the ticket income is regenerated. The tickets
+    /// are the source of truth; the stored entries only keep the file readable without Lancelot.
+    pub(crate) fn load(parts: BookParts) -> Result<(Book, Book), DomainError> {
+        let stored = Book::stored(parts)?;
+        let mut book = stored.clone();
+        book.sync_tickets()?;
+        book.recompute()?;
+        Ok((stored, book))
+    }
+
+    /// The generated entries that differ between two loads of a file, and how many of them
+    /// differ in their money, not only in wording.
+    pub(crate) fn regenerated(&self, stored: &Book) -> (bool, usize) {
+        let money = |book: &Book| -> BTreeMap<Origin, Vec<(AccountId, Cents)>> {
+            book.txns
+                .values()
+                .filter(|t| t.origin.is_generated())
+                .map(|t| {
+                    (
+                        t.origin,
+                        t.lines.iter().map(|l| (l.account, l.amount)).collect(),
+                    )
+                })
+                .collect()
+        };
+        let (now, then) = (money(self), money(stored));
+        let moved = now
+            .iter()
+            .filter(|(origin, lines)| then.get(origin) != Some(lines))
+            .count()
+            + then
+                .keys()
+                .filter(|origin| !now.contains_key(origin))
+                .count();
+        (
+            self.txns != stored.txns || self.accounts != stored.accounts,
+            moved,
+        )
     }
 
     // --- reading -------------------------------------------------------------------------
@@ -435,6 +486,11 @@ impl Book {
         &self.ledger
     }
 
+    /// The payout and repayment lists (R-PER-4, R-PER-7).
+    pub fn payouts(&self) -> &Payouts {
+        &self.payouts
+    }
+
     pub fn budget_lines(&self) -> impl Iterator<Item = &BudgetLine> {
         self.budget_lines.values()
     }
@@ -493,7 +549,47 @@ impl Book {
                 return Err(DomainError::WrongAccountKind { field: "id".into() });
             }
             account.asset_type = Some(asset_type);
+            let negative = book
+                .closing_counts
+                .get(&id)
+                .is_some_and(|c| c.amount.is_negative());
+            if asset_type == AssetType::Cash && negative {
+                return Err(DomainError::NegativeCashCount);
+            }
             Ok(())
+        })
+    }
+
+    /// Deletes an account or a person nothing refers to, such as a mistyped one (not the system
+    /// accounts). Whatever is in use stays, so no figure changes.
+    pub fn delete_account(&mut self, id: AccountId) -> Result<Account, DomainError> {
+        self.change(|book| {
+            let account = book
+                .accounts
+                .get(&id)
+                .ok_or(DomainError::UnknownAccount { field: "id".into() })?;
+            let in_use = account.role.is_some()
+                || book.event.default_reimbursement_account == id
+                || book.closing_counts.contains_key(&id)
+                || book.reconciliations.values().any(|r| r.account == id)
+                || book.budget_lines.values().any(|b| b.draft.category == id)
+                || book
+                    .txns
+                    .values()
+                    .flat_map(|t| &t.lines)
+                    .any(|l| l.account == id)
+                || book.manual_sales.values().any(|s| s.draft.person == id)
+                || book
+                    .cancellations
+                    .values()
+                    .any(|c| c.terms.is_some_and(|t| t.payer == Some(id)));
+            if in_use {
+                return Err(DomainError::AccountInUse);
+            }
+            book.persons.remove(&id);
+            book.accounts
+                .remove(&id)
+                .ok_or(DomainError::UnknownAccount { field: "id".into() })
         })
     }
 
@@ -690,10 +786,9 @@ impl Book {
                 }
                 Some(_) => {}
             }
-            if amount.is_negative() {
-                return Err(DomainError::NegativeAmount {
-                    field: "amount".into(),
-                });
+            let asset_type = book.accounts.get(&account).and_then(|a| a.asset_type);
+            if amount.is_negative() && asset_type != Some(AssetType::Bank) {
+                return Err(DomainError::NegativeCashCount);
             }
             book.closing_counts.insert(
                 account,
@@ -1007,6 +1102,11 @@ impl Book {
             reconciliations: &self.reconciliations,
             with_attachments: &with_attachments,
             ticket_conflicts: self.tickets.conflict_count(),
+            sheet_income: &crate::tickets::sheet_income(
+                &self.tiers,
+                &self.imports,
+                &self.cancellations,
+            )?,
         })?;
         self.budget = Budget::compute(
             &self.accounts,
@@ -1022,6 +1122,12 @@ impl Book {
             &self.cost_centres,
             &self.txns,
         )?;
+        self.payouts = payouts(self)?;
+        self.profitability = if self.budget_lines.is_empty() {
+            None
+        } else {
+            Some(Profitability::compute(&self.tickets, &self.budget)?)
+        };
         Ok(())
     }
 

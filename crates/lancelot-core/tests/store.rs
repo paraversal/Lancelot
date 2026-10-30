@@ -362,8 +362,9 @@ fn a_transaction_with_the_wrong_shape_is_reported() {
         .unwrap();
     drop(conn);
 
+    // The file is sound and its contents fail the rules: that is not called damage.
     match Store::open(&path, StoreOptions::default()) {
-        Err(StoreError::Damaged(report)) => {
+        Err(StoreError::Inconsistent(report)) => {
             assert!(report.codes().contains(&"malformed_txn"), "{report:?}")
         }
         other => panic!("unexpected {:?}", other.err()),
@@ -772,4 +773,54 @@ fn a_closed_event_reopens_closed_and_read_only() {
     store.reopen().unwrap();
     assert!(!store.book().event().is_closed());
     store.add_person("Kim", Person::default()).unwrap();
+}
+
+#[test]
+fn a_mistyped_person_or_category_can_go_while_nothing_refers_to_it() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("delete.lancelot");
+    let details = new_book().event().details.clone();
+    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let typo = store.add_person("Aña", Person::default()).unwrap();
+    let category = store.add_account(AccountKind::Expense, "Kichten").unwrap();
+    let used = store.add_person("Anna", Person::default()).unwrap();
+    let entry = Entry::Expense {
+        payer: used,
+        lines: vec![split(category, "10")],
+    };
+    let txn = store.save_txn(&draft("Food", entry), None).unwrap().id;
+
+    assert_eq!(
+        store.delete_account(used).unwrap_err().code(),
+        "account_in_use"
+    );
+    assert_eq!(
+        store.delete_account(category).unwrap_err().code(),
+        "account_in_use"
+    );
+    let verein = role(store.book(), Role::Verein);
+    assert_eq!(
+        store.delete_account(verein).unwrap_err().code(),
+        "account_in_use"
+    );
+    store.delete_account(typo).unwrap();
+    assert!(store.book().account(typo).is_none());
+    assert_eq!(
+        store.book().persons().filter(|(a, _)| a.id == typo).count(),
+        0
+    );
+
+    store.delete_txn(txn).unwrap();
+    store.delete_account(category).unwrap();
+    let log = store.change_log(50).unwrap();
+    assert!(
+        log.iter()
+            .any(|e| e.entity == "account" && e.op == "delete")
+    );
+
+    let expected = store.book().clone();
+    drop(store);
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(store.book(), &expected);
 }

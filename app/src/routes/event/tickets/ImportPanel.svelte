@@ -6,6 +6,7 @@
 	import { untrack } from 'svelte';
 	import { chooseTicketSheet } from '#lib/api/dialogs.ts';
 	import { api, ApiError } from '#lib/api/index.ts';
+	import type { ImportDeletion } from '#lib/api/generated/ImportDeletion.ts';
 	import type { ImportPreview } from '#lib/api/generated/ImportPreview.ts';
 	import type { Problem } from '#lib/api/generated/Problem.ts';
 	import type { TicketColumns } from '#lib/api/generated/TicketColumns.ts';
@@ -16,7 +17,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatDate } from '#lib/format.ts';
+	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -128,6 +129,30 @@
 		const current = imports.find((i) => i.id === id)?.date;
 		if (!value || value === current) return;
 		await session.change(() => api.setImportDate(id, value));
+	}
+
+	let deleting = $state<{ id: number; effect: ImportDeletion } | null>(null);
+
+	async function askDelete(id: number) {
+		error = null;
+		try {
+			deleting = { id, effect: await api.previewDeleteImport(id) };
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
+	}
+
+	async function removeImport() {
+		const id = deleting?.id;
+		if (id === undefined) return;
+		deleting = null;
+		try {
+			await session.change(() => api.deleteImport(id));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
 	}
 
 	const tierName = (id: TierId) => tiers.find((t) => t.id === id)?.name ?? '';
@@ -269,6 +294,17 @@
 					{/each}
 				</div>
 			{/if}
+
+			{#if preview.receiptsLost.length}
+				<div class="problems">
+					<strong
+						>{preview.receiptsLost.length}
+						{preview.receiptsLost.length === 1 ? 'receipt' : 'receipts'} would be deleted</strong
+					>
+					<span>Attached to ticket income this sheet takes to zero:</span>
+					{#each preview.receiptsLost as name, n (n)}<span>{name}</span>{/each}
+				</div>
+			{/if}
 		{/if}
 
 		{#if error && error.field !== 'file' && !error.field?.startsWith('columns.')}
@@ -292,8 +328,35 @@
 							oncommit={(v) => setDate(i.id, v)}
 						/>
 					</div>
+					{#if !session.closed}
+						<div class="actions">
+							{#if deleting?.id === i.id}
+								<Button size="sm" onclick={() => (deleting = null)}>Keep</Button>
+								<Button size="sm" kind="primary" onclick={removeImport}>Delete</Button>
+							{:else}
+								<Button size="sm" onclick={() => askDelete(i.id)}>Delete</Button>
+							{/if}
+						</div>
+					{/if}
 				</div>
+				{#if deleting?.id === i.id}
+					<div class="problems deleting">
+						<strong>Delete this import?</strong>
+						<span>
+							Sold: {deleting.effect.soldBefore} → {deleting.effect.soldAfter} · Net:
+							{formatAmount(deleting.effect.netBefore, format)} →
+							{formatAmount(deleting.effect.netAfter, format)}
+						</span>
+						<span>
+							Conflicts: {deleting.effect.conflictsBefore} → {deleting.effect.conflictsAfter}
+						</span>
+						{#if deleting.effect.receiptsLost.length}
+							<span>Receipts deleted: {deleting.effect.receiptsLost.join(', ')}</span>
+						{/if}
+					</div>
+				{/if}
 			{/each}
+			{#if error}<p class="error">{error.message}</p>{/if}
 			<p class="note">The import with the latest date is the current sheet.</p>
 		</div>
 	{/if}
@@ -527,6 +590,7 @@
 
 	.import {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: flex-end;
 		justify-content: space-between;
 		gap: var(--spacing-3);
@@ -539,6 +603,18 @@
 		flex-direction: column;
 		gap: 2px;
 		min-width: 0;
+	}
+
+	.actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-2);
+		width: 100%;
+	}
+
+	.deleting {
+		padding: 8px 0 12px;
+		border-bottom: 1px solid var(--color-rule);
 	}
 
 	.when {

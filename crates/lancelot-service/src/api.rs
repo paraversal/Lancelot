@@ -48,7 +48,9 @@ impl From<StoreError> for ApiError {
         let base = ApiError::new(e.code(), e.to_string());
         match e {
             StoreError::Domain(d) => d.into(),
-            StoreError::Damaged(report) | StoreError::IntegrityFailed(report) => ApiError {
+            StoreError::Damaged(report)
+            | StoreError::IntegrityFailed(report)
+            | StoreError::Inconsistent(report) => ApiError {
                 report: Some(report),
                 ..base
             },

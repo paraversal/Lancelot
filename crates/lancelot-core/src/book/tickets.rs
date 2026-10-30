@@ -14,9 +14,9 @@ use crate::money::{BP_FULL, percent_bp};
 use crate::sales::Profitability;
 use crate::sheet::Sheet;
 use crate::tickets::{
-    self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportPreview,
-    ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketColumns, TicketImport, Tickets,
-    Tier, TierDraft, clean_tier, default_payer, most_ever,
+    self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportDeletion,
+    ImportPreview, ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketColumns,
+    TicketImport, Tickets, Tier, TierDraft, clean_tier, default_payer, most_ever,
 };
 
 /// The name of the fee category when the first fee needs one.
@@ -62,11 +62,9 @@ impl Book {
     /// The projected result and break-even (R-TKT-9), once there is a budget and while the event
     /// is open.
     pub fn profitability(&self) -> Option<Profitability> {
-        if self.budget_lines.is_empty() || self.event.closed_at.is_some() {
-            return None;
-        }
-        // Differences of figures the budget already checked: cannot overflow.
-        Profitability::compute(&self.tickets, &self.budget).ok()
+        self.profitability
+            .clone()
+            .filter(|_| self.event.closed_at.is_none())
     }
 
     // --- tiers and settings --------------------------------------------------------------
@@ -156,7 +154,55 @@ impl Book {
         let imports = tickets::by_date(&self.imports);
         let previous = imports.iter().rev().find(|i| i.date <= date).copied();
         let current = imports.last().is_none_or(|i| i.date <= date);
-        tickets::preview(sheet, &self.tiers, previous, current)
+        let mut preview = tickets::preview(sheet, &self.tiers, previous, current);
+        let mut after = self.clone();
+        if after
+            .import_tickets(sheet, date, OffsetDateTime::UNIX_EPOCH)
+            .is_ok()
+        {
+            preview.receipts_lost = self.receipts_lost_in(&after);
+        }
+        preview
+    }
+
+    /// The receipts that are in this book but not in `after`, by file name.
+    fn receipts_lost_in(&self, after: &Book) -> Vec<String> {
+        self.attachments
+            .values()
+            .filter(|a| !after.attachments.contains_key(&a.id))
+            .map(|a| a.filename.clone())
+            .collect()
+    }
+
+    /// Deletes an import, such as a wrongly chosen sheet: everything goes back to the sheets that
+    /// are left (R-TKT-5). Refused while a cancellation still needs its tickets.
+    pub fn delete_import(&mut self, id: ImportId) -> Result<TicketImport, DomainError> {
+        self.change(|book| {
+            let import = book.imports.remove(&id).ok_or(DomainError::UnknownImport)?;
+            let needed = book
+                .cancellations
+                .values()
+                .any(|c| check_cancellation(c, book).is_err());
+            if needed {
+                return Err(DomainError::ImportInUse);
+            }
+            Ok(import)
+        })
+    }
+
+    /// What [`Book::delete_import`] would change.
+    pub fn preview_delete_import(&self, id: ImportId) -> Result<ImportDeletion, DomainError> {
+        let mut after = self.clone();
+        after.delete_import(id)?;
+        Ok(ImportDeletion {
+            sold_before: self.tickets.total.sold,
+            sold_after: after.tickets.total.sold,
+            net_before: self.tickets.total.net,
+            net_after: after.tickets.total.net,
+            conflicts_before: self.tickets.conflict_count(),
+            conflicts_after: after.tickets.conflict_count(),
+            receipts_lost: self.receipts_lost_in(&after),
+        })
     }
 
     /// Imports a ticket sheet as a snapshot dated `date`, the current one unless an import is

@@ -424,9 +424,7 @@ fn tickets_survive_saving_and_reopening() {
     assert!(!text.contains("4711"));
 }
 
-#[test]
-fn a_file_whose_ticket_income_was_tampered_with_does_not_open() {
-    let dir = TempDir::new().unwrap();
+fn imported_file(dir: &TempDir) -> (std::path::PathBuf, Store) {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
@@ -435,8 +433,44 @@ fn a_file_whose_ticket_income_was_tampered_with_does_not_open() {
     store.add_tier(tier("Supporter", "45", 0)).unwrap();
     let (name, data) = fixture("import-1.ods");
     store.import_tickets(&name, &data, june(1)).unwrap();
+    (path, store)
+}
+
+#[test]
+fn other_wording_in_a_generated_entry_is_quietly_brought_in_line_on_open() {
+    let dir = TempDir::new().unwrap();
+    let (path, store) = imported_file(&dir);
+    let expected = store.book().clone();
     drop(store);
 
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute(
+        "UPDATE txn SET description = replace(description, '×', 'x') WHERE origin = 'ticket_import'",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert_eq!(store.book(), &expected);
+    assert!(report.is_clean(), "{report:?}");
+    // It is written, with its change log entries, so the next open finds nothing to do.
+    let log = store.change_log(10).unwrap();
+    assert!(log.iter().any(|e| e.entity == "txn" && e.op == "update"));
+    drop(store);
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean());
+    assert_eq!(store.book(), &expected);
+}
+
+#[test]
+fn ticket_income_that_differs_in_money_is_recalculated_with_a_warning() {
+    let dir = TempDir::new().unwrap();
+    let (path, store) = imported_file(&dir);
+    let before = store.book().tickets().total.gross;
+    drop(store);
+
+    // What a change to the generator's rounding, or a price set outside the app, comes down to.
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute(
         "UPDATE ticket_tier SET price = 3000 WHERE name = 'Regular'",
@@ -444,7 +478,154 @@ fn a_file_whose_ticket_income_was_tampered_with_does_not_open() {
     )
     .unwrap();
     drop(conn);
-    assert!(Store::open(&path, StoreOptions::default()).is_err());
+
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert_eq!(report.codes(), ["ticket_income_regenerated"]);
+    assert!(!report.has_errors());
+    let total = store.book().tickets().total;
+    assert_ne!(total.gross, before);
+    assert_eq!(
+        store
+            .book()
+            .ledger()
+            .balance(role(store.book(), Role::Tickets)),
+        total.gross
+    );
+    drop(store);
+    let (_, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "written, so the warning is said once");
+}
+
+#[test]
+fn reading_another_event_regenerates_in_memory_and_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let (path, store) = imported_file(&dir);
+    drop(store);
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute(
+        "UPDATE txn SET description = 'other words' WHERE origin = 'ticket_import'",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let book = read_book(&path).unwrap();
+    assert!(book.txns().all(|t| t.description != "other words"));
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let left: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM txn WHERE description = 'other words'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(left > 0);
+}
+
+#[test]
+fn a_wrongly_chosen_sheet_can_be_deleted_and_leaves_nothing_behind() {
+    let dir = TempDir::new().unwrap();
+    let (path, mut store) = imported_file(&dir);
+    let clean = store.book().tickets().clone();
+
+    // The right sheet has fewer orders, which reads as tickets gone from the wrong one.
+    let (name, data) = fixture("import-2.ods");
+    store.import_tickets(&name, &data, june(8)).unwrap();
+    assert!(store.book().tickets().conflict_count() > 0);
+    let wrong = store.book().ticket_imports().last().unwrap().id;
+
+    let preview = store.book().preview_delete_import(wrong).unwrap();
+    assert_eq!(preview.conflicts_after, 0);
+    assert_eq!(preview.sold_after, clean.total.sold);
+    assert_eq!(preview.net_after, clean.total.net);
+    assert!(preview.receipts_lost.is_empty());
+    assert!(
+        store.book().tickets().conflict_count() > 0,
+        "only a preview"
+    );
+
+    store.delete_import(wrong).unwrap();
+    assert_eq!(store.book().tickets().conflict_count(), 0);
+    assert_eq!(store.book().tickets().total, clean.total);
+    let log = store.change_log(50).unwrap();
+    assert!(
+        log.iter()
+            .any(|e| e.entity == "ticket_import" && e.op == "delete")
+    );
+
+    let expected = store.book().clone();
+    drop(store);
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(store.book(), &expected);
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    drop(store);
+    let rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM ticket_import_row WHERE import_id = ?1",
+            [wrong.0],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(rows, 0);
+}
+
+#[test]
+fn an_import_a_cancellation_still_needs_cannot_be_deleted() {
+    let (mut book, t) = with_tiers();
+    let only = import(&mut book, "import-1.ods", 1);
+    book.add_cancellation(CancellationDraft {
+        source: CancellationSource::Order {
+            order: "4711".into(),
+            tier: t.regular,
+        },
+        count: 1,
+        note: None,
+        terms: RefundTerms {
+            refund_bp: 5000,
+            date: june(2),
+            payer: None,
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        book.delete_import(only).unwrap_err().code(),
+        "import_in_use"
+    );
+    assert_eq!(book.ticket_imports().count(), 1, "nothing changed");
+    assert_eq!(
+        book.delete_import(ImportId(99)).unwrap_err().code(),
+        "unknown_import"
+    );
+}
+
+#[test]
+fn the_import_preview_says_which_receipts_would_go() {
+    let (mut book, _) = with_tiers();
+    let first = import(&mut book, "import-1.ods", 1);
+    let income = book
+        .txns()
+        .find(|t| matches!(t.origin, Origin::TicketImport { .. }))
+        .unwrap()
+        .id;
+    let id = attach(&mut book, income);
+    let filename = book.attachment(id).unwrap().filename.clone();
+
+    let preview = book.preview_delete_import(first).unwrap();
+    assert_eq!(preview.receipts_lost, std::slice::from_ref(&filename));
+    let empty = Sheet {
+        filename: "empty.csv".into(),
+        sha256: "00".into(),
+        rows: Vec::new(),
+        problems: Vec::new(),
+    };
+    let conflicted = book.preview_import(&empty, june(9));
+    assert_eq!(conflicted.receipts_lost, [filename], "{conflicted:?}");
+    assert!(
+        book.preview_import(&sheet(&book, "import-1.ods"), june(9))
+            .receipts_lost
+            .is_empty()
+    );
 }
 
 mod properties {

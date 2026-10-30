@@ -54,6 +54,20 @@
 		}
 	}
 
+	// A mistyped person can go, as long as nothing refers to them.
+	let deleting = $state(false);
+
+	async function remove() {
+		error = null;
+		deleting = false;
+		try {
+			await session.change(() => api.deleteAccount(person.account));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
+	}
+
 	// The running balance, newest first, with what each transaction was.
 	const entries = $derived(
 		[...person.entries].reverse().map((e) => {
@@ -105,6 +119,7 @@
 		/>
 		{#if error}<p class="error">{error.message}</p>{/if}
 	{:else}
+		{#if error}<p class="error">{error.message}</p>{/if}
 		<section>
 			<span class="label">Bank</span>
 			{#if iban}
@@ -165,6 +180,14 @@
 				{#if net > 0 && fallback}<span class="muted">from {fallback}</span>{/if}
 			{/if}
 			<span class="grow"></span>
+			{#if !person.entries.length}
+				{#if deleting}
+					<Button size="sm" onclick={() => (deleting = false)}>Keep</Button>
+					<Button size="sm" kind="primary" onclick={remove}>Delete</Button>
+				{:else}
+					<Button size="sm" onclick={() => (deleting = true)}>Delete</Button>
+				{/if}
+			{/if}
 			<Button size="sm" onclick={() => (editing = true)}>Edit</Button>
 		{/if}
 	{/snippet}

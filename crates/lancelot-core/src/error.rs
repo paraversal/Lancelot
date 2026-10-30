@@ -68,6 +68,12 @@ pub enum DomainError {
     UnknownTier,
     #[error("tickets of this tier were imported or sold, so it cannot be deleted")]
     TierInUse,
+    #[error("a cancellation still needs the tickets of this import: delete it first")]
+    ImportInUse,
+    #[error("this account is in use: entries, budget lines or settings refer to it")]
+    AccountInUse,
+    #[error("a cash count cannot be below zero")]
+    NegativeCashCount,
     #[error("the fee must be lower than the price")]
     FeeTooHigh,
     #[error("unknown ticket import")]
@@ -134,6 +140,9 @@ impl DomainError {
             DomainError::TooManyReturned => "too_many_returned",
             DomainError::UnknownTier => "unknown_tier",
             DomainError::TierInUse => "tier_in_use",
+            DomainError::ImportInUse => "import_in_use",
+            DomainError::AccountInUse => "account_in_use",
+            DomainError::NegativeCashCount => "negative_cash_count",
             DomainError::FeeTooHigh => "fee_too_high",
             DomainError::UnknownImport => "unknown_import",
             DomainError::UnknownManualSale => "unknown_manual_sale",

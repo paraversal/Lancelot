@@ -118,6 +118,8 @@
 			}
 		});
 
+	// An account or category can go while nothing refers to it; the core has the last word.
+	let deletingAccount = $state<number | null>(null);
 	const accounts = $derived(open.snapshot.accounts.filter((a) => a.kind === 'asset'));
 	const assets = $derived(accounts.map((a) => ({ value: a.id, label: a.name })));
 	const TYPES: { value: AssetType; label: string }[] = [
@@ -237,6 +239,24 @@
 	);
 </script>
 
+{#snippet deleteAccount(a: { id: number; role: unknown; balance: number })}
+	{#if !a.role && !closed && !a.balance}
+		{#if deletingAccount === a.id}
+			<Button
+				size="sm"
+				kind="primary"
+				onclick={() => {
+					deletingAccount = null;
+					return run(() => session.change(() => api.deleteAccount(a.id)));
+				}}>Delete</Button
+			>
+			<Button size="sm" onclick={() => (deletingAccount = null)}>Keep</Button>
+		{:else}
+			<Button size="sm" onclick={() => (deletingAccount = a.id)}>Delete</Button>
+		{/if}
+	{/if}
+{/snippet}
+
 <div class="page">
 	<h1>Settings</h1>
 
@@ -312,6 +332,7 @@
 									onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
 								/>
 								<span class="balance">{formatAmount(a.balance, format)}</span>
+								{@render deleteAccount(a)}
 							</li>
 						{/each}
 					</ul>
@@ -368,6 +389,7 @@
 												· income</span
 											>{/if}</span
 									>
+									{@render deleteAccount(a)}
 									<Select
 										name="{a.name} starts in"
 										value={a.costCentre ?? 0}

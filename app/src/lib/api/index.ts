@@ -30,6 +30,7 @@ import type { CancellationId } from './generated/CancellationId';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
+import type { ImportDeletion } from './generated/ImportDeletion';
 import type { ImportId } from './generated/ImportId';
 import type { ImportPreview } from './generated/ImportPreview';
 import type { ManualSaleDraft } from './generated/ManualSaleDraft';
@@ -135,6 +136,8 @@ export const api = {
 	deleteTxn: (id: TxnId) => call<OpenEvent>('txn_delete', { id }),
 	addAccount: (kind: AccountKind, name: string) => call<Added>('account_add', { kind, name }),
 	renameAccount: (id: AccountId, name: string) => call<OpenEvent>('account_rename', { id, name }),
+	/** Only an account or person nothing refers to. */
+	deleteAccount: (id: AccountId) => call<OpenEvent>('account_delete', { id }),
 	addAsset: (name: string, assetType: AssetType) => call<Added>('asset_add', { name, assetType }),
 	setAssetType: (id: AccountId, assetType: AssetType) =>
 		call<OpenEvent>('asset_set_type', { id, assetType }),
@@ -185,6 +188,10 @@ export const api = {
 	importTickets: (path: string, date: string, sha256: string) =>
 		call<OpenEvent>('tickets_import', { path, date, sha256 }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
+	/** What deleting an import would change; changes nothing. */
+	previewDeleteImport: (id: ImportId) => call<ImportDeletion>('import_delete_preview', { id }),
+	/** Everything goes back to the sheets that are left. Refused while a cancellation needs it. */
+	deleteImport: (id: ImportId) => call<OpenEvent>('import_delete', { id }),
 	addManualSale: (draft: ManualSaleDraft) => call<OpenEvent>('manual_sale_add', { draft }),
 	updateManualSale: (id: ManualSaleId, draft: ManualSaleDraft) =>
 		call<OpenEvent>('manual_sale_update', { id, draft }),

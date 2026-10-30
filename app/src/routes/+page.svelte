@@ -41,7 +41,7 @@
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
 			if (e.code === 'already_open') problems[path] = 'locked';
-			else if (e.code === 'damaged') {
+			else if (e.code === 'damaged' || e.code === 'inconsistent') {
 				problems[path] = { damaged: e };
 				damaged = { path, name, error: e };
 			} else problems[path] = 'missing';
@@ -121,7 +121,11 @@
 							{:else if problem === 'locked'}
 								<span class="state"><Icon name="lock" size={14} />Open in another window</span>
 							{:else if problem}
-								<span class="state"><Icon name="warn" size={14} />Damaged</span>
+								<span class="state"
+									><Icon name="warn" size={14} />{problem.damaged.code === 'damaged'
+										? 'Damaged'
+										: 'Cannot be opened'}</span
+								>
 							{:else}
 								<span class="when">{formatTimestamp(r.lastOpened, session.format)}</span>
 							{/if}

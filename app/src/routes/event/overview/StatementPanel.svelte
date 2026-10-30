@@ -121,6 +121,12 @@
 							<span>In the books</span>
 							<span>{formatAmount(r.computed, format)}</span>
 						</span>
+						{#if r.fromSheet}
+							<span class="line note">
+								<span>Tickets in the sheet by then</span>
+								<span>{formatAmount(r.fromSheet, format)}</span>
+							</span>
+						{/if}
 						{#if r.difference}
 							<span class="note minus">{differenceText(r.difference, format)}</span>
 						{:else}

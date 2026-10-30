@@ -133,6 +133,24 @@ fn the_damaged_and_the_locked_file_are_refused_as_in_the_app() {
 }
 
 #[test]
+fn a_wrong_sheet_can_be_taken_back_through_the_commands() {
+    let (_dir, mut bridge) = bridge();
+    reset(&mut bridge, "conflict");
+    let (_, open) = invoke(&mut bridge, "event_current", json!({}));
+    let last = open["snapshot"]["tickets"]["imports"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()["id"]
+        .clone();
+    let (status, preview) = invoke(&mut bridge, "import_delete_preview", json!({ "id": last }));
+    assert_eq!((status, &preview["conflictsAfter"]), (200, &json!(0)));
+    let (status, open) = invoke(&mut bridge, "import_delete", json!({ "id": last }));
+    assert_eq!(status, 200, "{open}");
+    assert_eq!(open["snapshot"]["tickets"]["conflicts"], json!([]));
+}
+
+#[test]
 fn an_error_keeps_its_code_and_field() {
     let (_dir, mut bridge) = bridge();
     reset(&mut bridge, "example");

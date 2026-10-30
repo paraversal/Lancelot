@@ -44,7 +44,9 @@
 </script>
 
 <Panel title={fileName} {onclose}>
-	<span class="state"><Icon name="warn" size={14} />Damaged</span>
+	<span class="state"
+		><Icon name="warn" size={14} />{error.code === 'damaged' ? 'Damaged' : 'Cannot be opened'}</span
+	>
 	{#if issues.length}
 		<section>
 			<h3>Issues</h3>

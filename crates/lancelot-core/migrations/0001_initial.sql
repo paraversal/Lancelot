@@ -156,7 +156,7 @@ CREATE INDEX line_cost_centre ON line(cost_centre_id);
 CREATE TABLE closing_count (           -- R-ISO-3; opening counts are 'opening' transactions
   account_id INTEGER PRIMARY KEY REFERENCES account(id),
   date       TEXT NOT NULL,
-  amount     INTEGER NOT NULL CHECK (amount >= 0)
+  amount     INTEGER NOT NULL            -- below zero only on a bank account
 ) STRICT;
 
 CREATE TABLE reconciliation (          -- R-ACC-4; the Verein account's amount is its net movement

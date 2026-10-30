@@ -61,6 +61,20 @@ impl Report {
         self.issues.iter().map(|i| i.code).collect()
     }
 
+    /// Whether the file itself is harmed, as opposed to its contents failing the rules.
+    pub fn is_damaged(&self) -> bool {
+        const PHYSICAL: [&str; 5] = [
+            "sqlite_integrity",
+            "foreign_key",
+            "unsealed",
+            "unbalanced",
+            "attachment_hash",
+        ];
+        self.issues
+            .iter()
+            .any(|i| i.severity == Severity::Error && PHYSICAL.contains(&i.code))
+    }
+
     fn error(&mut self, code: &'static str, detail: impl Into<String>) {
         self.issues.push(Issue {
             severity: Severity::Error,
@@ -69,7 +83,7 @@ impl Report {
         });
     }
 
-    fn warning(&mut self, code: &'static str, detail: impl Into<String>) {
+    pub(crate) fn warning(&mut self, code: &'static str, detail: impl Into<String>) {
         self.issues.push(Issue {
             severity: Severity::Warning,
             code,

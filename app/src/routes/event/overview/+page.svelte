@@ -293,7 +293,7 @@
 									</span>
 								{/if}
 							</span>
-							{#if !closed && (account.assetType === 'cash' || cash)}
+							{#if !closed}
 								<Button size="sm" onclick={() => panel('count', account.id)}>Count</Button>
 							{/if}
 							{#if !closed}
