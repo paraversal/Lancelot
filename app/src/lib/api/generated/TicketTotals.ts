@@ -10,22 +10,34 @@ export type TicketTotals = {
  */
 sheet: number, 
 /**
+ * Cancelled and no longer in the sheet. Still sold; refunds are apart (R-TKT-15).
+ */
+cancelled: number, 
+/**
  * Sold manually.
  */
 manual: number, 
 /**
- * Both together.
+ * All three together.
  */
 sold: number, 
+/**
+ * Removed from the sheet without a resolution: not sold for now (R-TKT-16).
+ */
+unresolved: number, 
 /**
  * Sold × price.
  */
 gross: Cents, 
 /**
- * The platform's fees on the sheet's tickets.
+ * The platform's fees on the sheet's tickets. They are not refunded (R-TKT-15).
  */
 fees: Cents, 
 /**
- * Gross minus fees.
+ * All refunds of the tier.
+ */
+refunds: Cents, 
+/**
+ * Gross minus fees and refunds.
  */
 net: Cents, };

@@ -57,12 +57,17 @@
 	}
 	let width = $state(0);
 
+	// Refunds are negative income: the bar shows tickets net of them, so it adds up to the total.
+	const refunds = $derived(
+		snapshot.accounts.find((a) => a.role === 'ticket_refunds')?.balance ?? 0
+	);
 	const flows = (kind: 'income' | 'expense') =>
 		snapshot.accounts
-			.filter((a) => a.kind === kind && a.balance > 0)
-			.map((a) => ({
+			.map((a) => ({ a, value: a.role === 'tickets' ? a.balance + refunds : a.balance }))
+			.filter(({ a, value }) => a.kind === kind && value > 0)
+			.map(({ a, value }) => ({
 				label: a.name,
-				value: a.balance,
+				value,
 				color: categoryColor(a, snapshot.accounts)
 			}));
 	const max = $derived(Math.max(totals.income, totals.expense, 1));
@@ -81,7 +86,9 @@
 				? () => goto(`/event/people?person=${i.person}`)
 				: i.type === 'missingReceipt'
 					? () => goto(`/event/ledger?txn=${i.txn}`)
-					: () => (counting = i.account);
+					: i.type === 'ticketConflicts'
+						? () => goto('/event/tickets')
+						: () => (counting = i.account);
 		return { ...describe(i, snapshot, format), go, key: JSON.stringify(i) };
 	}
 	const open = $derived(snapshot.openItems.map(item));

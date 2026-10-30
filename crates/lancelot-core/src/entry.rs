@@ -186,12 +186,25 @@ pub fn build_lines(
 
 /// Checks a stored transaction: typed-in ones follow [`lines_follow_rules`], and ticket income
 /// is an income line, optionally fee lines, and the account that received the money (R-TKT-6).
+/// A refund is the opposite: negative income, paid by one account (R-TKT-15).
 pub fn txn_follows_rules(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> bool {
     if txn.origin == Origin::Manual {
         return lines_follow_rules(txn.kind, &txn.lines, accounts);
     }
     let lines = &txn.lines;
     let kind = |l: &Line| accounts.get(&l.account).map(|a| a.kind);
+    if let Origin::TicketRefund { .. } = txn.origin {
+        return match lines.as_slice() {
+            [income, payer] => {
+                txn.kind == TxnKind::Income
+                    && kind(income) == Some(AccountKind::Income)
+                    && income.amount.is_positive()
+                    && matches!(kind(payer), Some(AccountKind::Asset | AccountKind::Person))
+                    && payer.amount == -income.amount
+            }
+            _ => false,
+        };
+    }
     let (Some(first), Some(last)) = (lines.first(), lines.last()) else {
         return false;
     };

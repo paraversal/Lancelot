@@ -198,19 +198,32 @@
 		<p class="error">{error.message}</p>
 	{/if}
 
+	{#if tier?.unresolved}
+		<p class="unresolved">{tier.unresolved} removed, not counted until resolved</p>
+	{/if}
+
 	{#if tier && tier.sold}
 		<div class="figures">
 			<div class="line">
 				<span
-					>{tier.sold} sold · {tier.manual
-						? `${tier.sheet} sheet, ${tier.manual} manual`
-						: 'sheet'}</span
+					>{tier.sold} sold · {[
+						tier.sheet || !tier.manual ? `${tier.sheet} sheet` : null,
+						tier.cancelled ? `${tier.cancelled} cancelled` : null,
+						tier.manual ? `${tier.manual} manual` : null
+					]
+						.filter(Boolean)
+						.join(', ')}</span
 				>
 				<span>{formatAmount(tier.gross, format)}</span>
 			</div>
 			{#if tier.fees}
 				<div class="line">
 					<span>Ticket fees</span><span>{formatAmount(-tier.fees, format)}</span>
+				</div>
+			{/if}
+			{#if tier.refunds}
+				<div class="line">
+					<span>Refunds</span><span>{formatAmount(-tier.refunds, format)}</span>
 				</div>
 			{/if}
 			<div class="line net">
@@ -361,6 +374,12 @@
 
 	.line span:last-child {
 		color: var(--color-ink);
+	}
+
+	.unresolved {
+		margin: 0;
+		font-size: 13px;
+		color: var(--color-attention);
 	}
 
 	.line.net {

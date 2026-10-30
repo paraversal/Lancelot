@@ -120,7 +120,11 @@
 		if (!lines.length) lines = [{ account: null, amount: null }];
 		const parties = t.lines.filter((l) => !category(l.account));
 		if (t.kind === 'expense') party = parties.find((l) => l.amount < 0)?.account ?? null;
-		if (t.kind === 'income') party = parties.find((l) => l.amount > 0)?.account ?? null;
+		// A ticket refund is negative income: it is paid, not received (R-TKT-15).
+		if (t.kind === 'income')
+			party =
+				parties.find((l) => (t.origin.type === 'ticketRefund' ? l.amount < 0 : l.amount > 0))
+					?.account ?? null;
 		if (t.kind === 'transfer' || t.kind === 'opening') {
 			party = parties.find((l) => l.amount < 0)?.account ?? null;
 			other = parties.find((l) => l.amount > 0)?.account ?? null;
@@ -283,7 +287,9 @@
 
 	const fieldError = (name: string) => (error?.field === name ? error.message : null);
 	const partyLabel = $derived(
-		{ expense: 'Paid by', income: 'Received by', transfer: 'From', settle: 'Person' }[kind]
+		origin.type === 'ticketRefund'
+			? 'Paid by'
+			: { expense: 'Paid by', income: 'Received by', transfer: 'From', settle: 'Person' }[kind]
 	);
 
 	// Loaded once, after everything above is defined: the ledger remounts the panel for every
@@ -535,7 +541,9 @@
 							? `/event/tickets?tier=${origin.tier}`
 							: origin.type === 'ticketSale'
 								? `/event/tickets?sale=${origin.sale}`
-								: '/event/tickets'
+								: origin.type === 'ticketRefund'
+									? `/event/tickets?cancellation=${origin.cancellation}`
+									: '/event/tickets'
 					)}>Tickets</Button
 			>
 		{:else if session.closed}

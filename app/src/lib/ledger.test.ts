@@ -27,6 +27,33 @@ describe('rows', () => {
 	});
 });
 
+describe('a ticket refund', () => {
+	it('is money out, from whoever pays it', () => {
+		const [verein, refunds] = [1, 99];
+		const txn: EventSnapshot['txns'][number] = {
+			...snapshot.txns[0],
+			kind: 'income',
+			description: 'Refund 1 × Regular',
+			origin: { type: 'ticketRefund', cancellation: 1 },
+			lines: [
+				{ account: refunds, amount: 1600, memo: null, budgetLine: null },
+				{ account: verein, amount: -1600, memo: null, budgetLine: null }
+			]
+		};
+		const [row] = rows({
+			...snapshot,
+			txns: [txn],
+			accounts: [
+				...snapshot.accounts,
+				{ ...snapshot.accounts[0], id: refunds, kind: 'income', name: 'Ticket refunds', role: null }
+			]
+		});
+		expect(row.flow).toBe('out');
+		expect(row.who).toBe('Verein account');
+		expect(row.categories.map((c) => c.name)).toEqual(['Ticket refunds']);
+	});
+});
+
 describe('filters and search', () => {
 	it('counts each filter', () => {
 		expect(counts(all)).toEqual({ all: 19, expense: 12, income: 4, transfer: 3, missing: 1 });

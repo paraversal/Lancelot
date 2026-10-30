@@ -7,17 +7,21 @@ use time::{Date, OffsetDateTime};
 use super::{Book, NextIds, clean};
 use crate::error::DomainError;
 use crate::model::{
-    Account, AccountId, AccountKind, ImportId, Line, ManualSaleId, Origin, Role, TierId, Txn,
-    TxnId, TxnKind,
+    Account, AccountId, AccountKind, CancellationId, ImportId, Line, ManualSaleId, Origin, Role,
+    TierId, Txn, TxnId, TxnKind,
 };
+use crate::money::{BP_FULL, percent_bp};
 use crate::sheet::Sheet;
 use crate::tickets::{
-    self, ImportPreview, ManualSale, ManualSaleDraft, TicketColumns, TicketImport, Tickets, Tier,
-    TierDraft, clean_tier,
+    self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportPreview,
+    ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketColumns, TicketImport, Tickets,
+    Tier, TierDraft, clean_tier, default_payer, most_ever,
 };
 
 /// The name of the fee category when the first fee needs one.
 const TICKET_FEES: &str = "Ticket fees";
+/// The name of the refund category when the first refund needs one.
+const TICKET_REFUNDS: &str = "Ticket refunds";
 
 impl Book {
     // --- reading -------------------------------------------------------------------------
@@ -42,6 +46,11 @@ impl Book {
 
     pub fn manual_sales(&self) -> impl Iterator<Item = &ManualSale> {
         self.manual_sales.values()
+    }
+
+    /// Cancellations and corrections, oldest first.
+    pub fn cancellations(&self) -> impl Iterator<Item = &Cancellation> {
+        self.cancellations.values()
     }
 
     /// Ticket figures, always up to date.
@@ -200,10 +209,23 @@ impl Book {
         draft: ManualSaleDraft,
     ) -> Result<(), DomainError> {
         self.change(|book| {
-            if !book.manual_sales.contains_key(&id) {
-                return Err(DomainError::UnknownManualSale);
-            }
+            let current = book
+                .manual_sales
+                .get(&id)
+                .ok_or(DomainError::UnknownManualSale)?;
             let draft = clean_sale(draft, &book.tiers, &book.accounts)?;
+            let cancelled: u32 = book
+                .cancellations
+                .values()
+                .filter(|c| c.sale == Some(id))
+                .map(|c| c.count)
+                .sum();
+            if cancelled > 0 && draft.tier != current.draft.tier {
+                return Err(DomainError::SaleHasCancellations);
+            }
+            if draft.count < cancelled {
+                return Err(DomainError::TooManyTickets);
+            }
             book.manual_sales.insert(id, ManualSale { id, draft });
             Ok(())
         })
@@ -211,17 +233,165 @@ impl Book {
 
     pub fn delete_manual_sale(&mut self, id: ManualSaleId) -> Result<ManualSale, DomainError> {
         self.change(|book| {
+            if book.cancellations.values().any(|c| c.sale == Some(id)) {
+                return Err(DomainError::SaleHasCancellations);
+            }
             book.manual_sales
                 .remove(&id)
                 .ok_or(DomainError::UnknownManualSale)
         })
     }
 
+    // --- cancellations -------------------------------------------------------------------
+
+    /// Records a cancellation without a change in the sheet, on a sheet order or a manual sale
+    /// (R-TKT-14). Its refund counts from now on; its tickets stay sold.
+    pub fn add_cancellation(
+        &mut self,
+        draft: CancellationDraft,
+    ) -> Result<CancellationId, DomainError> {
+        self.change(|book| {
+            let (tier, order, sale) = match draft.source {
+                CancellationSource::Order { order, tier } => {
+                    let order = order.trim().to_owned();
+                    if most_ever(&book.imports, &order, tier) == 0 {
+                        return Err(DomainError::UnknownOrder);
+                    }
+                    (tier, Some(order), None)
+                }
+                CancellationSource::Sale { sale } => {
+                    let tier = book
+                        .manual_sales
+                        .get(&sale)
+                        .ok_or(DomainError::UnknownManualSale)?
+                        .draft
+                        .tier;
+                    (tier, None, Some(sale))
+                }
+            };
+            let id = CancellationId(book.next.cancellation);
+            book.next.cancellation += 1;
+            let c = Cancellation {
+                id,
+                tier,
+                count: draft.count,
+                order,
+                sale,
+                gone: 0,
+                note: clean(draft.note),
+                terms: Some(draft.terms),
+            };
+            check_cancellation(&c, book)?;
+            book.cancellations.insert(id, c);
+            Ok(id)
+        })
+    }
+
+    /// Changes the count, refund, date, payer or note of a cancellation.
+    pub fn update_cancellation(
+        &mut self,
+        id: CancellationId,
+        edit: CancellationEdit,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            let current = book
+                .cancellations
+                .get(&id)
+                .ok_or(DomainError::UnknownCancellation)?;
+            if current.terms.is_none() {
+                return Err(DomainError::CorrectionNotEditable);
+            }
+            let c = Cancellation {
+                count: edit.count,
+                note: clean(edit.note),
+                terms: Some(edit.terms),
+                ..current.clone()
+            };
+            check_cancellation(&c, book)?;
+            book.cancellations.insert(id, c);
+            Ok(())
+        })
+    }
+
+    /// Deletes a cancellation or correction. Tickets it resolved are a conflict again.
+    pub fn delete_cancellation(&mut self, id: CancellationId) -> Result<Cancellation, DomainError> {
+        self.change(|book| {
+            book.cancellations
+                .remove(&id)
+                .ok_or(DomainError::UnknownCancellation)
+        })
+    }
+
+    /// Resolves tickets of a conflict, all of them or some (R-TKT-13).
+    pub fn resolve_conflict(
+        &mut self,
+        order: &str,
+        tier: TierId,
+        resolution: Resolution,
+    ) -> Result<CancellationId, DomainError> {
+        self.change(|book| {
+            let count = match &resolution {
+                Resolution::Refund { count, .. }
+                | Resolution::Match { count, .. }
+                | Resolution::Correction { count, .. } => *count,
+            };
+            if count == 0 {
+                return Err(DomainError::NonPositiveAmount {
+                    field: "count".into(),
+                });
+            }
+            let open = tickets::reckon(&book.imports, &book.cancellations)
+                .unresolved
+                .get(&(order.to_owned(), tier))
+                .map_or(0, |(count, _)| *count);
+            if count > open {
+                return Err(DomainError::TooManyTickets);
+            }
+
+            if let Resolution::Match { cancellation, .. } = resolution {
+                let c = book
+                    .cancellations
+                    .get_mut(&cancellation)
+                    .filter(|c| {
+                        c.tier == tier && c.order.as_deref() == Some(order) && c.terms.is_some()
+                    })
+                    .ok_or(DomainError::UnknownCancellation)?;
+                if c.gone + count > c.count {
+                    return Err(DomainError::TooManyTickets);
+                }
+                c.gone += count;
+                return Ok(cancellation);
+            }
+
+            let (terms, note) = match resolution {
+                Resolution::Refund { terms, note, .. } => (Some(terms), note),
+                Resolution::Correction { note, .. } => (None, note),
+                Resolution::Match { .. } => unreachable!("handled above"),
+            };
+            let id = CancellationId(book.next.cancellation);
+            book.next.cancellation += 1;
+            let c = Cancellation {
+                id,
+                tier,
+                count,
+                order: Some(order.to_owned()),
+                sale: None,
+                gone: count,
+                note: clean(note),
+                terms,
+            };
+            check_cancellation(&c, book)?;
+            book.cancellations.insert(id, c);
+            Ok(id)
+        })
+    }
+
     // --- generated income ----------------------------------------------------------------
 
-    /// Makes the ticket income match the tickets (R-TKT-6, R-TKT-7): one income per tier of the
-    /// latest import, to the Verein account, net of the tier's fee; and one per manual sale, to
-    /// the person who took the money. Existing ones keep their ids; ones no longer needed go.
+    /// Makes the ticket income match the tickets (R-TKT-6, R-TKT-7, R-TKT-15): one income per tier
+    /// of the latest import and its cancelled tickets, to the Verein account, net of the tier's
+    /// fee; one per manual sale, to the person who took the money; and one negative income per
+    /// refund, from whoever pays it. Existing ones keep their ids; ones no longer needed go.
     pub(super) fn sync_tickets(&mut self) -> Result<(), DomainError> {
         let existing: BTreeMap<Origin, TxnId> = self
             .txns
@@ -250,7 +420,12 @@ impl Book {
             BTreeMap::new();
         if let Some(latest) = self.latest_import() {
             let date = latest.date;
-            for (tier, count) in latest.counts() {
+            let mut counts = latest.counts();
+            let reckoning = tickets::reckon(&self.imports, &self.cancellations);
+            for (tier, cancelled) in reckoning.cancelled {
+                *counts.entry(tier).or_insert(0) += cancelled;
+            }
+            for (tier, count) in counts {
                 let t = self.tiers.get(&tier).ok_or(DomainError::UnknownTier)?;
                 let gross = t.draft.price.checked_mul(i64::from(count))?;
                 if gross.is_zero() {
@@ -289,6 +464,34 @@ impl Book {
             );
         }
 
+        let refunds: Vec<Cancellation> = self.cancellations.values().cloned().collect();
+        for c in refunds {
+            let Some(terms) = c.terms else { continue };
+            let t = self.tiers.get(&c.tier).ok_or(DomainError::UnknownTier)?;
+            let refund =
+                percent_bp(t.draft.price, terms.refund_bp)?.checked_mul(i64::from(c.count))?;
+            if refund.is_zero() {
+                continue;
+            }
+            let description = format!("Refund {} × {}", c.count, t.draft.name);
+            let payer = terms
+                .payer
+                .or(default_payer(&c, &self.manual_sales, Some(verein)))
+                .ok_or(DomainError::UnknownManualSale)?;
+            wanted.insert(
+                Origin::TicketRefund { cancellation: c.id },
+                (
+                    terms.date,
+                    description,
+                    c.note,
+                    vec![
+                        line(self.ticket_refunds_account(), refund),
+                        line(payer, -refund),
+                    ],
+                ),
+            );
+        }
+
         for (origin, id) in &existing {
             if !wanted.contains_key(origin) {
                 self.remove_txn(*id);
@@ -320,35 +523,117 @@ impl Book {
         Ok(())
     }
 
-    /// The generated income of each manual sale.
-    pub(super) fn sale_txns(&self) -> BTreeMap<ManualSaleId, TxnId> {
+    /// The generated transactions by where they come from.
+    pub(super) fn generated_txns(&self) -> BTreeMap<Origin, TxnId> {
         self.txns
             .values()
-            .filter_map(|t| match t.origin {
-                Origin::TicketSale { sale } => Some((sale, t.id)),
-                _ => None,
-            })
+            .filter(|t| t.origin.is_generated())
+            .map(|t| (t.origin, t.id))
             .collect()
     }
 
-    /// The fee category: the one with the role, else an unassigned `Ticket fees` category,
-    /// else a new one.
     fn ticket_fees_account(&mut self) -> AccountId {
-        if let Some(a) = self.account_by_role(Role::TicketFees) {
+        self.ticket_category(Role::TicketFees, AccountKind::Expense, TICKET_FEES)
+    }
+
+    fn ticket_refunds_account(&mut self) -> AccountId {
+        self.ticket_category(Role::TicketRefunds, AccountKind::Income, TICKET_REFUNDS)
+    }
+
+    /// A generated category: the one with the role, else an unassigned one with the name, else
+    /// a new one.
+    fn ticket_category(&mut self, role: Role, kind: AccountKind, name: &str) -> AccountId {
+        if let Some(a) = self.account_by_role(role) {
             return a.id;
         }
         let named = self
-            .account_by_name(AccountKind::Expense, TICKET_FEES)
+            .account_by_name(kind, name)
             .filter(|a| a.role.is_none())
             .map(|a| a.id);
         match named.and_then(|id| self.accounts.get_mut(&id)) {
             Some(a) => {
-                a.role = Some(Role::TicketFees);
+                a.role = Some(role);
                 a.id
             }
-            None => self.insert_account(AccountKind::Expense, TICKET_FEES, Some(Role::TicketFees)),
+            None => self.insert_account(kind, name, Some(role)),
         }
     }
+}
+
+/// Checks a cancellation against the rest of the book: a known tier and source, a refund of at
+/// most 100 % from an asset or a person, a trimmed note, and no more tickets than there are.
+fn check_cancellation(c: &Cancellation, book: &Book) -> Result<(), DomainError> {
+    check_cancellation_parts(
+        c,
+        &book.tiers,
+        &book.imports,
+        &book.manual_sales,
+        &book.cancellations,
+        &book.accounts,
+    )
+}
+
+fn check_cancellation_parts(
+    c: &Cancellation,
+    tiers: &BTreeMap<TierId, Tier>,
+    imports: &BTreeMap<ImportId, TicketImport>,
+    sales: &BTreeMap<ManualSaleId, ManualSale>,
+    others: &BTreeMap<CancellationId, Cancellation>,
+    accounts: &BTreeMap<AccountId, Account>,
+) -> Result<(), DomainError> {
+    if !tiers.contains_key(&c.tier) {
+        return Err(DomainError::UnknownTier);
+    }
+    if c.count == 0 {
+        return Err(DomainError::NonPositiveAmount {
+            field: "count".into(),
+        });
+    }
+    if let Some(RefundTerms {
+        refund_bp, payer, ..
+    }) = c.terms
+    {
+        if refund_bp > BP_FULL {
+            return Err(DomainError::RefundTooHigh);
+        }
+        if let Some(payer) = payer {
+            match accounts.get(&payer).map(|a| a.kind) {
+                Some(AccountKind::Asset | AccountKind::Person) => {}
+                None => {
+                    return Err(DomainError::UnknownAccount {
+                        field: "payer".into(),
+                    });
+                }
+                Some(_) => {
+                    return Err(DomainError::WrongAccountKind {
+                        field: "payer".into(),
+                    });
+                }
+            }
+        }
+    }
+    let same_source = others
+        .values()
+        .filter(|o| o.id != c.id && o.sale == c.sale && o.order == c.order && o.tier == c.tier);
+    let taken: u32 = same_source.map(|o| o.count).sum();
+    let available = match (&c.order, c.sale) {
+        (Some(order), None) => most_ever(imports, order, c.tier),
+        (None, Some(sale)) => {
+            let s = sales.get(&sale).ok_or(DomainError::UnknownManualSale)?;
+            if s.draft.tier != c.tier {
+                return Err(DomainError::UnknownManualSale);
+            }
+            s.draft.count
+        }
+        _ => return Err(DomainError::UnknownOrder),
+    };
+    if available == 0 {
+        return Err(DomainError::UnknownOrder);
+    }
+    if taken + c.count > available || c.gone > c.count {
+        return Err(DomainError::TooManyTickets);
+    }
+    Ok(())
 }
 
 /// A tier that exists, a positive count, a person and a trimmed reference.
@@ -384,13 +669,16 @@ type TicketMaps = (
     BTreeMap<TierId, Tier>,
     BTreeMap<ImportId, TicketImport>,
     BTreeMap<ManualSaleId, ManualSale>,
+    BTreeMap<CancellationId, Cancellation>,
 );
 
-/// Checks stored tiers, imports and manual sales the way the commands would have made them.
+/// Checks stored tiers, imports, manual sales and cancellations the way the commands would have
+/// made them.
 pub(super) fn check_parts(
     tiers: Vec<Tier>,
     imports: Vec<TicketImport>,
     sales: Vec<ManualSale>,
+    cancellations: Vec<Cancellation>,
     next: &NextIds,
     accounts: &BTreeMap<AccountId, Account>,
 ) -> Result<TicketMaps, DomainError> {
@@ -433,7 +721,28 @@ pub(super) fn check_parts(
         }
         sale_map.insert(s.id, s);
     }
-    Ok((tier_map, import_map, sale_map))
+
+    let mut cancellation_map = BTreeMap::new();
+    for c in cancellations {
+        let correction_ok = c.terms.is_some() || (c.order.is_some() && c.gone == c.count);
+        if c.id.0 >= next.cancellation
+            || !correction_ok
+            || c.note != clean(c.note.clone())
+            || check_cancellation_parts(
+                &c,
+                &tier_map,
+                &import_map,
+                &sale_map,
+                &cancellation_map,
+                accounts,
+            )
+            .is_err()
+        {
+            return Err(bad("ticket cancellation that does not fit its tickets"));
+        }
+        cancellation_map.insert(c.id, c);
+    }
+    Ok((tier_map, import_map, sale_map, cancellation_map))
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ export interface Row {
 	who: string;
 	/** The income or expense categories the transaction books to. */
 	categories: AccountView[];
-	/** Money in (income), out (expense) or moved (transfer, settle, opening). */
+	/** Money in (income), out (expense, ticket refund) or moved (transfer, settle, opening). */
 	flow: 'in' | 'out' | 'moved';
 	receipt: 'attached' | 'missing' | 'none';
 }
@@ -47,13 +47,15 @@ export function rows(snapshot: EventSnapshot): Row[] {
 		const accounts = txn.lines.map((l) => ({ line: l, account: byId.get(l.account) }));
 		const categories = accounts.filter((x) => isCategory(x.account)).map((x) => x.account!);
 		const parties = accounts.filter((x) => !isCategory(x.account) && x.account?.kind !== 'opening');
+		// A ticket refund is negative income: money out, from whoever pays it (R-TKT-15).
+		const refund = txn.origin.type === 'ticketRefund';
 		const party =
 			txn.kind === 'settle'
 				? parties.find((x) => x.account?.kind === 'person')
-				: txn.kind === 'income'
+				: txn.kind === 'income' && !refund
 					? parties.find((x) => x.line.amount > 0)
 					: (parties.find((x) => x.line.amount < 0) ?? parties[0]);
-		const flow = txn.kind === 'expense' ? 'out' : txn.kind === 'income' ? 'in' : 'moved';
+		const flow = txn.kind === 'expense' || refund ? 'out' : txn.kind === 'income' ? 'in' : 'moved';
 		const receipt = txn.attachments.length
 			? 'attached'
 			: txn.kind === 'expense'

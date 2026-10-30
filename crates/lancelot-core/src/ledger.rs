@@ -8,7 +8,9 @@ use ts_rs::TS;
 
 use time::Date;
 
-use crate::model::{Account, AccountId, AccountKind, AssetType, ClosingCount, Txn, TxnId, TxnKind};
+use crate::model::{
+    Account, AccountId, AccountKind, AssetType, ClosingCount, Origin, Txn, TxnId, TxnKind,
+};
 use crate::money::{Cents, MoneyError};
 
 /// Per-person figures for the People view (R-PER-3, R-TX-5).
@@ -90,8 +92,8 @@ pub struct OpeningCount {
     pub amount: Cents,
 }
 
-/// Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches and
-/// ticket conflicts join in phase 2.
+/// Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches join
+/// in phase 2.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -107,6 +109,8 @@ pub enum OpenItem {
         account: AccountId,
         difference: Cents,
     },
+    /// Tickets removed from the sheet that have no resolution yet (R-TKT-16), per order and tier.
+    TicketConflicts { count: u32 },
 }
 
 /// What [`Ledger::compute`] needs from the book.
@@ -116,6 +120,8 @@ pub struct LedgerInput<'a> {
     pub closing_counts: &'a BTreeMap<AccountId, ClosingCount>,
     /// Transactions that have at least one attachment.
     pub with_attachments: &'a BTreeSet<TxnId>,
+    /// Unresolved ticket conflicts.
+    pub ticket_conflicts: u32,
 }
 
 /// An open item explicitly accepted when closing the event (R-SET-7).
@@ -141,6 +147,7 @@ pub struct Ledger {
     missing_receipts: Vec<TxnId>,
     person_entries: BTreeMap<AccountId, Vec<PersonEntry>>,
     person_totals: PersonTotals,
+    ticket_conflicts: u32,
 }
 
 /// One line of a person's running balance (R-PER-3).
@@ -173,6 +180,7 @@ impl Ledger {
             txns,
             closing_counts,
             with_attachments,
+            ticket_conflicts,
         } = input;
         let mut raw: BTreeMap<AccountId, Cents> =
             accounts.keys().map(|id| (*id, Cents::ZERO)).collect();
@@ -181,6 +189,7 @@ impl Ledger {
             .filter(|a| a.kind == AccountKind::Person)
             .map(|a| (a.id, PersonSummary::default()))
             .collect();
+        let mut refunded: BTreeMap<AccountId, Cents> = BTreeMap::new();
 
         for txn in txns.values() {
             for line in &txn.lines {
@@ -188,6 +197,11 @@ impl Ledger {
                 *balance = balance.checked_add(line.amount)?;
 
                 if let Some(p) = persons.get_mut(&line.account) {
+                    if let Origin::TicketRefund { .. } = txn.origin {
+                        let sum = refunded.entry(line.account).or_default();
+                        *sum = sum.checked_sub(line.amount)?;
+                        continue;
+                    }
                     let (field, amount) = match (txn.kind, line.amount.is_positive()) {
                         (TxnKind::Settle, true) => (&mut p.reimbursed, line.amount),
                         (TxnKind::Settle, false) => (&mut p.repaid, -line.amount),
@@ -196,6 +210,16 @@ impl Ledger {
                     };
                     *field = field.checked_add(amount)?;
                 }
+            }
+        }
+
+        // A refund comes out of the ticket money a person holds (R-TKT-15); beyond that it is
+        // their own money, an advance.
+        for (id, refund) in refunded {
+            if let Some(p) = persons.get_mut(&id) {
+                let from_held = refund.min(p.held);
+                p.held = p.held.checked_sub(from_held)?;
+                p.advanced = p.advanced.checked_add(refund.checked_sub(from_held)?)?;
             }
         }
 
@@ -353,6 +377,7 @@ impl Ledger {
             missing_receipts,
             person_entries,
             person_totals,
+            ticket_conflicts,
         })
     }
 
@@ -414,7 +439,7 @@ impl Ledger {
         &self.missing_receipts
     }
 
-    /// People first, then receipts, then cash.
+    /// People first, then receipts, then cash, then tickets.
     pub fn open_items(&self) -> Vec<OpenItem> {
         let people = self
             .persons
@@ -439,6 +464,9 @@ impl Ledger {
             }),
             Some(_) => None,
         });
-        people.chain(receipts).chain(cash).collect()
+        let tickets = (self.ticket_conflicts > 0).then_some(OpenItem::TicketConflicts {
+            count: self.ticket_conflicts,
+        });
+        people.chain(receipts).chain(cash).chain(tickets).collect()
     }
 }

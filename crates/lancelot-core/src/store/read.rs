@@ -10,12 +10,13 @@ use crate::book::{BookParts, NextIds};
 use crate::iban::validate_iban;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineDraft, BudgetLineId,
-    ClosingCount, Estimate, Event, EventDetails, ImportId, Line, ManualSaleId, Origin, Person,
-    TierId, Txn, TxnId,
+    CancellationId, ClosingCount, Estimate, Event, EventDetails, ImportId, Line, ManualSaleId,
+    Origin, Person, TierId, Txn, TxnId,
 };
 use crate::money::Cents;
 use crate::tickets::{
-    ManualSale, ManualSaleDraft, OrderCount, TicketColumns, TicketImport, Tier, TierDraft,
+    Cancellation, ManualSale, ManualSaleDraft, OrderCount, RefundTerms, TicketColumns,
+    TicketImport, Tier, TierDraft,
 };
 
 pub(crate) fn cents(value: i64) -> Result<Cents, StoreError> {
@@ -101,6 +102,9 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
             (o, Some(tier)) if o == "ticket_import" => Origin::TicketImport { tier: TierId(tier) },
             (o, Some(sale)) if o == "ticket_sale" => Origin::TicketSale {
                 sale: ManualSaleId(sale),
+            },
+            (o, Some(cancellation)) if o == "ticket_refund" => Origin::TicketRefund {
+                cancellation: CancellationId(cancellation),
             },
             (o, _) => {
                 return Err(StoreError::corrupt(format!(
@@ -318,6 +322,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     }
 
     let (tiers, imports, manual_sales) = tickets(conn)?;
+    let cancellations = cancellations(conn)?;
 
     Ok(BookParts {
         event,
@@ -330,6 +335,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         tiers,
         imports,
         manual_sales,
+        cancellations,
         next: NextIds {
             account: next_id(conn, "next_account_id")?,
             txn: next_id(conn, "next_txn_id")?,
@@ -338,6 +344,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             tier: next_id(conn, "next_tier_id")?,
             import: next_id(conn, "next_import_id")?,
             manual_sale: next_id(conn, "next_manual_sale_id")?,
+            cancellation: next_id(conn, "next_cancellation_id")?,
         },
     })
 }
@@ -459,4 +466,54 @@ fn tickets(conn: &Connection) -> Result<TicketParts, StoreError> {
         });
     }
     Ok((tiers, imports, sales))
+}
+
+/// Cancellations and corrections: a correction has no refund terms.
+fn cancellations(conn: &Connection) -> Result<Vec<Cancellation>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, tier_id, count, order_id, sale_id, gone, note, refund_bp, date, payer_id
+         FROM ticket_cancellation ORDER BY id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            (
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, Option<i64>>(4)?,
+            ),
+            (
+                r.get::<_, i64>(5)?,
+                r.get::<_, Option<String>>(6)?,
+                r.get::<_, Option<i64>>(7)?,
+                r.get::<_, Option<String>>(8)?,
+                r.get::<_, Option<i64>>(9)?,
+            ),
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let ((id, tier, n, order, sale), (gone, note, refund_bp, date, payer)) = row?;
+        let terms = match (refund_bp, date) {
+            (Some(refund_bp), Some(date)) => Some(RefundTerms {
+                refund_bp: u32::try_from(refund_bp)
+                    .map_err(|_| StoreError::corrupt("refund out of range"))?,
+                date: text_date(&date)?,
+                payer: payer.map(AccountId),
+            }),
+            _ => None,
+        };
+        out.push(Cancellation {
+            id: CancellationId(id),
+            tier: TierId(tier),
+            count: count(n)?,
+            order,
+            sale: sale.map(ManualSaleId),
+            gone: count(gone)?,
+            note,
+            terms,
+        });
+    }
+    Ok(out)
 }

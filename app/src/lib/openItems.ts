@@ -28,5 +28,10 @@ export function describe(item: OpenItem, snapshot: EventSnapshot, format: Number
 				text: `${name(item.account)}: ${differenceText(item.difference, format)}`,
 				amount: null
 			};
+		case 'ticketConflicts':
+			return {
+				text: `${item.count} ticket ${item.count === 1 ? 'conflict' : 'conflicts'}`,
+				amount: null
+			};
 	}
 }

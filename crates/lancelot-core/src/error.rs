@@ -60,6 +60,18 @@ pub enum DomainError {
     UnknownImport,
     #[error("unknown manual sale")]
     UnknownManualSale,
+    #[error("unknown cancellation")]
+    UnknownCancellation,
+    #[error("no such order with tickets of this tier in the sheet")]
+    UnknownOrder,
+    #[error("that is more tickets than are left to cancel")]
+    TooManyTickets,
+    #[error("the refund must be between 0 and 100 %")]
+    RefundTooHigh,
+    #[error("this sale has cancellations: delete them first")]
+    SaleHasCancellations,
+    #[error("a correction cannot be edited: delete it and resolve the conflict again")]
+    CorrectionNotEditable,
     #[error("this transaction is generated from tickets and cannot be changed by hand")]
     GeneratedTxn,
     #[error("the ticket sheet cannot be read: {reason}")]
@@ -104,6 +116,12 @@ impl DomainError {
             DomainError::FeeTooHigh => "fee_too_high",
             DomainError::UnknownImport => "unknown_import",
             DomainError::UnknownManualSale => "unknown_manual_sale",
+            DomainError::UnknownCancellation => "unknown_cancellation",
+            DomainError::UnknownOrder => "unknown_order",
+            DomainError::TooManyTickets => "too_many_tickets",
+            DomainError::RefundTooHigh => "refund_too_high",
+            DomainError::SaleHasCancellations => "sale_has_cancellations",
+            DomainError::CorrectionNotEditable => "correction_not_editable",
             DomainError::GeneratedTxn => "generated_txn",
             DomainError::UnreadableSheet { .. } => "unreadable_sheet",
             DomainError::MissingColumn { .. } => "missing_column",
@@ -129,6 +147,9 @@ impl DomainError {
             DomainError::SplitMismatch => Some("lines"),
             DomainError::FeeTooHigh => Some("feeBp"),
             DomainError::UnknownTier => Some("tier"),
+            DomainError::UnknownOrder => Some("order"),
+            DomainError::TooManyTickets => Some("count"),
+            DomainError::RefundTooHigh => Some("refundBp"),
             _ => None,
         }
     }

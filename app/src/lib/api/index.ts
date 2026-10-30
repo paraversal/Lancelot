@@ -15,6 +15,9 @@ import type { BackupInfo } from './generated/BackupInfo';
 import type { BlockerOverride } from './generated/BlockerOverride';
 import type { BudgetLineDraft } from './generated/BudgetLineDraft';
 import type { BudgetLineId } from './generated/BudgetLineId';
+import type { CancellationDraft } from './generated/CancellationDraft';
+import type { CancellationEdit } from './generated/CancellationEdit';
+import type { CancellationId } from './generated/CancellationId';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
@@ -28,6 +31,7 @@ import type { Person } from './generated/Person';
 import type { ParsedDate } from './generated/ParsedDate';
 import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
+import type { Resolution } from './generated/Resolution';
 import type { SavedTxn } from './generated/SavedTxn';
 import type { TicketColumns } from './generated/TicketColumns';
 import type { TierDraft } from './generated/TierDraft';
@@ -148,6 +152,13 @@ export const api = {
 	updateManualSale: (id: ManualSaleId, draft: ManualSaleDraft) =>
 		call<OpenEvent>('manual_sale_update', { id, draft }),
 	deleteManualSale: (id: ManualSaleId) => call<OpenEvent>('manual_sale_delete', { id }),
+	addCancellation: (draft: CancellationDraft) => call<OpenEvent>('cancellation_add', { draft }),
+	updateCancellation: (id: CancellationId, edit: CancellationEdit) =>
+		call<OpenEvent>('cancellation_update', { id, edit }),
+	/** Tickets it resolved are a conflict again. */
+	deleteCancellation: (id: CancellationId) => call<OpenEvent>('cancellation_delete', { id }),
+	resolveConflict: (order: string, tier: TierId, resolution: Resolution) =>
+		call<OpenEvent>('conflict_resolve', { order, tier, resolution }),
 
 	exportPayoutsCsv: (target: string) => call<void>('payouts_export_csv', { target }),
 	exportTransactionsCsv: (target: string) => call<void>('transactions_export_csv', { target }),
