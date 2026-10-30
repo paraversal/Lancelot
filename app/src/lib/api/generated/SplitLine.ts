@@ -2,6 +2,7 @@
 import type { AccountId } from "./AccountId";
 import type { BudgetLineId } from "./BudgetLineId";
 import type { Cents } from "./Cents";
+import type { CostCentreId } from "./CostCentreId";
 
 /**
  * One category line of a split expense or income (R-TX-2). The amount is positive.
@@ -10,4 +11,8 @@ export type SplitLine = { account: AccountId, amount: Cents, memo: string | null
 /**
  * Must belong to the line's category (R-BUD-2).
  */
-budgetLine: BudgetLineId | null, };
+budgetLine: BudgetLineId | null, 
+/**
+ * Must match the budget line's, if there is one (R-CC-1).
+ */
+costCentre: CostCentreId | null, };

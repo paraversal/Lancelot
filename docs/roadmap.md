@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. M9 is done: cost centres and the Drinks page, without the frame's Strichliste, which is M11. M10 is done: reconciliation checkpoints, templates and copying from another event; the Phase 2 exit still needs the next event. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -184,7 +184,7 @@ Built in three steps, each in its own pull request.
 **M6a · Budget core (Rust only)**
 
 - [x] Budget lines on an income or expense category, as an amount or as quantity × unit price, with a "complete" flag. Transaction lines link to a budget line of their own category; deleting a budget line leaves its actuals unbudgeted. Covers R-BUD-1 and R-BUD-2.
-- [x] Plan vs actual per line, per category and in total, in the snapshot. Forecast rule: complete lines use the actual, otherwise the cautious one of estimate and actual (larger for expenses, smaller for income), plus unbudgeted actuals. Covers R-BUD-3, R-BUD-4 and R-BUD-5. Per cost centre follows with cost centres in M9.
+- [x] Plan vs actual per line, per category and in total, in the snapshot. Forecast rule: complete lines use the actual, otherwise the cautious one of estimate and actual (larger for expenses, smaller for income), plus unbudgeted actuals. Covers R-BUD-3, R-BUD-4 and R-BUD-5. Per cost centre came with M9.
 - [x] Property tests: actuals add up to the ledger's totals, category figures add up from their lines, and budget lines never change a balance.
 
 **M6b · Budget screen**
@@ -258,13 +258,13 @@ Built in three steps, each in its own pull request.
 
 ### M9 · Cost centres and Drinks
 
-- [ ] Cost centre tags on lines and budget lines, a P&L per cost centre, and Drinks as the default cost centre. Covers R-CC-1, R-CC-2 and R-SET-3.
-- [ ] Drinks screen: cost (drinks plus Pfand), donations and result, per-product commission records with an invoice check, and the price per Strich. Covers R-DRK-1 to R-DRK-6.
+- [x] Cost centre tags on income and expense lines and on budget lines, with a P&L and plan vs actual per cost centre on the Budget page and in the report. Drinks exists in every event and cannot be deleted; a category can name the cost centre its new lines start in, and Drinks, Pfand and Drink donations start in Drinks. A line linked to a budget line has that line's cost centre, and follows it. Generated ticket income is not tagged. The transactions CSV gains a last column. Covers R-CC-1, R-CC-2, R-BUD-3 and R-SET-3.
+- [x] Drinks page (⌘5, Budget moves to ⌘6): cost, donations and result of the cost centre, per-product commission records, the cost per drink and the price per Strich. The invoice check compares the Drinks-tagged expenses whose counterparty is the supplier, without Pfand, with what the records say; **Supplier invoice** opens that expense in the ledger, filled in from the records. A difference shows on the page and is not an open item. Covers R-DRK-1 to R-DRK-6.
 
 ### M10 · Reconciliation and templates
 
-- [ ] Reconciliation checkpoints per asset account. The Verein account is checked on net movement (R-ACC-4), and mismatches become open items.
-- [ ] New event from a template, and copying persons and budget from another file. Covers R-EVT-3 and R-ISO-4.
+- [x] Reconciliation checkpoints per asset account, one per date, from a **Statement** panel on the Overview. The Verein account is checked on net movement, without opening counts (R-ACC-4, R-ISO-2), and every mismatched checkpoint is an open item, however later ones turn out (R-SET-5).
+- [x] New event from a template: accounts, categories, cost centres, persons, budget lines, tiers, sheet columns and the drink price list, with no money and nothing marked complete. Copying persons and budget lines from another file into an open event, in Settings, never overwrites: what is already there is skipped, and a missing category or cost centre is created. The other file is only read. Covers R-EVT-3 and R-ISO-4.
 
 **Phase 2 exit:** the next event runs with ticket imports, a budget and a Drinks P&L, and Excel is no longer needed. Tag `v0.2.0`.
 
@@ -291,4 +291,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M9: cost centres and Drinks. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
+Run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows.

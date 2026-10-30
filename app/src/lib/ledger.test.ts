@@ -36,8 +36,8 @@ describe('a ticket refund', () => {
 			description: 'Refund 1 × Regular',
 			origin: { type: 'ticketRefund', cancellation: 1 },
 			lines: [
-				{ account: refunds, amount: 1600, memo: null, budgetLine: null },
-				{ account: verein, amount: -1600, memo: null, budgetLine: null }
+				{ account: refunds, amount: 1600, memo: null, budgetLine: null, costCentre: null },
+				{ account: verein, amount: -1600, memo: null, budgetLine: null, costCentre: null }
 			]
 		};
 		const [row] = rows({

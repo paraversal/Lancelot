@@ -50,6 +50,20 @@ pub enum DomainError {
     WrongBudgetLine { field: String },
     #[error("transactions are linked to this budget line, so its category cannot change")]
     BudgetLineInUse,
+    #[error("unknown cost centre")]
+    UnknownCostCentre { field: String },
+    #[error("this line has the cost centre of its budget line")]
+    WrongCostCentre { field: String },
+    #[error("the Drinks cost centre cannot be deleted")]
+    CostCentreProtected,
+    #[error("unknown product")]
+    UnknownDrinkProduct,
+    #[error("unknown checkpoint")]
+    UnknownReconciliation,
+    #[error("this account already has a checkpoint on this date")]
+    DuplicateCheckpoint { field: String },
+    #[error("more units returned than taken")]
+    TooManyReturned,
     #[error("unknown ticket tier")]
     UnknownTier,
     #[error("tickets of this tier were imported or sold, so it cannot be deleted")]
@@ -111,6 +125,13 @@ impl DomainError {
             DomainError::UnknownBudgetLine => "unknown_budget_line",
             DomainError::WrongBudgetLine { .. } => "wrong_budget_line",
             DomainError::BudgetLineInUse => "budget_line_in_use",
+            DomainError::UnknownCostCentre { .. } => "unknown_cost_centre",
+            DomainError::WrongCostCentre { .. } => "wrong_cost_centre",
+            DomainError::CostCentreProtected => "cost_centre_protected",
+            DomainError::UnknownDrinkProduct => "unknown_drink_product",
+            DomainError::UnknownReconciliation => "unknown_reconciliation",
+            DomainError::DuplicateCheckpoint { .. } => "duplicate_checkpoint",
+            DomainError::TooManyReturned => "too_many_returned",
             DomainError::UnknownTier => "unknown_tier",
             DomainError::TierInUse => "tier_in_use",
             DomainError::FeeTooHigh => "fee_too_high",
@@ -140,7 +161,11 @@ impl DomainError {
             | DomainError::NegativeAmount { field }
             | DomainError::EmptyName { field }
             | DomainError::DuplicateName { field }
-            | DomainError::WrongBudgetLine { field } => Some(field),
+            | DomainError::WrongBudgetLine { field }
+            | DomainError::UnknownCostCentre { field }
+            | DomainError::WrongCostCentre { field }
+            | DomainError::DuplicateCheckpoint { field } => Some(field),
+            DomainError::TooManyReturned => Some("returned"),
             DomainError::BudgetLineInUse => Some("category"),
             DomainError::SameAccount => Some("to"),
             DomainError::InvalidBic => Some("bic"),

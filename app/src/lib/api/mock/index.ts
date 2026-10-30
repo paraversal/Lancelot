@@ -12,7 +12,10 @@ import type { BlockerOverride } from '../generated/BlockerOverride';
 import type { BudgetLineDraft } from '../generated/BudgetLineDraft';
 import type { AccountKind } from '../generated/AccountKind';
 import type { AssetType } from '../generated/AssetType';
+import type { CopyChoice } from '../generated/CopyChoice';
+import type { CopySummary } from '../generated/CopySummary';
 import type { CountInput } from '../generated/CountInput';
+import type { PersonSummary } from '../generated/PersonSummary';
 import type { EventDetails } from '../generated/EventDetails';
 import type { EventSnapshot } from '../generated/EventSnapshot';
 import type { OpenEvent } from '../generated/OpenEvent';
@@ -28,6 +31,8 @@ import type { ManualSaleDraft } from '../generated/ManualSaleDraft';
 import type { TicketColumns } from '../generated/TicketColumns';
 import type { TierDraft } from '../generated/TierDraft';
 import type { TxnDraft } from '../generated/TxnDraft';
+import type { DrinkProductDraft } from '../generated/DrinkProductDraft';
+import type { DrinkSettings } from '../generated/DrinkSettings';
 import empty from './empty-event.json';
 import example from './example-event.json';
 
@@ -187,21 +192,21 @@ function parseDate(input: string) {
 // recomputed. Good enough to click through the ledger.
 function lines(draft: TxnDraft): Line[] {
 	const e = draft.entry;
-	const line = (account: number, amount: number, budgetLine: number | null = null): Line => ({
-		account,
-		amount,
-		memo: null,
-		budgetLine
-	});
+	const line = (
+		account: number,
+		amount: number,
+		budgetLine: number | null = null,
+		costCentre: number | null = null
+	): Line => ({ account, amount, memo: null, budgetLine, costCentre });
 	switch (e.type) {
 		case 'expense':
 			return [
 				line(e.payer, -e.lines.reduce((s, l) => s + l.amount, 0)),
-				...e.lines.map((l) => line(l.account, l.amount, l.budgetLine))
+				...e.lines.map((l) => line(l.account, l.amount, l.budgetLine, l.costCentre))
 			];
 		case 'income':
 			return [
-				...e.lines.map((l) => line(l.account, -l.amount, l.budgetLine)),
+				...e.lines.map((l) => line(l.account, -l.amount, l.budgetLine, l.costCentre)),
 				line(
 					e.destination,
 					e.lines.reduce((s, l) => s + l.amount, 0)
@@ -285,6 +290,7 @@ function addAccount(kind: AccountKind, name: string, assetType: AssetType | null
 			name: name.trim(),
 			role: null,
 			assetType: kind === 'asset' ? (assetType ?? 'bank') : null,
+			costCentre: null,
 			balance: 0
 		});
 		if (kind === 'asset') s.whereTheMoneyIs.assets.push({ account: id, balance: 0 });
@@ -431,6 +437,227 @@ function rebudget(s: EventSnapshot) {
 	for (const k of ['estimate', 'actual', 'forecast'] as const)
 		s.budget.result[k] = totals.income[k] - totals.expense[k];
 	s.profitability = profitability(s);
+	reckonCostCentres(s);
+	reckonStatements(s);
+}
+
+function otherEvent(path: string): EventSnapshot {
+	if (path === LOCKED) fail('already_open', 'this event file is already open');
+	if (path === DAMAGED) fail('damaged', 'the event file is damaged and cannot be opened');
+	return example as EventSnapshot;
+}
+
+const NO_BALANCE: PersonSummary = {
+	advanced: 0,
+	held: 0,
+	reimbursed: 0,
+	repaid: 0,
+	settled: 0,
+	net: 0,
+	status: 'settled'
+};
+
+// A new event's setup from the example event, following the core's `Book::from_template`. Tiers
+// are left out: their figures come from the core.
+function fromTemplate(path: string): EventSnapshot {
+	const source = structuredClone(otherEvent(path));
+	const s = structuredClone(empty as EventSnapshot);
+	s.accounts = source.accounts.map((a) => ({ ...a, balance: 0 }));
+	s.persons = source.persons.map((p) => ({ ...p, summary: NO_BALANCE, entries: [] }));
+	s.costCentres = source.costCentres;
+	s.budgetLines = source.budgetLines.map((b) => ({ ...b, complete: false }));
+	s.budget.categories = source.budget.categories.map((c) => ({
+		...c,
+		actual: 0,
+		estimate: 0,
+		forecast: 0,
+		unbudgeted: 0
+	}));
+	s.drinkProducts = source.drinkProducts.map((p) => ({ ...p, taken: 0, returned: 0 }));
+	s.event.drinks = source.event.drinks;
+	s.openItems = s.openItems.filter((i) => i.type !== 'personBalance');
+	rebudget(s);
+	return s;
+}
+
+// Following the core's `Book::copy_from`, without its cost centres: the example's already exist.
+function copyInto(s: EventSnapshot, source: EventSnapshot, choice: CopyChoice): CopySummary {
+	const summary: CopySummary = {
+		personsAdded: 0,
+		personsSkipped: 0,
+		budgetLinesAdded: 0,
+		budgetLinesSkipped: 0,
+		categoriesAdded: 0,
+		costCentresAdded: 0
+	};
+	const lower = (t: string) => t.toLowerCase();
+	const nextAccount = () => Math.max(0, ...s.accounts.map((a) => a.id)) + 1;
+	if (choice.persons)
+		for (const p of source.persons) {
+			if (s.persons.some((o) => lower(o.name) === lower(p.name))) {
+				summary.personsSkipped++;
+				continue;
+			}
+			const id = nextAccount();
+			const account = source.accounts.find((a) => a.id === p.account)!;
+			s.accounts.push({ ...account, id, balance: 0 });
+			s.persons.push({ ...p, account: id, summary: NO_BALANCE, entries: [] });
+			summary.personsAdded++;
+		}
+	if (choice.budget) {
+		const here = s.budgetLines.map((b) => `${b.category}/${lower(b.description)}`);
+		for (const b of source.budgetLines) {
+			const from = source.accounts.find((a) => a.id === b.category)!;
+			let to = s.accounts.find((a) => a.kind === from.kind && lower(a.name) === lower(from.name));
+			if (!to) {
+				to = { ...from, id: nextAccount(), balance: 0 };
+				s.accounts.push(to);
+				s.budget.categories.push({
+					category: to.id,
+					estimate: 0,
+					actual: 0,
+					forecast: 0,
+					unbudgeted: 0
+				});
+				summary.categoriesAdded++;
+			}
+			if (here.includes(`${to.id}/${lower(b.description)}`)) {
+				summary.budgetLinesSkipped++;
+				continue;
+			}
+			s.budgetLines.push({
+				...b,
+				id: Math.max(0, ...s.budgetLines.map((l) => l.id)) + 1,
+				category: to.id,
+				complete: false
+			});
+			summary.budgetLinesAdded++;
+		}
+	}
+	rebudget(s);
+	return summary;
+}
+
+// Statements against the books, following the core's `ledger.rs` (R-ACC-4).
+function reckonStatements(s: EventSnapshot) {
+	s.reconciliations = s.reconciliations
+		.map((r) => {
+			const movement = s.accounts.find((a) => a.id === r.account)?.role === 'verein';
+			const computed = s.txns
+				.filter((t) => t.date <= r.date && !(movement && t.kind === 'opening'))
+				.flatMap((t) => t.lines)
+				.filter((l) => l.account === r.account)
+				.reduce((sum, l) => sum + l.amount, 0);
+			return { ...r, computed, difference: r.amount - computed, movement };
+		})
+		.sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+	const tickets = s.openItems.filter((i) => i.type === 'ticketConflicts');
+	s.openItems = [
+		...s.openItems.filter(
+			(i) => i.type !== 'reconciliationMismatch' && i.type !== 'ticketConflicts'
+		),
+		...s.reconciliations
+			.filter((r) => r.difference !== 0)
+			.map((r) => ({
+				type: 'reconciliationMismatch' as const,
+				checkpoint: r.id,
+				account: r.account,
+				difference: r.difference
+			})),
+		...tickets
+	];
+}
+
+function checkCheckpoint(s: EventSnapshot, account: number, date: string, except: number | null) {
+	if (s.reconciliations.some((r) => r.account === account && r.date === date && r.id !== except))
+		fail('duplicate_checkpoint', 'this account already has a checkpoint on this date', {
+			field: 'date'
+		});
+}
+
+// Cost centres and Drinks, following the core's `budget.rs` and `drinks.rs`.
+function reckonCostCentres(s: EventSnapshot) {
+	const account = (id: number) => s.accounts.find((a) => a.id === id);
+	const shown = (id: number, amount: number) => (account(id)?.kind === 'income' ? -amount : amount);
+	const zero = () => ({ estimate: 0, actual: 0, forecast: 0 });
+	const lines = s.txns.flatMap((t) => t.lines);
+	s.budget.costCentres = s.costCentres.map((centre) => {
+		const categories = new Map<number, ReturnType<typeof zero> & { budgeted: number }>();
+		const of = (id: number) => {
+			if (!categories.has(id)) categories.set(id, { ...zero(), budgeted: 0 });
+			return categories.get(id)!;
+		};
+		for (const b of s.budgetLines.filter((b) => b.costCentre === centre.id)) {
+			const f = s.budget.lines.find((l) => l.line === b.id)!;
+			const c = of(b.category);
+			c.estimate += f.estimate;
+			c.forecast += f.forecast;
+			c.budgeted += f.actual;
+		}
+		for (const l of lines.filter((l) => l.costCentre === centre.id))
+			of(l.account).actual += shown(l.account, l.amount);
+		const totals = { income: zero(), expense: zero() };
+		const rows = [...categories.entries()]
+			.sort(([a], [b]) => a - b)
+			.map(([category, c]) => {
+				const unbudgeted = c.actual - c.budgeted;
+				const row = {
+					category,
+					estimate: c.estimate,
+					actual: c.actual,
+					forecast: c.forecast + unbudgeted,
+					unbudgeted
+				};
+				const total = totals[account(category)?.kind === 'income' ? 'income' : 'expense'];
+				for (const k of ['estimate', 'actual', 'forecast'] as const) total[k] += row[k];
+				return row;
+			});
+		const result = zero();
+		for (const k of ['estimate', 'actual', 'forecast'] as const)
+			result[k] = totals.income[k] - totals.expense[k];
+		return { costCentre: centre.id, categories: rows, ...totals, result };
+	});
+
+	const products = s.drinkProducts.map((p) => ({
+		product: p.id,
+		kept: p.taken - p.returned,
+		cost: (p.taken - p.returned) * p.unitPrice
+	}));
+	const kept = products.reduce((t, p) => t + p.kept, 0);
+	const cost = products.reduce((t, p) => t + p.cost, 0);
+	const supplier = s.event.drinks.supplier?.toLowerCase();
+	const centre = s.costCentres.find((c) => c.role === 'drinks')?.id;
+	const invoiced = s.txns
+		.filter((t) => t.kind === 'expense' && t.counterparty?.trim().toLowerCase() === supplier)
+		.flatMap((t) => t.lines)
+		.filter((l) => supplier && l.costCentre === centre);
+	const amount = invoiced.reduce((t, l) => t + l.amount, 0);
+	const pfand = invoiced
+		.filter((l) => account(l.account)?.role === 'pfand')
+		.reduce((t, l) => t + l.amount, 0);
+	s.drinks = {
+		products,
+		kept,
+		cost,
+		costPerDrink: kept ? Math.round(cost / kept) : null,
+		invoice: invoiced.length ? { amount, pfand, difference: amount - pfand - cost } : null
+	};
+}
+
+function checkProduct(d: DrinkProductDraft) {
+	if (!d.name.trim()) fail('empty_name', 'a name is needed', { field: 'name' });
+	if (d.returned > d.taken)
+		fail('too_many_returned', 'more units returned than taken', { field: 'returned' });
+	return { ...d, name: d.name.trim() };
+}
+
+function checkCentreName(s: EventSnapshot, name: string, except: number | null) {
+	if (!name.trim()) fail('empty_name', 'a name is needed', { field: 'name' });
+	if (
+		s.costCentres.some((c) => c.id !== except && c.name.toLowerCase() === name.trim().toLowerCase())
+	)
+		fail('duplicate_name', 'this name is already used', { field: 'name' });
+	return name.trim();
 }
 
 // Tickets in the mock. The ticket sheets are made up: each "file" is a list of (order, tier)
@@ -767,7 +994,8 @@ function retickets(s: EventSnapshot) {
 		account,
 		amount,
 		memo: null,
-		budgetLine: null
+		budgetLine: null,
+		costCentre: null
 	});
 	const wanted: EventSnapshot['txns'] = [];
 	const add = (
@@ -803,6 +1031,7 @@ function retickets(s: EventSnapshot) {
 					name: 'Ticket fees',
 					role: 'ticket_fees',
 					assetType: null,
+					costCentre: null,
 					balance: 0
 				});
 			}
@@ -833,6 +1062,7 @@ function retickets(s: EventSnapshot) {
 				name: 'Ticket refunds',
 				role: 'ticket_refunds',
 				assetType: null,
+				costCentre: null,
 				balance: 0
 			});
 		}
@@ -907,9 +1137,31 @@ const commands: Record<string, (a: Args) => unknown> = {
 		const path = a.path as string;
 		if (recent.some((r) => r.path === path))
 			fail('already_exists', 'a file with this name already exists');
-		const snapshot = structuredClone(empty as EventSnapshot);
+		const snapshot = a.template
+			? fromTemplate(a.template as string)
+			: structuredClone(empty as EventSnapshot);
 		snapshot.event = { ...snapshot.event, ...(a.details as EventDetails) };
 		return opened(path, snapshot);
+	},
+	template_preview: (a) => {
+		const source = otherEvent(a.path as string);
+		return {
+			name: source.event.name,
+			categories: source.accounts.filter((c) => c.kind === 'income' || c.kind === 'expense').length,
+			persons: source.persons.length,
+			budgetLines: source.budgetLines.length,
+			tiers: source.tickets.tiers.length,
+			drinkProducts: source.drinkProducts.length
+		};
+	},
+	copy_preview: (a) => {
+		if (!open) fail('no_event_open', 'no event is open');
+		const source = otherEvent(a.path as string);
+		return copyInto(structuredClone(open.snapshot), source, { persons: true, budget: true });
+	},
+	copy_from_event: (a) => {
+		const source = otherEvent(a.path as string);
+		return changed((s) => void copyInto(s, source, a.choice as CopyChoice));
 	},
 	event_open: (a) => {
 		const path = a.path as string;
@@ -1026,6 +1278,8 @@ const commands: Record<string, (a: Args) => unknown> = {
 					{ field: 'category' }
 				);
 			Object.assign(line, draft, { description: draft.description.trim() });
+			for (const l of s.txns.flatMap((t) => t.lines))
+				if (l.budgetLine === line.id) l.costCentre = draft.costCentre;
 			rebudget(s);
 		}),
 	budget_line_delete: (a) =>
@@ -1034,6 +1288,94 @@ const commands: Record<string, (a: Args) => unknown> = {
 			for (const l of s.txns.flatMap((t) => t.lines))
 				if (l.budgetLine === a.id) l.budgetLine = null;
 			rebudget(s);
+		}),
+	cost_centre_add: (a) =>
+		changed((s) => {
+			const name = checkCentreName(s, a.name as string, null);
+			s.costCentres.push({
+				id: Math.max(0, ...s.costCentres.map((c) => c.id)) + 1,
+				name,
+				role: null
+			});
+			rebudget(s);
+		}),
+	cost_centre_rename: (a) =>
+		changed((s) => {
+			const centre = s.costCentres.find((c) => c.id === a.id);
+			if (!centre) fail('unknown_cost_centre', 'unknown cost centre');
+			centre.name = checkCentreName(s, a.name as string, centre.id);
+		}),
+	cost_centre_delete: (a) =>
+		changed((s) => {
+			if (s.costCentres.find((c) => c.id === a.id)?.role)
+				fail('cost_centre_protected', 'the Drinks cost centre cannot be deleted');
+			s.costCentres = s.costCentres.filter((c) => c.id !== a.id);
+			for (const l of s.txns.flatMap((t) => t.lines))
+				if (l.costCentre === a.id) l.costCentre = null;
+			for (const b of s.budgetLines) if (b.costCentre === a.id) b.costCentre = null;
+			for (const c of s.accounts) if (c.costCentre === a.id) c.costCentre = null;
+			rebudget(s);
+		}),
+	category_set_cost_centre: (a) =>
+		changed((s) => {
+			const category = s.accounts.find((c) => c.id === a.category);
+			if (category) category.costCentre = a.costCentre as number | null;
+		}),
+	reconciliation_add: (a) =>
+		changed((s) => {
+			const account = a.account as number;
+			const date = parseDate(a.date as string).date;
+			checkCheckpoint(s, account, date, null);
+			s.reconciliations.push({
+				id: Math.max(0, ...s.reconciliations.map((r) => r.id)) + 1,
+				account,
+				date,
+				amount: a.amount as number,
+				computed: 0,
+				difference: 0,
+				movement: false
+			});
+			reckonStatements(s);
+		}),
+	reconciliation_update: (a) =>
+		changed((s) => {
+			const r = s.reconciliations.find((r) => r.id === a.id);
+			if (!r) fail('unknown_reconciliation', 'unknown checkpoint');
+			const date = parseDate(a.date as string).date;
+			checkCheckpoint(s, r.account, date, r.id);
+			r.date = date;
+			r.amount = a.amount as number;
+			reckonStatements(s);
+		}),
+	reconciliation_delete: (a) =>
+		changed((s) => {
+			s.reconciliations = s.reconciliations.filter((r) => r.id !== a.id);
+			reckonStatements(s);
+		}),
+	drink_product_add: (a) =>
+		changed((s) => {
+			const draft = checkProduct(a.draft as DrinkProductDraft);
+			s.drinkProducts.push({ id: Math.max(0, ...s.drinkProducts.map((p) => p.id)) + 1, ...draft });
+			reckonCostCentres(s);
+		}),
+	drink_product_update: (a) =>
+		changed((s) => {
+			const draft = checkProduct(a.draft as DrinkProductDraft);
+			const product = s.drinkProducts.find((p) => p.id === a.id);
+			if (!product) fail('unknown_drink_product', 'unknown product');
+			Object.assign(product, draft);
+			reckonCostCentres(s);
+		}),
+	drink_product_delete: (a) =>
+		changed((s) => {
+			s.drinkProducts = s.drinkProducts.filter((p) => p.id !== a.id);
+			reckonCostCentres(s);
+		}),
+	drink_settings_set: (a) =>
+		changed((s) => {
+			const settings = a.settings as DrinkSettings;
+			s.event.drinks = { ...settings, supplier: settings.supplier?.trim() || null };
+			reckonCostCentres(s);
 		}),
 	tier_add: (a) =>
 		changed((s) => {

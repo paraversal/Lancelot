@@ -512,11 +512,14 @@ mod properties {
                 txns: book.txns().cloned().collect(),
                 attachments: Vec::new(),
                 closing_counts: Vec::new(),
+                reconciliations: Vec::new(),
                 budget_lines: Vec::new(),
                 tiers: book.tiers().cloned().collect(),
                 imports: book.ticket_imports().cloned().collect(),
                 manual_sales: Vec::new(),
                 cancellations: Vec::new(),
+                cost_centres: book.cost_centres().cloned().collect(),
+                drink_products: Vec::new(),
                 next: book.next_ids(),
             };
             prop_assert_eq!(Book::from_parts(parts), Ok(book));
@@ -1112,11 +1115,14 @@ mod conflict_properties {
                 txns: book.txns().cloned().collect(),
                 attachments: Vec::new(),
                 closing_counts: Vec::new(),
+                reconciliations: Vec::new(),
                 budget_lines: Vec::new(),
                 tiers: book.tiers().cloned().collect(),
                 imports: book.ticket_imports().cloned().collect(),
                 manual_sales: Vec::new(),
                 cancellations: book.cancellations().cloned().collect(),
+                cost_centres: book.cost_centres().cloned().collect(),
+                drink_products: Vec::new(),
                 next: book.next_ids(),
             };
             prop_assert_eq!(Book::from_parts(parts), Ok(book));

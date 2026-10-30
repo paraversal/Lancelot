@@ -8,11 +8,15 @@ use ts_rs::TS;
 
 use crate::book::Book;
 use crate::budget::Budget;
+use crate::drinks::{DrinkProduct, Drinks};
 use crate::entry::txn_amount;
 use crate::ledger::{
     CashStatus, MoneyLocation, OpenItem, PersonEntry, PersonSummary, PersonTotals,
+    ReconciliationStatus,
 };
-use crate::model::{Account, AccountId, Attachment, BudgetLine, ClosingCount, Event, Person, Txn};
+use crate::model::{
+    Account, AccountId, Attachment, BudgetLine, ClosingCount, CostCentre, Event, Person, Txn,
+};
 use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
 use crate::sales::Profitability;
@@ -33,6 +37,8 @@ pub struct EventSnapshot {
     pub where_the_money_is: MoneyLocation,
     pub cash: Vec<CashStatus>,
     pub closing_counts: Vec<ClosingCount>,
+    /// Statements against the books, by date (R-ACC-4).
+    pub reconciliations: Vec<ReconciliationStatus>,
     pub open_items: Vec<OpenItem>,
     /// The payout and repayment lists (R-PER-4, R-PER-7).
     pub payouts: Payouts,
@@ -45,6 +51,12 @@ pub struct EventSnapshot {
     /// The projected result and break-even (R-TKT-9), once there is a budget and while the
     /// event is open.
     pub profitability: Option<Profitability>,
+    /// In creation order; the Drinks cost centre is always there (R-CC-2).
+    pub cost_centres: Vec<CostCentre>,
+    /// The commission records, in creation order (R-DRK-5).
+    pub drink_products: Vec<DrinkProduct>,
+    /// The figures of the records and the invoice check.
+    pub drinks: Drinks,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -129,6 +141,7 @@ impl EventSnapshot {
             where_the_money_is: ledger.where_the_money_is().clone(),
             cash: ledger.cash().to_vec(),
             closing_counts: book.closing_counts().cloned().collect(),
+            reconciliations: ledger.reconciliations().to_vec(),
             open_items: ledger.open_items(),
             // Sums of person balances that the ledger already checked: cannot overflow.
             payouts: payouts(book).unwrap_or_default(),
@@ -136,6 +149,9 @@ impl EventSnapshot {
             budget: book.budget().clone(),
             tickets: book.tickets().clone(),
             profitability: book.profitability(),
+            cost_centres: book.cost_centres().cloned().collect(),
+            drink_products: book.drink_products().cloned().collect(),
+            drinks: book.drinks().clone(),
         }
     }
 }

@@ -57,6 +57,24 @@ pub struct CancellationId(#[ts(type = "number")] pub i64);
 #[serde(transparent)]
 pub struct ManualSaleId(#[ts(type = "number")] pub i64);
 
+/// Identifies a cost centre within one event (R-CC-1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct CostCentreId(#[ts(type = "number")] pub i64);
+
+/// Identifies a commission product within one event (R-DRK-5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct DrinkProductId(#[ts(type = "number")] pub i64);
+
+/// Identifies a reconciliation checkpoint within one event (R-ACC-4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct ReconciliationId(#[ts(type = "number")] pub i64);
+
 /// See requirements §4.1 and the sign convention in `docs/technical-design.md` §3.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -96,6 +114,25 @@ pub enum Role {
     TicketFees,
     /// The income category of refunds, made with the first refund (R-TKT-15).
     TicketRefunds,
+    /// The expense category of Pfand on crates that could not be returned (R-DRK-2).
+    Pfand,
+}
+
+/// Cost centres that exist in every event and that the app refers to directly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum CostCentreRole {
+    Drinks,
+}
+
+/// A sub-area of an event with its own profit and loss (R-CC-1).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct CostCentre {
+    pub id: CostCentreId,
+    pub name: String,
+    pub role: Option<CostCentreRole>,
 }
 
 /// What an asset account holds. Cash accounts are counted at the start and the end (R-ISO-3).
@@ -117,6 +154,8 @@ pub struct Account {
     pub role: Option<Role>,
     /// Set exactly for asset accounts.
     pub asset_type: Option<AssetType>,
+    /// For a category: the cost centre a new line of it starts with.
+    pub cost_centre: Option<CostCentreId>,
 }
 
 /// Bank and contact details of a person. The person's name is the name of their account.
@@ -155,6 +194,10 @@ pub struct Line {
     /// lines of the budget line's own category can have one.
     #[serde(rename = "budgetLine", default)]
     pub budget_line: Option<BudgetLineId>,
+    /// Only income and expense lines can have one, and a line linked to a budget line has that
+    /// line's (R-CC-1).
+    #[serde(rename = "costCentre", default)]
+    pub cost_centre: Option<CostCentreId>,
 }
 
 /// A balanced transaction: its lines always sum to zero (R-COR-2).
@@ -233,6 +276,8 @@ pub struct Event {
     pub closing_overrides: Vec<crate::ledger::BlockerOverride>,
     /// The columns read from the ticket sheet (R-TKT-3).
     pub ticket_columns: crate::tickets::TicketColumns,
+    /// The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
+    pub drinks: crate::drinks::DrinkSettings,
 }
 
 /// A file attached to a transaction, e.g. a receipt (R-ATT-1). The bytes live only in the
@@ -264,8 +309,21 @@ pub struct ClosingCount {
     pub amount: Cents,
 }
 
+/// "The statement shows this on this date" for an asset account (R-ACC-4). For the Verein account
+/// the amount is the event's net movement up to the date, since its real balance is never entered
+/// (R-ISO-2). Either can be negative.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct Reconciliation {
+    pub id: ReconciliationId,
+    pub account: AccountId,
+    #[ts(type = "string")]
+    pub date: Date,
+    pub amount: Cents,
+}
+
 /// A planned income or expense (R-BUD-1). Planning data only: it never affects a balance
-/// (R-BUD-5). Cost centres join in M9.
+/// (R-BUD-5).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 pub struct BudgetLine {
@@ -284,6 +342,8 @@ pub struct BudgetLineDraft {
     pub estimate: Estimate,
     /// Nothing more is expected: the forecast uses the actual amount (R-BUD-4).
     pub complete: bool,
+    #[serde(rename = "costCentre", default)]
+    pub cost_centre: Option<CostCentreId>,
 }
 
 /// A budget line's estimate, always positive or zero, whether it is an income or an expense.

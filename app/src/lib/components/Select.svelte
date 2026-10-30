@@ -4,11 +4,14 @@
 
 	let {
 		label,
+		name,
 		value,
 		options,
 		onchange
 	}: {
-		label: string;
+		label?: string;
+		/** The accessible name when there is no visible label. */
+		name?: string;
 		value: V;
 		options: { value: V; label: string }[];
 		onchange: (value: V) => void;
@@ -20,6 +23,7 @@
 <Field {label} {id}>
 	<select
 		{id}
+		aria-label={name}
 		value={String(value)}
 		onchange={(e) => {
 			const picked = options.find((o) => String(o.value) === e.currentTarget.value);

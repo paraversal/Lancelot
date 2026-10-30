@@ -317,6 +317,7 @@ fn with_budget(rows: &[(&str, &str)]) -> (Book, TierId, TierId) {
     let (mut book, early, regular) = with_tiers();
     let kitchen = expense(&book, "Kitchen");
     book.add_budget_line(BudgetLineDraft {
+        cost_centre: None,
         category: kitchen,
         description: "Food".into(),
         estimate: Estimate::Amount {
@@ -418,6 +419,7 @@ fn budget_only() -> Book {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
     book.add_budget_line(BudgetLineDraft {
+        cost_centre: None,
         category: kitchen,
         description: "Food".into(),
         estimate: Estimate::Amount {
@@ -477,6 +479,7 @@ fn estimates_on_the_ticket_categories_do_not_count_the_money_twice() {
     let fees = role(&book, Role::TicketFees);
     let tickets = role(&book, Role::Tickets);
     let plan = |category, description: &str, amount: &str| BudgetLineDraft {
+        cost_centre: None,
         category,
         description: description.into(),
         estimate: Estimate::Amount {
@@ -570,6 +573,7 @@ proptest! {
         let (mut book, _, regular) = with_tiers();
         let kitchen = expense(&book, "Kitchen");
         book.add_budget_line(BudgetLineDraft {
+            cost_centre: None,
             category: kitchen,
             description: "Food".into(),
             estimate: Estimate::Amount { amount: Cents::new(estimate).unwrap() },

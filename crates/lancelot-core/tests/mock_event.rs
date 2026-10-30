@@ -35,6 +35,10 @@ fn result_and_totals_match_the_mockups() {
     assert_eq!(drinks, eur("484"));
     // Drinks result: donations minus drinks cost.
     assert_eq!(eur("812,50").checked_sub(drinks).unwrap(), eur("328,50"));
+    let centre = book.drinks_cost_centre().unwrap().id;
+    let pnl = book.budget().cost_centre(centre).unwrap();
+    assert_eq!(pnl.result.actual, eur("328,50"));
+    assert_eq!(book.drinks().invoice.unwrap().difference, Cents::ZERO);
 }
 
 #[test]
@@ -222,7 +226,8 @@ fn the_transactions_csv_has_one_row_per_line() {
             "Amount",
             "Memo",
             "Receipt",
-            "Notes"
+            "Notes",
+            "Cost centre"
         ]
     );
     let lines: usize = book.txns().map(|t| t.lines.len()).sum();

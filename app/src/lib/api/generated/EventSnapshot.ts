@@ -4,6 +4,9 @@ import type { Budget } from "./Budget";
 import type { BudgetLine } from "./BudgetLine";
 import type { CashStatus } from "./CashStatus";
 import type { ClosingCount } from "./ClosingCount";
+import type { CostCentre } from "./CostCentre";
+import type { DrinkProduct } from "./DrinkProduct";
+import type { Drinks } from "./Drinks";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
 import type { OpenItem } from "./OpenItem";
@@ -11,6 +14,7 @@ import type { Payouts } from "./Payouts";
 import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
 import type { Profitability } from "./Profitability";
+import type { ReconciliationStatus } from "./ReconciliationStatus";
 import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
@@ -23,7 +27,11 @@ accounts: Array<AccountView>, persons: Array<PersonView>, personTotals: PersonTo
 /**
  * Transactions by date, then by id.
  */
-txns: Array<TxnView>, totals: Totals, whereTheMoneyIs: MoneyLocation, cash: Array<CashStatus>, closingCounts: Array<ClosingCount>, openItems: Array<OpenItem>, 
+txns: Array<TxnView>, totals: Totals, whereTheMoneyIs: MoneyLocation, cash: Array<CashStatus>, closingCounts: Array<ClosingCount>, 
+/**
+ * Statements against the books, by date (R-ACC-4).
+ */
+reconciliations: Array<ReconciliationStatus>, openItems: Array<OpenItem>, 
 /**
  * The payout and repayment lists (R-PER-4, R-PER-7).
  */
@@ -44,4 +52,16 @@ tickets: Tickets,
  * The projected result and break-even (R-TKT-9), once there is a budget and while the
  * event is open.
  */
-profitability: Profitability | null, };
+profitability: Profitability | null, 
+/**
+ * In creation order; the Drinks cost centre is always there (R-CC-2).
+ */
+costCentres: Array<CostCentre>, 
+/**
+ * The commission records, in creation order (R-DRK-5).
+ */
+drinkProducts: Array<DrinkProduct>, 
+/**
+ * The figures of the records and the invoice check.
+ */
+drinks: Drinks, };

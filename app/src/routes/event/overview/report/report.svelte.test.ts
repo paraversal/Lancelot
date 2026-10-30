@@ -49,6 +49,12 @@ describe('Settlement report', () => {
 		expect(row('Expenses')).toEqual(['Expenses', '4.895,00 €', '5.362,50 €', '5.512,50 €']);
 		expect(row('Result')).toEqual(['Result', '+2.305,00 €', '+2.027,50 €', '+1.765,00 €']);
 
+		const centre = screen.getByTestId('report-cost-centre').textContent?.replace(/\s+/g, ' ');
+		expect(centre).toContain('Drinks');
+		expect(centre).toContain('812,50 €');
+		expect(centre).toContain('484,00 €');
+		expect(centre).toContain('+328,50 €');
+
 		await settle();
 		await settle();
 		const files = snapshot.txns.flatMap((t) => t.attachments);

@@ -9,7 +9,8 @@ use ts_rs::TS;
 use time::Date;
 
 use crate::model::{
-    Account, AccountId, AccountKind, AssetType, ClosingCount, Origin, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, ClosingCount, Origin, Reconciliation,
+    ReconciliationId, Role, Txn, TxnId, TxnKind,
 };
 use crate::money::{Cents, MoneyError};
 
@@ -92,8 +93,24 @@ pub struct OpeningCount {
     pub amount: Cents,
 }
 
-/// Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches join
-/// in phase 2.
+/// A statement against the books on its date (R-ACC-4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ReconciliationStatus {
+    pub id: ReconciliationId,
+    pub account: AccountId,
+    #[ts(type = "string")]
+    pub date: Date,
+    pub amount: Cents,
+    /// The account's lines up to and including the date.
+    pub computed: Cents,
+    /// `amount − computed`: positive when the statement shows more than the books.
+    pub difference: Cents,
+    /// The Verein account: `amount` and `computed` are net movements, without opening counts.
+    pub movement: bool,
+}
+
+/// Something that keeps the event from being closed (R-SET-5).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -109,6 +126,12 @@ pub enum OpenItem {
         account: AccountId,
         difference: Cents,
     },
+    /// A statement differs from the books on its date (R-ACC-4).
+    ReconciliationMismatch {
+        checkpoint: ReconciliationId,
+        account: AccountId,
+        difference: Cents,
+    },
     /// Tickets removed from the sheet that have no resolution yet (R-TKT-16), per order and tier.
     TicketConflicts { count: u32 },
 }
@@ -118,6 +141,7 @@ pub struct LedgerInput<'a> {
     pub accounts: &'a BTreeMap<AccountId, Account>,
     pub txns: &'a BTreeMap<TxnId, Txn>,
     pub closing_counts: &'a BTreeMap<AccountId, ClosingCount>,
+    pub reconciliations: &'a BTreeMap<ReconciliationId, Reconciliation>,
     /// Transactions that have at least one attachment.
     pub with_attachments: &'a BTreeSet<TxnId>,
     /// Unresolved ticket conflicts.
@@ -144,6 +168,7 @@ pub struct Ledger {
     result: Cents,
     money: MoneyLocation,
     cash: Vec<CashStatus>,
+    reconciliations: Vec<ReconciliationStatus>,
     missing_receipts: Vec<TxnId>,
     person_entries: BTreeMap<AccountId, Vec<PersonEntry>>,
     person_totals: PersonTotals,
@@ -179,6 +204,7 @@ impl Ledger {
             accounts,
             txns,
             closing_counts,
+            reconciliations,
             with_attachments,
             ticket_conflicts,
         } = input;
@@ -353,6 +379,27 @@ impl Ledger {
             });
         }
 
+        let mut checkpoints = Vec::new();
+        for r in reconciliations.values() {
+            let movement = accounts.get(&r.account).and_then(|a| a.role) == Some(Role::Verein);
+            let computed = txns
+                .values()
+                .filter(|t| t.date <= r.date && !(movement && t.kind == TxnKind::Opening))
+                .flat_map(|t| &t.lines)
+                .filter(|l| l.account == r.account)
+                .try_fold(Cents::ZERO, |acc, l| acc.checked_add(l.amount))?;
+            checkpoints.push(ReconciliationStatus {
+                id: r.id,
+                account: r.account,
+                date: r.date,
+                amount: r.amount,
+                computed,
+                difference: r.amount.checked_sub(computed)?,
+                movement,
+            });
+        }
+        checkpoints.sort_by_key(|c| (c.date, c.id));
+
         let missing_receipts = txns
             .values()
             .filter(|t| t.kind == TxnKind::Expense && !with_attachments.contains(&t.id))
@@ -374,6 +421,7 @@ impl Ledger {
                 total,
             },
             cash,
+            reconciliations: checkpoints,
             missing_receipts,
             person_entries,
             person_totals,
@@ -434,12 +482,17 @@ impl Ledger {
         &self.cash
     }
 
+    /// Every checkpoint against the books, by date (R-ACC-4).
+    pub fn reconciliations(&self) -> &[ReconciliationStatus] {
+        &self.reconciliations
+    }
+
     /// Expense transactions without an attachment (R-ATT-4).
     pub fn missing_receipts(&self) -> &[TxnId] {
         &self.missing_receipts
     }
 
-    /// People first, then receipts, then cash, then tickets.
+    /// People first, then receipts, then cash, then statements, then tickets.
     pub fn open_items(&self) -> Vec<OpenItem> {
         let people = self
             .persons
@@ -464,9 +517,23 @@ impl Ledger {
             }),
             Some(_) => None,
         });
+        let statements = self
+            .reconciliations
+            .iter()
+            .filter(|r| !r.difference.is_zero())
+            .map(|r| OpenItem::ReconciliationMismatch {
+                checkpoint: r.id,
+                account: r.account,
+                difference: r.difference,
+            });
         let tickets = (self.ticket_conflicts > 0).then_some(OpenItem::TicketConflicts {
             count: self.ticket_conflicts,
         });
-        people.chain(receipts).chain(cash).chain(tickets).collect()
+        people
+            .chain(receipts)
+            .chain(cash)
+            .chain(statements)
+            .chain(tickets)
+            .collect()
     }
 }

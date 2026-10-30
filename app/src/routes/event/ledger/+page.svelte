@@ -33,6 +33,7 @@
 	let panelKey = $state(0);
 	let pending = $state<string[]>([]);
 	let preview = $state<Attachment | null>(null);
+	let invoice = $state(false);
 	let dragging = $state<string[] | null>(null);
 
 	// Dropping files anywhere attaches them to the open entry, or starts a new expense with
@@ -68,8 +69,14 @@
 	];
 
 	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`, or
-	// "New entry" on the overview: `/event/ledger?new`.
+	// "New entry" on the overview: `/event/ledger?new`, or the supplier's invoice on the Drinks
+	// page: `/event/ledger?invoice`.
 	onMount(() => {
+		if (page.url.searchParams.has('invoice') && !session.closed) {
+			open(null);
+			invoice = true;
+			return;
+		}
 		if (page.url.searchParams.has('new') && !session.closed) return open(null);
 		const id = Number(page.url.searchParams.get('txn'));
 		const txn = snapshot.txns.find((t) => t.id === id);
@@ -82,6 +89,7 @@
 	});
 
 	function open(txn: TxnView | null) {
+		invoice = false;
 		selected = txn?.id ?? null;
 		editing = txn;
 		pending = [];
@@ -257,6 +265,7 @@
 		{#key panelKey}
 			<EntryPanel
 				txn={editing}
+				{invoice}
 				bind:pending
 				previewing={preview?.id ?? null}
 				onpreview={(a) => (preview = a)}

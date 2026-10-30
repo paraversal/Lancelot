@@ -14,6 +14,7 @@
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
+	import type { CostCentreId } from '#lib/api/generated/CostCentreId.ts';
 	import type { Entry } from '#lib/api/generated/Entry.ts';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
 	import { categoryColor } from '#lib/colors.ts';
@@ -36,15 +37,18 @@
 
 	type Kind = 'expense' | 'income' | 'transfer' | 'settle';
 	// The budget line link is kept while the category stays (R-BUD-2); the Budget page sets it.
+	// A category starts with its cost centre; a budget line brings its own (R-CC-1).
 	type SplitLine = {
 		account: AccountId | null;
 		amount: Cents | null;
 		budgetLine?: BudgetLineId | null;
+		costCentre?: CostCentreId | null;
 	};
 
 	let {
 		txn,
 		settle = null,
+		invoice = false,
 		pending = $bindable([]),
 		previewing,
 		onpreview,
@@ -56,6 +60,8 @@
 		txn: TxnView | null;
 		/** For a new entry: start as a settle with this person, filled in from their balance. */
 		settle?: AccountId | null;
+		/** For a new entry: start as the supplier's invoice, filled in from the drink records. */
+		invoice?: boolean;
 		/** Files to attach on save (paths), e.g. dropped onto the window. */
 		pending?: string[];
 		previewing: number | null;
@@ -115,7 +121,8 @@
 		lines = cats.map((l) => ({
 			account: l.account,
 			amount: Math.abs(l.amount),
-			budgetLine: l.budgetLine
+			budgetLine: l.budgetLine,
+			costCentre: l.costCentre
 		}));
 		if (!lines.length) lines = [{ account: null, amount: null }];
 		const parties = t.lines.filter((l) => !category(l.account));
@@ -179,6 +186,19 @@
 		generation++;
 	}
 
+	// The supplier's invoice: the kept drinks at their price, in the Drinks cost centre's first
+	// expense category that is not Pfand. Pfand is added as a line if there is any (R-DRK-2).
+	function fillInvoice() {
+		const centre = snapshot.costCentres.find((c) => c.role === 'drinks')?.id;
+		const category = snapshot.accounts.find(
+			(a) => a.kind === 'expense' && a.costCentre === centre && a.role !== 'pfand'
+		);
+		counterparty = snapshot.event.drinks.supplier;
+		party = snapshot.event.defaultReimbursementAccount;
+		amount = snapshot.drinks.cost || null;
+		if (category) lines = [{ account: category.id, amount: null, costCentre: centre }];
+	}
+
 	// --- adding people and categories on the spot ------------------------------------
 	async function addPerson(name: string) {
 		try {
@@ -212,7 +232,8 @@
 				account: l.account!,
 				amount: split ? (l.amount ?? 0) : amount!,
 				memo: null,
-				budgetLine: l.budgetLine ?? null
+				budgetLine: l.budgetLine ?? null,
+				costCentre: l.costCentre ?? null
 			}));
 			return kind === 'expense'
 				? { type: 'expense', payer: party, lines: splits }
@@ -300,6 +321,7 @@
 			kind = 'settle';
 			pickPerson(settle);
 		}
+		if (!txn && invoice) fillInvoice();
 	});
 </script>
 
@@ -431,7 +453,10 @@
 											addLabel="New category…"
 											invalid={!!fieldError('lines') && line.account === null}
 											onchange={(v) => {
-												if (v !== lines[i].account) lines[i].budgetLine = null;
+												if (v !== lines[i].account) {
+													lines[i].budgetLine = null;
+													lines[i].costCentre = byId.get(v)?.costCentre ?? null;
+												}
 												lines[i].account = v;
 											}}
 											onadd={addCategory}
@@ -465,8 +490,28 @@
 												{ value: 0, label: 'Not budgeted' },
 												...planned.map((b) => ({ value: b.id, label: b.description }))
 											]}
-											onchange={(v) => (lines[i].budgetLine = v === 0 ? null : v)}
+											onchange={(v) => {
+												lines[i].budgetLine = v === 0 ? null : v;
+												const b = planned.find((p) => p.id === v);
+												if (b) lines[i].costCentre = b.costCentre;
+											}}
 										/>
+									</div>
+								{/if}
+								{#if account}
+									{@const fixed = planned.find((b) => b.id === line.budgetLine)}
+									<div class="budget-line">
+										<fieldset class="plain" disabled={!!fixed}>
+											<Select
+												label="Cost centre"
+												value={line.costCentre ?? 0}
+												options={[
+													{ value: 0, label: 'None' },
+													...snapshot.costCentres.map((c) => ({ value: c.id, label: c.name }))
+												]}
+												onchange={(v) => (lines[i].costCentre = v === 0 ? null : v)}
+											/>
+										</fieldset>
 									</div>
 								{/if}
 							{/each}

@@ -22,6 +22,7 @@ pub fn transactions_csv(book: &Book, format: NumberFormat) -> String {
         "Memo",
         "Receipt",
         "Notes",
+        "Cost centre",
     ]);
     let mut txns: Vec<&Txn> = book.txns().collect();
     txns.sort_by_key(|t| (t.date, t.id));
@@ -45,6 +46,12 @@ pub fn transactions_csv(book: &Book, format: NumberFormat) -> String {
                 csv.text(line.memo.as_deref().unwrap_or("")),
                 receipt.to_owned(),
                 csv.text(t.notes.as_deref().unwrap_or("")),
+                csv.text(
+                    line.cost_centre
+                        .and_then(|c| book.cost_centre(c))
+                        .map(|c| c.name.as_str())
+                        .unwrap_or(""),
+                ),
             ];
             csv.row(&row);
         }

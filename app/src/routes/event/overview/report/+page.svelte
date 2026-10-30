@@ -37,6 +37,14 @@
 			if (account?.kind !== kind || (c.estimate === 0 && c.actual === 0)) return [];
 			return [{ ...c, name: account.name }];
 		});
+	// The P&L per cost centre (R-SET-3), for those with something tagged.
+	const centres = $derived(
+		budget.costCentres.flatMap((f) => {
+			const centre = snapshot.costCentres.find((c) => c.id === f.costCentre);
+			const booked = f.income.actual !== 0 || f.expense.actual !== 0;
+			return centre && booked ? [{ ...f, name: centre.name }] : [];
+		})
+	);
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
 	const entries = $derived(rows(snapshot));
 	const open = $derived(snapshot.openItems.map((i) => describe(i, snapshot, format)));
@@ -232,6 +240,31 @@
 						{/each}
 					</tr>
 				</tfoot>
+			</table>
+		{/if}
+
+		{#if centres.length}
+			<table class="budget">
+				<caption>Cost centres</caption>
+				<thead>
+					<tr>
+						<th></th><th class="num">Income</th><th class="num">Expenses</th><th class="num"
+							>Result</th
+						>
+					</tr>
+				</thead>
+				<tbody>
+					{#each centres as c (c.costCentre)}
+						<tr data-testid="report-cost-centre">
+							<td>{c.name}</td>
+							<td class="num">{cell(c.income.actual)}</td>
+							<td class="num">{cell(c.expense.actual)}</td>
+							<td class="num" class:plus={c.result.actual > 0} class:minus={c.result.actual < 0}
+								>{formatAmount(c.result.actual, format, 'always')}</td
+							>
+						</tr>
+					{/each}
+				</tbody>
 			</table>
 		{/if}
 

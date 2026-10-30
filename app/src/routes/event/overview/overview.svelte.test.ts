@@ -6,15 +6,16 @@ import example from '#lib/api/mock/example-event.json';
 import { session } from '#lib/state/session.svelte.ts';
 import Overview from './+page.svelte';
 
-const { goto, setCounts, closeEvent } = vi.hoisted(() => ({
+const { goto, setCounts, closeEvent, deleteReconciliation } = vi.hoisted(() => ({
 	goto: vi.fn(),
 	setCounts: vi.fn(),
-	closeEvent: vi.fn()
+	closeEvent: vi.fn(),
+	deleteReconciliation: vi.fn()
 }));
 vi.mock('$app/navigation', () => ({ goto }));
 vi.mock('#lib/api/index.ts', async () => {
 	const actual = await vi.importActual<typeof import('#lib/api/index.ts')>('#lib/api/index.ts');
-	return { ...actual, api: { setCounts, closeEvent } };
+	return { ...actual, api: { setCounts, closeEvent, deleteReconciliation, parseAmount: vi.fn() } };
 });
 
 // jsdom does not lay out; the bars only need it to exist.
@@ -52,6 +53,61 @@ describe('Overview', () => {
 		expect(screen.getByText('Anna is owed')).toBeTruthy();
 		expect(screen.getByText('Bob holds')).toBeTruthy();
 		expect(screen.getByText('No receipt: Cups and ice')).toBeTruthy();
+	});
+
+	describe('statements', () => {
+		const mismatched = () => {
+			const next = structuredClone(snapshot);
+			const r = next.reconciliations[0];
+			r.amount += 1200;
+			r.difference = 1200;
+			next.openItems.push({
+				type: 'reconciliationMismatch',
+				checkpoint: r.id,
+				account: r.account,
+				difference: 1200
+			});
+			session.update({ ...session.event!, snapshot: next });
+			return r;
+		};
+
+		it('shows that the Verein account matches its statement', () => {
+			render(Overview);
+			const verein = screen.getByText('Verein account').closest('li')!;
+			expect(text(verein)).toContain('statement 30.06.2026 ✓');
+		});
+
+		it('leads from a mismatch to the panel, which asks for the net movement', async () => {
+			mismatched();
+			render(Overview);
+			await fireEvent.click(
+				screen.getByText('Verein account, 30.06.2026: 12,00 € more than recorded')
+			);
+			expect(screen.getByText('Net movement')).toBeTruthy();
+			expect(
+				screen.getByText('12,00 € more than recorded', { selector: 'li button span' })
+			).toBeTruthy();
+		});
+
+		it('asks for the statement on another account', async () => {
+			render(Overview);
+			const cash = screen.getByText('Cash box').closest('li')!;
+			await fireEvent.click(within(cash).getByRole('button', { name: 'Statement' }));
+			expect(screen.getByText('Statement shows')).toBeTruthy();
+		});
+
+		it('deletes a checkpoint after asking', async () => {
+			const r = mismatched();
+			deleteReconciliation.mockResolvedValue(session.event);
+			render(Overview);
+			const verein = screen.getByText('Verein account').closest('li')!;
+			await fireEvent.click(within(verein).getByRole('button', { name: 'Statement' }));
+			await fireEvent.click(screen.getByText('In the books'));
+			await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+			expect(deleteReconciliation).not.toHaveBeenCalled();
+			await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+			expect(deleteReconciliation).toHaveBeenCalledWith(r.id);
+		});
 	});
 
 	it('shows the forecast and leads to the budget', async () => {

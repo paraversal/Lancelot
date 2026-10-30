@@ -54,6 +54,13 @@
 		{ title: 'Income', total: budget.income, groups: groups('income') },
 		{ title: 'Expenses', total: budget.expense, groups: groups('expense') }
 	]);
+	// Cost centres with a plan or something tagged (R-BUD-3).
+	const centres = $derived(
+		budget.costCentres.flatMap((f) => {
+			const centre = snapshot.costCentres.find((c) => c.id === f.costCentre);
+			return centre && f.categories.length ? [{ centre, figures: f.result }] : [];
+		})
+	);
 	const order = $derived(
 		sections.flatMap((s) => s.groups.flatMap((g) => g.rows.map((r) => r.line.id)))
 	);
@@ -178,6 +185,31 @@
 				</div>
 			</div>
 		{/each}
+
+		{#if centres.length}
+			<div class="rows" role="table" aria-label="Cost centres">
+				<div class="row head" role="row">
+					<span class="name">Cost centres</span>
+					<span class="num">Estimate</span>
+					<span class="num">Actual</span>
+					<span class="num">Forecast</span>
+				</div>
+				{#each centres as c (c.centre.id)}
+					<div class="row" role="row">
+						<span class="name">
+							{#if c.centre.role === 'drinks'}
+								<a href="/event/drinks">{c.centre.name}</a>
+							{:else}
+								{c.centre.name}
+							{/if}
+						</span>
+						<span class="num">{formatAmount(c.figures.estimate, format, 'always')}</span>
+						<span class="num">{formatAmount(c.figures.actual, format, 'always')}</span>
+						<span class="num">{formatAmount(c.figures.forecast, format, 'always')}</span>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	</section>
 
 	{#if adding !== false}

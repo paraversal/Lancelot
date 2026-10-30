@@ -9,20 +9,26 @@ use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::budget::Budget;
+use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
 use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, txn_amount, txn_follows_rules};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{BlockerOverride, Ledger, LedgerInput};
 use crate::model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, Line, Person, Role,
-    Txn, TxnId, TxnKind,
+    BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId, CostCentreRole,
+    DrinkProductId, Estimate, Event, EventDetails, Line, Person, Reconciliation, ReconciliationId,
+    Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
 use crate::tickets::{Cancellation, ManualSale, TicketImport, Tickets, Tier};
 
+mod drinks;
+mod template;
 mod tickets;
+
+pub use template::{CopyChoice, CopySummary, TemplateSummary};
 
 /// The largest attachment Lancelot accepts. Phone photos and PDFs are far smaller; the limit
 /// only catches accidents.
@@ -33,6 +39,9 @@ const DEFAULT_INCOME: &[&str] = &["Tickets", "Drink donations", "General"];
 const DEFAULT_EXPENSE: &[&str] = &[
     "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General",
 ];
+
+/// The default categories that start in the Drinks cost centre (R-DRK-2, R-DRK-3).
+const DRINKS_CATEGORIES: &[&str] = &["Drink donations", "Drinks", "Pfand"];
 
 /// The description of an opening transaction made by [`Book::set_opening_count`].
 const OPENING_DESCRIPTION: &str = "Opening count";
@@ -45,19 +54,23 @@ pub struct Book {
     txns: BTreeMap<TxnId, Txn>,
     attachments: BTreeMap<AttachmentId, Attachment>,
     closing_counts: BTreeMap<AccountId, ClosingCount>,
+    reconciliations: BTreeMap<ReconciliationId, Reconciliation>,
     budget_lines: BTreeMap<BudgetLineId, BudgetLine>,
     tiers: BTreeMap<TierId, Tier>,
     imports: BTreeMap<ImportId, TicketImport>,
     manual_sales: BTreeMap<ManualSaleId, ManualSale>,
     cancellations: BTreeMap<CancellationId, Cancellation>,
+    cost_centres: BTreeMap<CostCentreId, CostCentre>,
+    drink_products: BTreeMap<DrinkProductId, DrinkProduct>,
     next: NextIds,
     ledger: Ledger,
     budget: Budget,
     tickets: Tickets,
+    drinks: Drinks,
 }
 
 /// The ids the next new account, transaction, attachment, budget line, tier, import, manual
-/// sale and cancellation get. Ids are never reused, so the change log stays unambiguous after deletions.
+/// sale, cancellation, cost centre, product and checkpoint get. Ids are never reused, so the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
@@ -68,6 +81,9 @@ pub struct NextIds {
     pub import: i64,
     pub manual_sale: i64,
     pub cancellation: i64,
+    pub cost_centre: i64,
+    pub drink_product: i64,
+    pub reconciliation: i64,
 }
 
 /// A book taken apart into its stored pieces. [`Book::from_parts`] checks them all.
@@ -79,11 +95,14 @@ pub struct BookParts {
     pub txns: Vec<Txn>,
     pub attachments: Vec<Attachment>,
     pub closing_counts: Vec<ClosingCount>,
+    pub reconciliations: Vec<Reconciliation>,
     pub budget_lines: Vec<BudgetLine>,
     pub tiers: Vec<Tier>,
     pub imports: Vec<TicketImport>,
     pub manual_sales: Vec<ManualSale>,
     pub cancellations: Vec<Cancellation>,
+    pub cost_centres: Vec<CostCentre>,
+    pub drink_products: Vec<DrinkProduct>,
     pub next: NextIds,
 }
 
@@ -115,17 +134,21 @@ impl Book {
                 default_reimbursement_account: AccountId(1),
                 closing_overrides: Vec::new(),
                 ticket_columns: Default::default(),
+                drinks: DrinkSettings::default(),
             },
             accounts: BTreeMap::new(),
             persons: BTreeMap::new(),
             txns: BTreeMap::new(),
             attachments: BTreeMap::new(),
             closing_counts: BTreeMap::new(),
+            reconciliations: BTreeMap::new(),
             budget_lines: BTreeMap::new(),
             tiers: BTreeMap::new(),
             imports: BTreeMap::new(),
             manual_sales: BTreeMap::new(),
             cancellations: BTreeMap::new(),
+            cost_centres: BTreeMap::new(),
+            drink_products: BTreeMap::new(),
             next: NextIds {
                 account: 1,
                 txn: 1,
@@ -135,11 +158,16 @@ impl Book {
                 import: 1,
                 manual_sale: 1,
                 cancellation: 1,
+                cost_centre: 1,
+                drink_product: 1,
+                reconciliation: 1,
             },
             ledger: Ledger::default(),
             budget: Budget::default(),
             tickets: Tickets::default(),
+            drinks: Drinks::default(),
         };
+        let drinks = book.insert_cost_centre("Drinks", Some(CostCentreRole::Drinks));
         let verein = book.insert_account(AccountKind::Asset, "Verein account", Some(Role::Verein));
         book.insert_account(AccountKind::Asset, "Cash box", Some(Role::CashBox));
         book.insert_account(AccountKind::Opening, "Opening balance", Some(Role::Opening));
@@ -148,7 +176,13 @@ impl Book {
             book.insert_account(AccountKind::Income, name, role);
         }
         for name in DEFAULT_EXPENSE {
-            book.insert_account(AccountKind::Expense, name, None);
+            let role = (*name == "Pfand").then_some(Role::Pfand);
+            book.insert_account(AccountKind::Expense, name, role);
+        }
+        for account in book.accounts.values_mut() {
+            if a_category(account.kind) && DRINKS_CATEGORIES.contains(&account.name.as_str()) {
+                account.cost_centre = Some(drinks);
+            }
         }
         book.event.default_reimbursement_account = verein;
         book.recompute()?;
@@ -182,7 +216,7 @@ impl Book {
         let roles_ok = accounts.values().all(|a| match a.role {
             Some(Role::Verein | Role::CashBox) => a.kind == AccountKind::Asset,
             Some(Role::Tickets | Role::TicketRefunds) => a.kind == AccountKind::Income,
-            Some(Role::TicketFees) => a.kind == AccountKind::Expense,
+            Some(Role::TicketFees | Role::Pfand) => a.kind == AccountKind::Expense,
             Some(Role::Opening) | None => true,
         });
         let once = |role| accounts.values().filter(|a| a.role == Some(role)).count() <= 1;
@@ -198,10 +232,13 @@ impl Book {
             || !types_ok
             || !once(Role::TicketFees)
             || !once(Role::TicketRefunds)
+            || !once(Role::Pfand)
             || names.len() != accounts.len()
         {
             return Err(bad("account kinds, roles or names are inconsistent"));
         }
+
+        let cost_centres = drinks::check_cost_centres(parts.cost_centres, &parts.next, &accounts)?;
 
         let mut persons = BTreeMap::new();
         for (id, p) in parts.persons {
@@ -220,7 +257,8 @@ impl Book {
         let mut budget_lines = BTreeMap::new();
         for b in parts.budget_lines {
             if b.id.0 >= parts.next.budget_line
-                || clean_budget_line(b.draft.clone(), &accounts).as_ref() != Ok(&b.draft)
+                || clean_budget_line(b.draft.clone(), &accounts, &cost_centres).as_ref()
+                    != Ok(&b.draft)
             {
                 return Err(bad("budget line with an invalid category or estimate"));
             }
@@ -232,6 +270,7 @@ impl Book {
             if t.id.0 >= parts.next.txn
                 || !txn_follows_rules(&t, &accounts)
                 || !links_valid(&t.lines, &budget_lines)
+                || !tags_valid(&t.lines, &accounts, &cost_centres)
             {
                 return Err(DomainError::MalformedTxn { txn: t.id });
             }
@@ -256,9 +295,28 @@ impl Book {
             closing_counts.insert(c.account, c);
         }
 
+        let mut reconciliations = BTreeMap::new();
+        let mut checkpoints = BTreeSet::new();
+        for r in parts.reconciliations {
+            if accounts.get(&r.account).map(|a| a.kind) != Some(AccountKind::Asset)
+                || r.id.0 >= parts.next.reconciliation
+                || !checkpoints.insert((r.account, r.date))
+            {
+                return Err(bad(
+                    "checkpoint on an account that is not an asset, or twice",
+                ));
+            }
+            reconciliations.insert(r.id, r);
+        }
+
         let default = parts.event.default_reimbursement_account;
         if accounts.get(&default).map(|a| a.kind) != Some(AccountKind::Asset) {
             return Err(bad("default reimbursement account is not an asset"));
+        }
+
+        let drink_products = drinks::check_products(parts.drink_products, &parts.next)?;
+        if drinks::clean_settings(parts.event.drinks.clone()).as_ref() != Ok(&parts.event.drinks) {
+            return Err(bad("drink settings are invalid"));
         }
 
         let (tiers, imports, manual_sales, cancellations) = tickets::check_parts(
@@ -277,15 +335,19 @@ impl Book {
             txns,
             attachments,
             closing_counts,
+            reconciliations,
             budget_lines,
             tiers,
             imports,
             manual_sales,
             cancellations,
+            cost_centres,
+            drink_products,
             next: parts.next,
             ledger: Ledger::default(),
             budget: Budget::default(),
             tickets: Tickets::default(),
+            drinks: Drinks::default(),
         };
         // The ticket income must be exactly what the tickets generate.
         let mut regenerated = book.clone();
@@ -358,6 +420,10 @@ impl Book {
 
     pub fn closing_count(&self, account: AccountId) -> Option<&ClosingCount> {
         self.closing_counts.get(&account)
+    }
+
+    pub fn reconciliations(&self) -> impl Iterator<Item = &Reconciliation> {
+        self.reconciliations.values()
     }
 
     pub fn next_ids(&self) -> NextIds {
@@ -481,7 +547,7 @@ impl Book {
     /// Adds a transaction (`id = None`) or replaces an existing one.
     pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved, DomainError> {
         let saved = self.change(|book| {
-            check_links(&draft.entry, &book.budget_lines)?;
+            check_links(&draft.entry, &book.budget_lines, &book.cost_centres)?;
             let lines = build_lines(&draft.entry, &book.accounts)?;
             if draft.total.is_some_and(|total| total != txn_amount(&lines)) {
                 return Err(DomainError::SplitMismatch);
@@ -702,12 +768,90 @@ impl Book {
         })
     }
 
+    // --- reconciliation ------------------------------------------------------------------
+
+    /// Records what a statement shows for an asset account on a date (R-ACC-4). A mismatch
+    /// becomes an open item.
+    pub fn add_reconciliation(
+        &mut self,
+        account: AccountId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<ReconciliationId, DomainError> {
+        self.change(|book| {
+            match book.accounts.get(&account) {
+                None => {
+                    return Err(DomainError::UnknownAccount {
+                        field: "account".into(),
+                    });
+                }
+                Some(a) if a.kind != AccountKind::Asset => {
+                    return Err(DomainError::WrongAccountKind {
+                        field: "account".into(),
+                    });
+                }
+                Some(_) => {}
+            }
+            book.check_checkpoint_free(account, date, None)?;
+            let id = ReconciliationId(book.next.reconciliation);
+            book.next.reconciliation += 1;
+            book.reconciliations.insert(
+                id,
+                Reconciliation {
+                    id,
+                    account,
+                    date,
+                    amount,
+                },
+            );
+            Ok(id)
+        })
+    }
+
+    /// Corrects a checkpoint's date or amount. Its account stays.
+    pub fn update_reconciliation(
+        &mut self,
+        id: ReconciliationId,
+        date: Date,
+        amount: Cents,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            let account = book
+                .reconciliations
+                .get(&id)
+                .ok_or(DomainError::UnknownReconciliation)?
+                .account;
+            book.check_checkpoint_free(account, date, Some(id))?;
+            book.reconciliations.insert(
+                id,
+                Reconciliation {
+                    id,
+                    account,
+                    date,
+                    amount,
+                },
+            );
+            Ok(())
+        })
+    }
+
+    pub fn delete_reconciliation(
+        &mut self,
+        id: ReconciliationId,
+    ) -> Result<Reconciliation, DomainError> {
+        self.change(|book| {
+            book.reconciliations
+                .remove(&id)
+                .ok_or(DomainError::UnknownReconciliation)
+        })
+    }
+
     // --- budget --------------------------------------------------------------------------
 
     /// Adds a budget line (R-BUD-1).
     pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<BudgetLineId, DomainError> {
         self.change(|book| {
-            let draft = clean_budget_line(draft, &book.accounts)?;
+            let draft = clean_budget_line(draft, &book.accounts, &book.cost_centres)?;
             let id = BudgetLineId(book.next.budget_line);
             book.next.budget_line += 1;
             book.budget_lines.insert(id, BudgetLine { id, draft });
@@ -716,20 +860,25 @@ impl Book {
     }
 
     /// Changes a budget line. Its category stays while transaction lines are linked to it,
-    /// since a link always stays within its category.
+    /// since a link always stays within its category. Linked lines follow its cost centre.
     pub fn update_budget_line(
         &mut self,
         id: BudgetLineId,
         draft: BudgetLineDraft,
     ) -> Result<(), DomainError> {
         self.change(|book| {
-            let draft = clean_budget_line(draft, &book.accounts)?;
+            let draft = clean_budget_line(draft, &book.accounts, &book.cost_centres)?;
             let line = book
                 .budget_lines
                 .get(&id)
                 .ok_or(DomainError::UnknownBudgetLine)?;
             if line.draft.category != draft.category && book.links_to(id).next().is_some() {
                 return Err(DomainError::BudgetLineInUse);
+            }
+            for l in book.txns.values_mut().flat_map(|t| &mut t.lines) {
+                if l.budget_line == Some(id) {
+                    l.cost_centre = draft.cost_centre;
+                }
             }
             book.budget_lines.insert(id, BudgetLine { id, draft });
             Ok(())
@@ -855,11 +1004,24 @@ impl Book {
             accounts: &self.accounts,
             txns: &self.txns,
             closing_counts: &self.closing_counts,
+            reconciliations: &self.reconciliations,
             with_attachments: &with_attachments,
             ticket_conflicts: self.tickets.conflict_count(),
         })?;
-        self.budget =
-            Budget::compute(&self.accounts, &self.budget_lines, &self.txns, &self.ledger)?;
+        self.budget = Budget::compute(
+            &self.accounts,
+            &self.budget_lines,
+            &self.cost_centres,
+            &self.txns,
+            &self.ledger,
+        )?;
+        self.drinks = Drinks::compute(
+            &self.drink_products,
+            &self.event.drinks,
+            &self.accounts,
+            &self.cost_centres,
+            &self.txns,
+        )?;
         Ok(())
     }
 
@@ -887,6 +1049,7 @@ impl Book {
                 name: name.to_owned(),
                 role,
                 asset_type,
+                cost_centre: None,
             },
         );
         id
@@ -905,6 +1068,25 @@ impl Book {
             .filter(|t| t.kind == TxnKind::Opening && t.lines.iter().any(|l| l.account == account))
             .map(|t| t.id)
             .collect()
+    }
+
+    /// Two checkpoints on one date would be compared with the same figure.
+    fn check_checkpoint_free(
+        &self,
+        account: AccountId,
+        date: Date,
+        except: Option<ReconciliationId>,
+    ) -> Result<(), DomainError> {
+        let taken = self
+            .reconciliations
+            .values()
+            .any(|r| r.account == account && r.date == date && Some(r.id) != except);
+        if taken {
+            return Err(DomainError::DuplicateCheckpoint {
+                field: "date".into(),
+            });
+        }
+        Ok(())
     }
 
     /// A trimmed, non-empty name that no other account of the same kind uses (ignoring case).
@@ -927,6 +1109,10 @@ impl Book {
             _ => Ok(name.to_owned()),
         }
     }
+}
+
+fn a_category(kind: AccountKind) -> bool {
+    matches!(kind, AccountKind::Income | AccountKind::Expense)
 }
 
 fn clean(text: Option<String>) -> Option<String> {
@@ -952,7 +1138,15 @@ fn clean_details(d: EventDetails) -> Result<EventDetails, DomainError> {
 fn clean_budget_line(
     d: BudgetLineDraft,
     accounts: &BTreeMap<AccountId, Account>,
+    cost_centres: &BTreeMap<CostCentreId, CostCentre>,
 ) -> Result<BudgetLineDraft, DomainError> {
+    if d.cost_centre
+        .is_some_and(|c| !cost_centres.contains_key(&c))
+    {
+        return Err(DomainError::UnknownCostCentre {
+            field: "costCentre".into(),
+        });
+    }
     match accounts.get(&d.category).map(|a| a.kind) {
         None => {
             return Err(DomainError::UnknownAccount {
@@ -994,16 +1188,24 @@ fn clean_budget_line(
     Ok(BudgetLineDraft { description, ..d })
 }
 
-/// Every link must point to an existing budget line of the line's own category (R-BUD-2).
-/// Errors name the form's split line.
+/// Every link must point to an existing budget line of the line's own category (R-BUD-2), and
+/// the line has that budget line's cost centre (R-CC-1). Errors name the form's split line.
 fn check_links(
     entry: &Entry,
     budget_lines: &BTreeMap<BudgetLineId, BudgetLine>,
+    cost_centres: &BTreeMap<CostCentreId, CostCentre>,
 ) -> Result<(), DomainError> {
     let (Entry::Expense { lines, .. } | Entry::Income { lines, .. }) = entry else {
         return Ok(());
     };
     for (i, l) in lines.iter().enumerate() {
+        if l.cost_centre
+            .is_some_and(|c| !cost_centres.contains_key(&c))
+        {
+            return Err(DomainError::UnknownCostCentre {
+                field: format!("lines[{i}].costCentre"),
+            });
+        }
         let Some(id) = l.budget_line else { continue };
         let b = budget_lines
             .get(&id)
@@ -1011,6 +1213,11 @@ fn check_links(
         if b.draft.category != l.account {
             return Err(DomainError::WrongBudgetLine {
                 field: format!("lines[{i}].budgetLine"),
+            });
+        }
+        if b.draft.cost_centre != l.cost_centre {
+            return Err(DomainError::WrongCostCentre {
+                field: format!("lines[{i}].costCentre"),
             });
         }
     }
@@ -1021,9 +1228,23 @@ fn check_links(
 fn links_valid(lines: &[Line], budget_lines: &BTreeMap<BudgetLineId, BudgetLine>) -> bool {
     lines.iter().all(|l| {
         l.budget_line.is_none_or(|id| {
-            budget_lines
-                .get(&id)
-                .is_some_and(|b| b.draft.category == l.account)
+            budget_lines.get(&id).is_some_and(|b| {
+                b.draft.category == l.account && b.draft.cost_centre == l.cost_centre
+            })
+        })
+    })
+}
+
+/// Only category lines are tagged, and only with a cost centre that exists (R-CC-1).
+fn tags_valid(
+    lines: &[Line],
+    accounts: &BTreeMap<AccountId, Account>,
+    cost_centres: &BTreeMap<CostCentreId, CostCentre>,
+) -> bool {
+    lines.iter().all(|l| {
+        l.cost_centre.is_none_or(|c| {
+            cost_centres.contains_key(&c)
+                && accounts.get(&l.account).is_some_and(|a| a_category(a.kind))
         })
     })
 }

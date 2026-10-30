@@ -13,7 +13,11 @@ pub trait Target {
     /// A made-up receipt: a photo, or a PDF for invoices.
     fn attach(&mut self, txn: TxnId, pdf: bool);
     fn count(&mut self, account: AccountId, amount: Cents);
+    fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents);
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId;
+    fn save_draft(&mut self, draft: TxnDraft) -> TxnId;
+    fn product(&mut self, draft: DrinkProductDraft);
+    fn drink_settings(&mut self, settings: DrinkSettings);
 }
 
 impl Target for Book {
@@ -44,8 +48,20 @@ impl Target for Book {
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
     }
+    fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents) {
+        self.add_reconciliation(account, date, amount).unwrap();
+    }
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
         self.add_budget_line(draft).unwrap()
+    }
+    fn save_draft(&mut self, draft: TxnDraft) -> TxnId {
+        self.save_txn(&draft, None).unwrap().id
+    }
+    fn product(&mut self, draft: DrinkProductDraft) {
+        self.add_drink_product(draft).unwrap();
+    }
+    fn drink_settings(&mut self, settings: DrinkSettings) {
+        self.set_drink_settings(settings).unwrap();
     }
 }
 
@@ -70,8 +86,20 @@ impl Target for Store {
     fn count(&mut self, account: AccountId, amount: Cents) {
         self.set_closing_count(account, june(14), amount).unwrap();
     }
+    fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents) {
+        self.add_reconciliation(account, date, amount).unwrap();
+    }
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
         self.add_budget_line(draft).unwrap()
+    }
+    fn save_draft(&mut self, draft: TxnDraft) -> TxnId {
+        self.save_txn(&draft, None).unwrap().id
+    }
+    fn product(&mut self, draft: DrinkProductDraft) {
+        self.add_drink_product(draft).unwrap();
+    }
+    fn drink_settings(&mut self, settings: DrinkSettings) {
+        self.set_drink_settings(settings).unwrap();
     }
 }
 
@@ -93,12 +121,19 @@ pub fn build(t: &mut impl Target) -> Mock {
         "Kitchen", "Venue", "Drinks", "Pfand", "Tech", "General", "Mobility",
     ]
     .map(|n| expense(b, n));
+    let centre = b.drinks_cost_centre().unwrap().id;
+    let tag = move |account| {
+        [donations, drinks, pfand]
+            .contains(&account)
+            .then_some(centre)
+    };
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
     // The budget. The mockups have none, so it is made up: some lines over, some under, some
     // complete, and a few receipts left unbudgeted (Pfand, cups, cables, decoration).
     let mut plan = |category, description: &str, estimate, complete| {
         t.budget(BudgetLineDraft {
+            cost_centre: tag(category),
             category,
             description: description.into(),
             estimate,
@@ -123,6 +158,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     let to = |line| {
         move |account, amount: &str| SplitLine {
             budget_line: Some(line),
+            cost_centre: tag(account),
             ..split(account, amount)
         }
     };
@@ -153,14 +189,46 @@ pub fn build(t: &mut impl Target) -> Mock {
     );
     t.save("Donation box", income_to(cash, split(other_in, "50")));
 
+    // The drinks: the supplier's invoice checks against the records (R-DRK-5).
+    t.drink_settings(DrinkSettings {
+        supplier: Some("Hoffmann".into()),
+        price_per_strich: Some(eur("1,00")),
+    });
+    for (name, taken, returned, unit) in [
+        ("Club-Mate 0,5", 240, 96, "1,15"),
+        ("Pils 0,33", 480, 312, "0,95"),
+        ("Radler 0,33", 120, 72, "0,95"),
+        ("Apfelschorle 1,0", 72, 48, "1,40"),
+        ("Water 1,0", 96, 70, "0,60"),
+    ] {
+        t.product(DrinkProductDraft {
+            name: name.into(),
+            taken,
+            returned,
+            unit_price: eur(unit),
+        });
+    }
+    let invoice = t.save_draft(TxnDraft {
+        counterparty: Some("Hoffmann".into()),
+        ..draft(
+            "Hoffmann drinks",
+            expense_by(
+                verein,
+                vec![
+                    to(b_drinks)(drinks, "420"),
+                    SplitLine {
+                        cost_centre: tag(pfand),
+                        ..split(pfand, "32")
+                    },
+                ],
+            ),
+        )
+    });
+    t.attach(invoice, false);
+
     // Expenses with receipts
     for (description, payer, lines) in [
         ("Hall rent", verein, vec![to(b_hall)(venue, "1.800")]),
-        (
-            "Hoffmann drinks",
-            verein,
-            vec![to(b_drinks)(drinks, "420"), split(pfand, "32")],
-        ),
         ("PA rental", verein, vec![to(b_pa)(tech, "500")]),
         ("Catering", verein, vec![to(b_catering)(food, "1.098,50")]),
         (
@@ -183,7 +251,16 @@ pub fn build(t: &mut impl Target) -> Mock {
         let id = t.save(description, expense_by(payer, lines));
         t.attach(id, invoice);
     }
-    let cups = t.save("Cups and ice", expense_by(cash, vec![split(drinks, "32")]));
+    let cups = t.save(
+        "Cups and ice",
+        expense_by(
+            cash,
+            vec![SplitLine {
+                cost_centre: tag(drinks),
+                ..split(drinks, "32")
+            }],
+        ),
+    );
 
     // Advances and settling
     t.save(
@@ -205,6 +282,11 @@ pub fn build(t: &mut impl Target) -> Mock {
 
     // Counted 410,00 € against 412,90 € in the books.
     t.count(cash, eur("410"));
+
+    // The Verein account's statement agrees with the books.
+    let verein = role(t.book(), Role::Verein);
+    let movement = t.book().ledger().balance(verein);
+    t.checkpoint(verein, june(30), movement);
 
     Mock {
         anna,

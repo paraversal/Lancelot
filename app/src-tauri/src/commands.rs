@@ -5,9 +5,10 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, EventDetails, ImportId,
-    ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, Resolution, TicketColumns,
-    TierDraft, TierId, TxnDraft, TxnId,
+    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
+    CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
+    ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId,
+    Resolution, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -67,8 +68,34 @@ pub async fn event_create(
     state: State<'_, AppState>,
     path: PathBuf,
     details: EventDetails,
+    template: Option<PathBuf>,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.create_event(&path, details))
+    with(&state, |s| match &template {
+        Some(template) => s.create_event_from(&path, details, template),
+        None => s.create_event(&path, details),
+    })
+}
+
+#[tauri::command]
+pub async fn template_preview(
+    state: State<'_, AppState>,
+    path: PathBuf,
+) -> Result<TemplateSummary> {
+    with(&state, |s| s.template_preview(&path))
+}
+
+#[tauri::command]
+pub async fn copy_preview(state: State<'_, AppState>, path: PathBuf) -> Result<CopySummary> {
+    with(&state, |s| s.copy_preview(&path))
+}
+
+#[tauri::command]
+pub async fn copy_from_event(
+    state: State<'_, AppState>,
+    path: PathBuf,
+    choice: CopyChoice,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.copy_from_event(&path, choice))
 }
 
 #[tauri::command]
@@ -219,6 +246,34 @@ pub async fn counts_set(
 }
 
 #[tauri::command]
+pub async fn reconciliation_add(
+    state: State<'_, AppState>,
+    account: AccountId,
+    date: String,
+    amount: Cents,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_reconciliation(account, &date, amount))
+}
+
+#[tauri::command]
+pub async fn reconciliation_update(
+    state: State<'_, AppState>,
+    id: ReconciliationId,
+    date: String,
+    amount: Cents,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_reconciliation(id, &date, amount))
+}
+
+#[tauri::command]
+pub async fn reconciliation_delete(
+    state: State<'_, AppState>,
+    id: ReconciliationId,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_reconciliation(id))
+}
+
+#[tauri::command]
 pub async fn account_rename(
     state: State<'_, AppState>,
     id: AccountId,
@@ -262,6 +317,69 @@ pub async fn budget_line_update(
 #[tauri::command]
 pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) -> Result<OpenEvent> {
     with(&state, |s| s.delete_budget_line(id))
+}
+
+#[tauri::command]
+pub async fn cost_centre_add(state: State<'_, AppState>, name: String) -> Result<OpenEvent> {
+    with(&state, |s| s.add_cost_centre(&name))
+}
+
+#[tauri::command]
+pub async fn cost_centre_rename(
+    state: State<'_, AppState>,
+    id: CostCentreId,
+    name: String,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.rename_cost_centre(id, &name))
+}
+
+#[tauri::command]
+pub async fn cost_centre_delete(state: State<'_, AppState>, id: CostCentreId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_cost_centre(id))
+}
+
+#[tauri::command]
+pub async fn category_set_cost_centre(
+    state: State<'_, AppState>,
+    category: AccountId,
+    cost_centre: Option<CostCentreId>,
+) -> Result<OpenEvent> {
+    with(&state, |s| {
+        s.set_category_cost_centre(category, cost_centre)
+    })
+}
+
+#[tauri::command]
+pub async fn drink_product_add(
+    state: State<'_, AppState>,
+    draft: DrinkProductDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_drink_product(draft))
+}
+
+#[tauri::command]
+pub async fn drink_product_update(
+    state: State<'_, AppState>,
+    id: DrinkProductId,
+    draft: DrinkProductDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_drink_product(id, draft))
+}
+
+#[tauri::command]
+pub async fn drink_product_delete(
+    state: State<'_, AppState>,
+    id: DrinkProductId,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_drink_product(id))
+}
+
+#[tauri::command]
+pub async fn drink_settings_set(
+    state: State<'_, AppState>,
+    settings: DrinkSettings,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.set_drink_settings(settings))
 }
 
 #[tauri::command]

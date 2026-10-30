@@ -8,6 +8,7 @@ pub mod book;
 pub mod budget;
 mod csv;
 pub mod date;
+pub mod drinks;
 pub mod entry;
 pub mod error;
 pub mod export;
@@ -24,9 +25,15 @@ pub mod store;
 pub mod tickets;
 
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
-pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
-pub use budget::{Budget, BudgetLineFigures, CategoryFigures, Figures};
+pub use book::{
+    Book, BookParts, CopyChoice, CopySummary, MAX_ATTACHMENT_SIZE, NextIds, Saved, TemplateSummary,
+    Warning,
+};
+pub use budget::{Budget, BudgetLineFigures, CategoryFigures, CostCentreFigures, Figures};
 pub use date::{DateError, format_date, parse_date};
+pub use drinks::{
+    DrinkProduct, DrinkProductDraft, DrinkProductFigures, DrinkSettings, Drinks, InvoiceCheck,
+};
 pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, txn_amount};
 pub use error::DomainError;
 pub use export::transactions_csv;
@@ -34,12 +41,13 @@ pub use iban::{BicError, Iban, IbanError, validate_bic, validate_iban};
 pub use integrity::{Issue, Report, Severity};
 pub use ledger::{
     BlockerOverride, CashStatus, Ledger, MoneyLocation, OpenItem, OpeningCount, PersonEntry,
-    PersonStatus, PersonSummary, PersonTotals,
+    PersonStatus, PersonSummary, PersonTotals, ReconciliationStatus,
 };
 pub use model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, Estimate, Event, EventDetails,
-    ImportId, Line, ManualSaleId, Origin, Person, Role, TierId, Txn, TxnId, TxnKind,
+    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre, CostCentreId,
+    CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, ImportId, Line, ManualSaleId,
+    Origin, Person, Reconciliation, ReconciliationId, Role, TierId, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
@@ -48,7 +56,7 @@ pub use sheet::{Problem, RowProblem, Sheet, SheetRow, read_sheet};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
     BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,
-    list_backups,
+    list_backups, read_book,
 };
 pub use tickets::{
     Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
