@@ -201,7 +201,7 @@ crates/lancelot-core/src/
   book.rs        Book: the event in memory; every change is checked on a copy, then kept
     tickets.rs     tiers, imports, manual sales and the ticket income they generate
   tickets.rs     tier rules, import preview (changes per tier and per order), conflicts, ticket figures
-  sales.rs       sales over time from one source of dated steps, fed by the import snapshots (R-TKT-8); the projected result and break-even (R-TKT-9)
+  sales.rs       sales over time from one source of dated steps, fed by the import snapshots (R-TKT-8); the projected result, the estimate to break even and the places left (R-TKT-9)
   sheet.rs       reads the configured columns of a ticket sheet (.ods, .xlsx, .csv)
   ledger.rs      Ledger: balances, person summaries, totals, where the money is, open items
   store/         Store: the event file (rusqlite)

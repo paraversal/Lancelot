@@ -421,8 +421,14 @@ proptest! {
         }
         for b in book.budget_lines() {
             let f = budget.line(b.id).unwrap();
-            let is_income = book.account(b.draft.category).unwrap().kind == AccountKind::Income;
-            let expected = match (b.draft.complete, is_income) {
+            let account = book.account(b.draft.category).unwrap();
+            let is_income = account.kind == AccountKind::Income;
+            // The ticket categories forecast what is booked, whatever the estimate.
+            let follows_the_tickets = matches!(
+                account.role,
+                Some(Role::Tickets | Role::TicketFees | Role::TicketRefunds)
+            );
+            let expected = match (b.draft.complete || follows_the_tickets, is_income) {
                 (true, _) => f.actual,
                 (false, true) => f.estimate.min(f.actual),
                 (false, false) => f.estimate.max(f.actual),

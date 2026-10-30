@@ -703,19 +703,24 @@ function profitability(s: EventSnapshot): EventSnapshot['profitability'] {
 	const projected = s.budget.result.forecast;
 	const gap = Math.max(0, -projected);
 	const { sold, net } = s.tickets.total;
-	return {
-		projected,
-		gap,
-		tickets: sold > 0 && net > 0 ? Math.ceil((gap * sold) / net) : null,
-		tiers: !gap
-			? []
-			: s.tickets.tiers.flatMap((t) => {
-					const netPrice = t.price - Math.round((t.price * t.feeBp) / 10_000);
-					if (netPrice <= 0) return [];
-					const left = t.quota === null ? null : Math.max(0, t.quota - t.places);
-					return [{ tier: t.id, netPrice, tickets: Math.ceil(gap / netPrice), left }];
-				})
-	};
+	const paying = s.tickets.tiers.flatMap((t) => {
+		const netPrice = t.price - Math.round((t.price * t.feeBp) / 10_000);
+		if (netPrice <= 0) return [];
+		const left = t.quota === null ? null : Math.max(0, t.quota - t.places);
+		return [{ tier: t.id, netPrice, tickets: Math.ceil(gap / netPrice), left }];
+	});
+	const prices = paying.reduce((n, t) => n + t.netPrice, 0);
+	const tickets =
+		sold > 0 && net > 0
+			? Math.ceil((gap * sold) / net)
+			: paying.length
+				? Math.ceil((gap * paying.length) / prices)
+				: null;
+	const placesLeft =
+		paying.length && paying.every((t) => t.left !== null)
+			? paying.reduce((n, t) => n + (t.left ?? 0), 0)
+			: null;
+	return { projected, gap, tickets, placesLeft, tiers: gap ? paying : [] };
 }
 
 function retickets(s: EventSnapshot) {

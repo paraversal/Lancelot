@@ -2,8 +2,8 @@
 	// Tickets (requirements §5.6): the tiers with sold vs quota, gross and net, from the latest
 	// import of the sheet and the manual sales. Every figure comes from the core. Tickets that left
 	// the sheet are conflicts on top, each a card to resolve (R-TKT-13). A tier, the import, a manual
-	// sale and a cancellation each open in the panel on the right. Break-even and sales per import
-	// (M8) join the page later.
+	// sale and a cancellation each open in the panel on the right. Beside the tiers, or under them
+	// when a panel leaves no room: break-even and the sales per import (R-TKT-8, R-TKT-9).
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { SHEET_EXTENSIONS, chooseTicketSheet } from '#lib/api/dialogs.ts';
@@ -12,8 +12,10 @@
 	import type { ManualSaleId } from '#lib/api/generated/ManualSaleId.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import { tierColor } from '#lib/colors.ts';
+	import BreakEven from '#lib/components/BreakEven.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
+	import SalesChart from '#lib/components/SalesChart.svelte';
 	import { onFileDrop } from '#lib/dragdrop.ts';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -157,111 +159,133 @@
 				</section>
 			{/if}
 
-			<div class="rows" role="table" aria-label="Tiers">
-				<div class="row head" role="row">
-					<span class="name"></span>
-					<span class="num price">Price</span>
-					<span class="num fee">Fee</span>
-					<span class="sold">Sold</span>
-					<span class="num gross">Gross</span>
-				</div>
-				{#each tickets.tiers as t, i (t.id)}
-					<button
-						type="button"
-						class="row tier"
-						class:selected={selectedTier === t.id}
-						role="row"
-						onclick={() => show({ type: 'tier', id: t.id })}
-					>
-						<span class="name">
-							<span class="dot" style:background={tierColor(i)}></span>
-							<span class="label">{t.name}</span>
-							{#if t.manual}<span class="manual">+{t.manual} manual</span>{/if}
-							{#if t.unresolved}<span class="unresolved">−{t.unresolved} open</span>{/if}
-						</span>
-						<span class="num price">{formatAmount(t.price, format)}</span>
-						<span class="num fee">{formatFee(t.feeBp, format)}</span>
-						<span class="sold">
-							<span class="count">
-								<strong>{t.places}</strong>{#if t.quota !== null}<span class="quota">
-										/ {t.quota}</span
-									>{/if}
-							</span>
-							{#if t.quota !== null}
-								<span class="bar" class:over={t.places > t.quota}>
-									<span
-										style:width="{Math.min(100, (t.places / t.quota) * 100)}%"
-										style:background={tierColor(i)}
-									></span>
+			<div class="body">
+				<div class="ledger">
+					<div class="rows" role="table" aria-label="Tiers">
+						<div class="row head" role="row">
+							<span class="name"></span>
+							<span class="num price">Price</span>
+							<span class="num fee">Fee</span>
+							<span class="sold">Sold</span>
+							<span class="num gross">Gross</span>
+						</div>
+						{#each tickets.tiers as t, i (t.id)}
+							<button
+								type="button"
+								class="row tier"
+								class:selected={selectedTier === t.id}
+								role="row"
+								onclick={() => show({ type: 'tier', id: t.id })}
+							>
+								<span class="name">
+									<span class="dot" style:background={tierColor(i)}></span>
+									<span class="label">{t.name}</span>
+									{#if t.manual}<span class="manual">+{t.manual} manual</span>{/if}
+									{#if t.unresolved}<span class="unresolved">−{t.unresolved} open</span>{/if}
 								</span>
+								<span class="num price">{formatAmount(t.price, format)}</span>
+								<span class="num fee">{formatFee(t.feeBp, format)}</span>
+								<span class="sold">
+									<span class="count">
+										<strong>{t.places}</strong>{#if t.quota !== null}<span class="quota">
+												/ {t.quota}</span
+											>{/if}
+									</span>
+									{#if t.quota !== null}
+										<span class="bar" class:over={t.places > t.quota}>
+											<span
+												style:width="{Math.min(100, (t.places / t.quota) * 100)}%"
+												style:background={tierColor(i)}
+											></span>
+										</span>
+									{/if}
+								</span>
+								<span class="num gross">{formatAmount(t.gross, format)}</span>
+							</button>
+						{/each}
+						{#if !session.closed}
+							<button
+								type="button"
+								class="row add"
+								class:selected={panel?.type === 'tier' && panel.id === null}
+								onclick={() => show({ type: 'tier', id: null })}
+							>
+								<Icon name="plus" size={14} />Tier
+							</button>
+						{/if}
+						{#if tickets.tiers.length}
+							{#if tickets.total.fees}
+								<div class="row total" role="row">
+									<span class="name">Ticket fees</span>
+									<span class="num">{formatAmount(-tickets.total.fees, format)}</span>
+								</div>
 							{/if}
-						</span>
-						<span class="num gross">{formatAmount(t.gross, format)}</span>
-					</button>
-				{/each}
-				{#if !session.closed}
-					<button
-						type="button"
-						class="row add"
-						class:selected={panel?.type === 'tier' && panel.id === null}
-						onclick={() => show({ type: 'tier', id: null })}
-					>
-						<Icon name="plus" size={14} />Tier
-					</button>
-				{/if}
-				{#if tickets.tiers.length}
-					{#if tickets.total.fees}
-						<div class="row total" role="row">
-							<span class="name">Ticket fees</span>
-							<span class="num">{formatAmount(-tickets.total.fees, format)}</span>
-						</div>
-					{/if}
-					{#if tickets.total.refunds}
-						<div class="row total" role="row">
-							<span class="name">Refunds</span>
-							<span class="num">{formatAmount(-tickets.total.refunds, format)}</span>
-						</div>
-					{/if}
-					<div class="row total strong" role="row">
-						<span class="name">Ticket income</span>
-						<span class="num">{formatAmount(tickets.total.net, format)}</span>
+							{#if tickets.total.refunds}
+								<div class="row total" role="row">
+									<span class="name">Refunds</span>
+									<span class="num">{formatAmount(-tickets.total.refunds, format)}</span>
+								</div>
+							{/if}
+							<div class="row total strong" role="row">
+								<span class="name">Ticket income</span>
+								<span class="num">{formatAmount(tickets.total.net, format)}</span>
+							</div>
+							{#if conflicts}
+								<p class="warning" role="note">
+									{tickets.total.unresolved} removed {tickets.total.unresolved === 1
+										? 'ticket is'
+										: 'tickets are'} not counted until the conflicts are resolved
+								</p>
+							{/if}
+						{/if}
 					</div>
-					{#if conflicts}
-						<p class="warning" role="note">
-							{tickets.total.unresolved} removed {tickets.total.unresolved === 1
-								? 'ticket is'
-								: 'tickets are'} not counted until the conflicts are resolved
-						</p>
+
+					{#if tickets.cancellations.length || (latest && !session.closed) || (tickets.manualSales.length && !session.closed)}
+						<div class="rows cancellations" aria-label="Cancellations">
+							<div class="row head"><span class="name">Cancellations</span></div>
+							{#each tickets.cancellations as c (c.id)}
+								<button
+									type="button"
+									class="row cancellation"
+									class:selected={panel?.type === 'cancellation' && panel.id === c.id}
+									onclick={() => show({ type: 'cancellation', id: c.id })}
+								>
+									<span class="name"><span class="label">{cancellationText(c)}</span></span>
+									<span class="num">{c.refund ? formatAmount(-c.refund, format) : '–'}</span>
+								</button>
+							{/each}
+							{#if !session.closed}
+								<button
+									type="button"
+									class="row add"
+									class:selected={panel?.type === 'cancellation' && panel.id === null}
+									onclick={() => show({ type: 'cancellation', id: null })}
+								>
+									<Icon name="plus" size={14} />Cancellation
+								</button>
+							{/if}
+						</div>
 					{/if}
+				</div>
+				{#if snapshot.profitability || tickets.sales.length}
+					<div class="statistics" role="group" aria-label="Statistics">
+						{#if snapshot.profitability}
+							<BreakEven
+								profitability={snapshot.profitability}
+								tiers={tickets.tiers}
+								{format}
+								onaddtier={() => show({ type: 'tier', id: null })}
+							/>
+						{/if}
+						{#if snapshot.profitability && tickets.sales.length}
+							<hr />
+						{/if}
+						{#if tickets.sales.length}
+							<SalesChart points={tickets.sales} tiers={tickets.tiers} {format} />
+						{/if}
+					</div>
 				{/if}
 			</div>
-
-			{#if tickets.cancellations.length || (latest && !session.closed) || (tickets.manualSales.length && !session.closed)}
-				<div class="rows cancellations" aria-label="Cancellations">
-					<div class="row head"><span class="name">Cancellations</span></div>
-					{#each tickets.cancellations as c (c.id)}
-						<button
-							type="button"
-							class="row cancellation"
-							class:selected={panel?.type === 'cancellation' && panel.id === c.id}
-							onclick={() => show({ type: 'cancellation', id: c.id })}
-						>
-							<span class="name"><span class="label">{cancellationText(c)}</span></span>
-							<span class="num">{c.refund ? formatAmount(-c.refund, format) : '–'}</span>
-						</button>
-					{/each}
-					{#if !session.closed}
-						<button
-							type="button"
-							class="row add"
-							class:selected={panel?.type === 'cancellation' && panel.id === null}
-							onclick={() => show({ type: 'cancellation', id: null })}
-						>
-							<Icon name="plus" size={14} />Cancellation
-						</button>
-					{/if}
-				</div>
-			{/if}
 		{/if}
 	</section>
 
@@ -305,6 +329,54 @@
 		min-width: 0;
 		padding: var(--spacing-10) var(--spacing-8) var(--spacing-10) var(--spacing-10);
 		overflow: auto;
+		container-type: inline-size;
+	}
+
+	.body {
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+	}
+
+	.ledger {
+		display: flex;
+		flex-direction: column;
+		gap: 28px;
+		min-width: 0;
+	}
+
+	.statistics {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		min-width: 0;
+		max-width: 560px;
+	}
+
+	.statistics hr {
+		width: 100%;
+		margin: 0;
+		border: none;
+		border-top: 1px solid var(--color-rule);
+	}
+
+	/* Beside the tiers when no panel takes the room, as in UI.fig. */
+	@container (min-width: 920px) {
+		.body {
+			flex-direction: row;
+			align-items: stretch;
+			gap: var(--spacing-8);
+		}
+
+		.ledger {
+			flex: 0 0 560px;
+		}
+
+		.statistics {
+			flex: 1;
+			padding-left: var(--spacing-8);
+			border-left: 1px solid var(--color-rule);
+		}
 	}
 
 	header {

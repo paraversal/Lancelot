@@ -118,9 +118,13 @@ pub struct Profitability {
     pub projected: Cents,
     /// How much is missing to reach zero. Zero once the forecast is not negative.
     pub gap: Cents,
-    /// More tickets needed at the average net price sold so far. Absent while nothing has sold
-    /// or the tickets brought in nothing.
+    /// About how many more tickets close the gap: at the average net price sold so far, or at the
+    /// average of the tiers that bring in something while no sales give an average. Absent when
+    /// no tier brings in anything.
     pub tickets: Option<u32>,
+    /// Places left over the tiers that bring in something. Absent when one of them has no quota,
+    /// or none exists.
+    pub places_left: Option<u32>,
     /// In tier order, without tiers that bring in nothing per ticket. Empty without a gap.
     pub tiers: Vec<TierBreakEven>,
 }
@@ -146,32 +150,45 @@ impl Profitability {
         } else {
             Cents::ZERO
         };
-        let net = tickets.total.net;
-        let at_average = (tickets.total.sold > 0 && net.is_positive())
-            .then(|| needed(gap, net, tickets.total.sold));
 
         let mut tiers = Vec::new();
-        if gap.is_positive() {
-            for t in &tickets.tiers {
-                let net_price = t.tier.draft.price.checked_sub(t.tier.fee()?)?;
-                if net_price.is_positive() {
-                    tiers.push(TierBreakEven {
-                        tier: t.tier.id,
-                        net_price,
-                        tickets: needed(gap, net_price, 1),
-                        left: t
-                            .tier
-                            .draft
-                            .quota
-                            .map(|q| q.saturating_sub(t.figures.places)),
-                    });
-                }
+        let mut tier_prices = Cents::ZERO;
+        let mut paying = 0u32;
+        let mut places_left = Some(0u32);
+        for t in &tickets.tiers {
+            let net_price = t.tier.draft.price.checked_sub(t.tier.fee()?)?;
+            if !net_price.is_positive() {
+                continue;
+            }
+            tier_prices = tier_prices.checked_add(net_price)?;
+            paying += 1;
+            let left = t
+                .tier
+                .draft
+                .quota
+                .map(|q| q.saturating_sub(t.figures.places));
+            places_left = places_left.zip(left).map(|(sum, l)| sum.saturating_add(l));
+            if gap.is_positive() {
+                tiers.push(TierBreakEven {
+                    tier: t.tier.id,
+                    net_price,
+                    tickets: needed(gap, net_price, 1),
+                    left,
+                });
             }
         }
+
+        let net = tickets.total.net;
+        let tickets = if tickets.total.sold > 0 && net.is_positive() {
+            Some(needed(gap, net, tickets.total.sold))
+        } else {
+            (paying > 0).then(|| needed(gap, tier_prices, paying))
+        };
         Ok(Profitability {
             projected,
             gap,
-            tickets: at_average,
+            tickets,
+            places_left: places_left.filter(|_| paying > 0),
             tiers,
         })
     }

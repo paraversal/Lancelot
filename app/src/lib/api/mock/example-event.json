@@ -1278,6 +1278,7 @@
     "projected": 176500,
     "gap": 0,
     "tickets": null,
+    "placesLeft": null,
     "tiers": []
   }
 }

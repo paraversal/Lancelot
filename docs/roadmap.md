@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is under way: its core is done. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is under way: its core and the Tickets page are done. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -248,8 +248,9 @@ Built in three steps, each in its own pull request.
 
 **M8b · Tickets page**
 
-- [ ] Designs in `UI.fig`: revenue, cancellations and break-even per tier.
-- [ ] The break-even block under the totals, and stacked bars per snapshot with sold vs quota, revenue and cancellations.
+- [x] Designs in `UI.fig`: the Tickets frame and `Tickets / Statistics`, with revenue, cancellations, break-even per tier and the states of the block.
+- [x] The break-even block beside the tiers, or under them with a panel open: the amount missing, about how many tickets close it, the places left when they fall short, and the count per tier. Without sales the estimate uses the average of the tiers; without tiers there is `+ Tier` (R-TKT-9).
+- [x] Stacked bars per snapshot, by places against the quota with the cancelled on top, or by net income (R-TKT-8).
 
 **M8c · Overview**
 
@@ -290,4 +291,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M8b: the sales chart and break-even on the Tickets page. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
+M8c: the ticket block on the Overview. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.

@@ -15,10 +15,16 @@ projected: Cents,
  */
 gap: Cents, 
 /**
- * More tickets needed at the average net price sold so far. Absent while nothing has sold
- * or the tickets brought in nothing.
+ * About how many more tickets close the gap: at the average net price sold so far, or at the
+ * average of the tiers that bring in something while no sales give an average. Absent when
+ * no tier brings in anything.
  */
 tickets: number | null, 
+/**
+ * Places left over the tiers that bring in something. Absent when one of them has no quota,
+ * or none exists.
+ */
+placesLeft: number | null, 
 /**
  * In tier order, without tiers that bring in nothing per ticket. Empty without a gap.
  */

@@ -390,13 +390,73 @@ fn a_refund_lowers_the_average_and_gives_the_place_back() {
 }
 
 #[test]
-fn nothing_sold_gives_no_average_and_free_tiers_no_row() {
+fn nothing_sold_uses_the_average_of_the_tiers_and_free_tiers_count_for_nothing() {
     let (mut book, _, _) = with_budget(&[]);
     let free = book.add_tier(tier("Helper", "0", 0, None)).unwrap();
     let p = book.profitability().unwrap();
-    assert_eq!(p.tickets, None);
+    // 1.000 € at the average of 25 € and 31,20 € is 35,58…
+    assert_eq!(p.tickets, Some(36));
     assert!(p.tiers.iter().all(|t| t.tier != free));
     assert_eq!(p.tiers.len(), 2);
+}
+
+#[test]
+fn everything_refunded_falls_back_on_the_average_of_the_tiers() {
+    let (mut book, _, regular) = with_budget(&[("1", "Regular")]);
+    import(&mut book, 2, &[]);
+    book.resolve_conflict("1", regular, refund(1, 10_000, 3))
+        .unwrap();
+    // The ticket brought in 32 € − 0,80 € − 32 €: nothing to take an average from.
+    let p = book.profitability().unwrap();
+    assert_eq!(book.tickets().total.net, eur("-0,80"));
+    assert_eq!(p.gap, eur("1.000,80"));
+    assert_eq!(p.tickets, Some(36));
+}
+
+/// A budget of 1.000 € and no tiers yet.
+fn budget_only() -> Book {
+    let mut book = new_book();
+    let kitchen = expense(&book, "Kitchen");
+    book.add_budget_line(BudgetLineDraft {
+        category: kitchen,
+        description: "Food".into(),
+        estimate: Estimate::Amount {
+            amount: eur("1.000"),
+        },
+        complete: false,
+    })
+    .unwrap();
+    book
+}
+
+#[test]
+fn without_tiers_or_with_only_free_ones_there_is_no_count() {
+    let mut book = budget_only();
+    let p = book.profitability().unwrap();
+    assert_eq!(
+        (p.gap, p.tickets, p.places_left),
+        (eur("1.000"), None, None)
+    );
+
+    book.add_tier(tier("Helper", "0", 0, None)).unwrap();
+    let p = book.profitability().unwrap();
+    assert_eq!((p.tickets, p.places_left), (None, None));
+    assert!(p.tiers.is_empty());
+}
+
+#[test]
+fn places_left_add_up_only_when_every_paying_tier_has_a_quota() {
+    // Early Bird has no quota, so places are not limited.
+    let (book, _, _) = with_budget(&[("1", "Regular"), ("2", "Regular")]);
+    assert_eq!(book.profitability().unwrap().places_left, None);
+
+    let mut book = budget_only();
+    book.add_tier(tier("Regular", "32", 0, Some(10))).unwrap();
+    book.add_tier(tier("Supporter", "45", 0, Some(5))).unwrap();
+    // A free tier without a quota changes nothing: its places close no gap.
+    book.add_tier(tier("Helper", "0", 0, None)).unwrap();
+    import(&mut book, 1, &[("1", "Regular"), ("2", "Regular")]);
+    assert_eq!(book.profitability().unwrap().places_left, Some(13));
 }
 
 #[test]

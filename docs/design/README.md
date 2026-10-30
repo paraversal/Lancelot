@@ -11,7 +11,7 @@ The app should feel like a well-kept paper ledger at a community event. It is ca
 1. **No gradients, no shadows.** Depth comes from rules (1 px lines) and the sunk sidebar tone.
 2. **No coloured edge accents** (the "fingernail" strip on the side of cards or rows).
 3. **One type face: Familjen Grotesk, weights 400 and 600.** Sizes: 12, 14, 16, 22, 40.
-4. **Show, don't tell.** Labels name things. No sentences that explain a view, no empty-state prose, no "Here you can…" hints. A hint line exists only when it carries data (e.g. `= 1.234,50 €` under an amount, `9 tickets to break even`).
+4. **Show, don't tell.** Labels name things. No sentences that explain a view, no empty-state prose, no "Here you can…" hints. A hint line exists only when it carries data (e.g. `= 1.234,50 €` under an amount, `~9 tickets`).
 5. **Rules and whitespace instead of cards.** A card is allowed only when it holds more than one figure and is a unit of work. Example: the open ticket conflict, which has its own controls.
 6. **Inviting, a little quirky, never forced.** The quirks are the marker highlight, the tally marks and the warm paper tone.
 
@@ -71,6 +71,7 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 | People / Mark as paid | The reimbursements to record, people without an IBAN, the account and the date |
 | People / Edit person | The person's details in the panel; the IBAN previews its grouped form while typing |
 | Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |
+| Tickets / Statistics | The states of Break-even (too few places, no tiers, only free tiers, reached), Sales by revenue, and both under the tiers while a panel is open |
 | Tickets / Import | The sheet in the right-hand panel: file and hash, the columns read, the snapshot date, an unknown tier to map or add, the changes per tier (removals lead to conflicts) and the rows not read; Import stays blocked while a tier is unmapped |
 | Tickets / Edit tier | Name, price, fee (`= 0,80 € per ticket`), quota and the sheet's names for the tier; sold, fees and net; a tier in use cannot be deleted |
 | Tickets / Manual sale | Tier, count, the amount, who received the money (with their balance before and after), date and reference; the earlier manual sales |
@@ -84,7 +85,9 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says *Note*.
 
-The app's Tickets page follows the Tickets frames without the parts of a later milestone: break-even and sales per import (M8). Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees.
+The app's Tickets page follows the Tickets frames. Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees.
+
+Sales draws places against the quota, so its label matches the Sold column, with the cancelled on top in `on-ink-muted`, a neutral fill that belongs to no tier. The line appears only when every tier has a quota. Revenue is net income; only its last column carries an amount, and the others have theirs in the tooltip. Date labels thin out when they no longer fit, and the last always shows. Below 920 px of content, Break-even and Sales move under the tiers.
 
 The conflict card has more fields than the frame, which only shows the refund and the payer: the count of a partly resolved conflict, the date and a note (R-TKT-13), as labelled fields under the switch. **Match** is offered only when a cancellation is waiting; then the card opens on it, with **Confirm** and "Resolve another way". The default refund is 100 % (R-TKT-13), where the frame shows 50 %. Not in the frames: a warning under the totals while conflicts are open (R-TKT-16), and a **Cancellations** list under the tiers with `+ Cancellation`, which opens a right-hand panel (R-TKT-14). The navigation's Tickets count turns into a badge while conflicts are open.
 
