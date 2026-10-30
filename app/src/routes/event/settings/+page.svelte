@@ -152,6 +152,48 @@
 			input?.focus();
 			input?.select();
 		});
+	// Cost centres (R-CC-1): names save when left, like the accounts. Deleting one leaves what was
+	// tagged without a tag, so it asks first.
+	const centres = $derived(open.snapshot.costCentres);
+	const centreOptions = $derived([
+		{ value: 0, label: 'None' },
+		...centres.map((c) => ({ value: c.id, label: c.name }))
+	]);
+	const categories = $derived(
+		open.snapshot.accounts.filter((a) => a.kind === 'income' || a.kind === 'expense')
+	);
+	let deletingCentre = $state<number | null>(null);
+
+	function renameCentre(id: number, input: HTMLInputElement) {
+		const name = input.value.trim();
+		const current = centres.find((c) => c.id === id)?.name ?? '';
+		if (!name || name === current) {
+			input.value = current;
+			return;
+		}
+		run(async () => {
+			try {
+				await session.change(() => api.renameCostCentre(id, name));
+			} catch (e) {
+				input.value = current;
+				throw e;
+			}
+		});
+	}
+
+	const addCentre = () =>
+		run(async () => {
+			let name = 'New cost centre';
+			for (let n = 2; centres.some((c) => c.name.toLowerCase() === name.toLowerCase()); n++)
+				name = `New cost centre ${n}`;
+			await session.change(() => api.addCostCentre(name));
+			await tick();
+			const inputs = document.querySelectorAll<HTMLInputElement>('.centres input');
+			const input = inputs[inputs.length - 1];
+			input?.focus();
+			input?.select();
+		});
+
 	const issues = $derived(open.integrity.issues.length);
 	const shortPath = $derived(open.path.replace(/^\/Users\/[^/]+/, '~'));
 	const checked = $derived(
@@ -242,6 +284,69 @@
 					{#if !closed}
 						<div><Button size="sm" icon="plus" onclick={addAccount}>Account</Button></div>
 					{/if}
+				</section>
+
+				<section>
+					<h2>Cost centres</h2>
+					<ul class="accounts centres">
+						{#each centres as c (c.id)}
+							<li>
+								<input
+									class="name"
+									type="text"
+									aria-label="Cost centre name"
+									value={c.name}
+									onblur={(e) => renameCentre(c.id, e.currentTarget)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') e.currentTarget.blur();
+										if (e.key === 'Escape') {
+											e.currentTarget.value = c.name;
+											e.currentTarget.blur();
+										}
+									}}
+								/>
+								{#if !c.role && !closed}
+									{#if deletingCentre === c.id}
+										<Button
+											size="sm"
+											kind="primary"
+											onclick={() => run(() => session.change(() => api.deleteCostCentre(c.id)))}
+											>Delete</Button
+										>
+										<Button size="sm" onclick={() => (deletingCentre = null)}>Keep</Button>
+									{:else}
+										<Button size="sm" onclick={() => (deletingCentre = c.id)}>Delete</Button>
+									{/if}
+								{/if}
+							</li>
+						{/each}
+					</ul>
+					{#if !closed}
+						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
+					{/if}
+					<div class="labelled">
+						<span class="label">Categories start in</span>
+						<ul class="accounts starts">
+							{#each categories as a (a.id)}
+								<li>
+									<span class="name"
+										>{a.name}{#if a.kind === 'income'}<span class="muted">
+												· income</span
+											>{/if}</span
+									>
+									<Select
+										name="{a.name} starts in"
+										value={a.costCentre ?? 0}
+										options={centreOptions}
+										onchange={(v) =>
+											run(() =>
+												session.change(() => api.setCategoryCostCentre(a.id, v === 0 ? null : v))
+											)}
+									/>
+								</li>
+							{/each}
+						</ul>
+					</div>
 				</section>
 			</div>
 		</fieldset>
@@ -506,6 +611,25 @@
 		width: 110px;
 		flex: none;
 		text-align: right;
+	}
+
+	.starts span.name {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		margin-left: 0;
+		padding: 0;
+		border: none;
+		white-space: nowrap;
+	}
+
+	.starts span.name:hover {
+		border: none;
+	}
+
+	.starts li > :global(.field) {
+		width: 150px;
+		flex: none;
 	}
 
 	.backups {

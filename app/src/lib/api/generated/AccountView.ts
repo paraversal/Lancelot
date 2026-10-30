@@ -3,10 +3,15 @@ import type { AccountId } from "./AccountId";
 import type { AccountKind } from "./AccountKind";
 import type { AssetType } from "./AssetType";
 import type { Cents } from "./Cents";
+import type { CostCentreId } from "./CostCentreId";
 import type { Role } from "./Role";
 
 export type AccountView = { balance: Cents, id: AccountId, kind: AccountKind, name: string, role: Role | null, 
 /**
  * Set exactly for asset accounts.
  */
-assetType: AssetType | null, };
+assetType: AssetType | null, 
+/**
+ * For a category: the cost centre a new line of it starts with.
+ */
+costCentre: CostCentreId | null, };

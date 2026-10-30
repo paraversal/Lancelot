@@ -12,7 +12,7 @@ use ts_rs::TS;
 
 use crate::error::DomainError;
 use crate::model::{
-    Account, AccountId, AccountKind, BudgetLineId, Line, Origin, Role, Txn, TxnKind,
+    Account, AccountId, AccountKind, BudgetLineId, CostCentreId, Line, Origin, Role, Txn, TxnKind,
 };
 use crate::money::{Cents, try_sum};
 
@@ -76,6 +76,9 @@ pub struct SplitLine {
     /// Must belong to the line's category (R-BUD-2).
     #[serde(rename = "budgetLine", default)]
     pub budget_line: Option<BudgetLineId>,
+    /// Must match the budget line's, if there is one (R-CC-1).
+    #[serde(rename = "costCentre", default)]
+    pub cost_centre: Option<CostCentreId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
@@ -276,6 +279,7 @@ fn line(account: AccountId, amount: Cents) -> Line {
         amount,
         memo: None,
         budget_line: None,
+        cost_centre: None,
     }
 }
 
@@ -285,6 +289,7 @@ fn split(l: &SplitLine, amount: Cents) -> Line {
         amount,
         memo: l.memo.clone(),
         budget_line: l.budget_line,
+        cost_centre: l.cost_centre,
     }
 }
 
@@ -339,6 +344,7 @@ mod tests {
                     name: format!("a{}", id.0),
                     role,
                     asset_type: (kind == AccountKind::Asset).then_some(AssetType::Bank),
+                    cost_centre: None,
                 },
             )
         })
@@ -362,6 +368,7 @@ mod tests {
             amount: c(cents),
             memo: None,
             budget_line: None,
+            cost_centre: None,
         }
     }
 

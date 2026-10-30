@@ -12,6 +12,10 @@
       "tier": "Ticket",
       "order": "Order ID",
       "saleDate": null
+    },
+    "drinks": {
+      "supplier": null,
+      "pricePerStrich": null
     }
   },
   "accounts": [
@@ -21,6 +25,7 @@
       "name": "Verein account",
       "role": "verein",
       "assetType": "bank",
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -29,6 +34,7 @@
       "name": "Cash box",
       "role": "cash_box",
       "assetType": "cash",
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -37,6 +43,7 @@
       "name": "Opening balance",
       "role": "opening",
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -45,6 +52,7 @@
       "name": "Tickets",
       "role": "tickets",
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -53,6 +61,7 @@
       "name": "Drink donations",
       "role": null,
       "assetType": null,
+      "costCentre": 1,
       "balance": 0
     },
     {
@@ -61,6 +70,7 @@
       "name": "General",
       "role": null,
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -69,6 +79,7 @@
       "name": "Kitchen",
       "role": null,
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -77,14 +88,16 @@
       "name": "Drinks",
       "role": null,
       "assetType": null,
+      "costCentre": 1,
       "balance": 0
     },
     {
       "id": 9,
       "kind": "expense",
       "name": "Pfand",
-      "role": null,
+      "role": "pfand",
       "assetType": null,
+      "costCentre": 1,
       "balance": 0
     },
     {
@@ -93,6 +106,7 @@
       "name": "Mobility",
       "role": null,
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -101,6 +115,7 @@
       "name": "Venue",
       "role": null,
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -109,6 +124,7 @@
       "name": "Tech",
       "role": null,
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     },
     {
@@ -117,6 +133,7 @@
       "name": "General",
       "role": null,
       "assetType": null,
+      "costCentre": null,
       "balance": 0
     }
   ],
@@ -262,7 +279,28 @@
       "estimate": 0,
       "actual": 0,
       "forecast": 0
-    }
+    },
+    "costCentres": [
+      {
+        "costCentre": 1,
+        "categories": [],
+        "income": {
+          "estimate": 0,
+          "actual": 0,
+          "forecast": 0
+        },
+        "expense": {
+          "estimate": 0,
+          "actual": 0,
+          "forecast": 0
+        },
+        "result": {
+          "estimate": 0,
+          "actual": 0,
+          "forecast": 0
+        }
+      }
+    ]
   },
   "tickets": {
     "tiers": [],
@@ -284,5 +322,20 @@
     "cancellations": [],
     "sales": []
   },
-  "profitability": null
+  "profitability": null,
+  "costCentres": [
+    {
+      "id": 1,
+      "name": "Drinks",
+      "role": "drinks"
+    }
+  ],
+  "drinkProducts": [],
+  "drinks": {
+    "products": [],
+    "kept": 0,
+    "cost": 0,
+    "costPerDrink": null,
+    "invoice": null
+  }
 }

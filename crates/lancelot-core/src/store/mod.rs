@@ -26,13 +26,14 @@ use ts_rs::TS;
 pub use backup::{BackupPolicy, list as list_backups, taken_at as backup_time};
 
 use crate::book::{Book, Saved};
+use crate::drinks::{DrinkProductDraft, DrinkSettings};
 use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Depth, Report};
 use crate::ledger::BlockerOverride;
 use crate::model::{
-    AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, EventDetails,
-    Person, TxnId,
+    AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, CostCentreId,
+    DrinkProductId, EventDetails, Person, TxnId,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, TierId};
 use crate::money::Cents;
@@ -418,6 +419,53 @@ impl Store {
 
     pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.delete_budget_line(id).map(|_| ()))
+    }
+
+    // --- cost centres and Drinks (requirements §5.8) ---
+
+    pub fn add_cost_centre(&mut self, name: &str) -> Result<CostCentreId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_cost_centre(name))
+    }
+
+    pub fn rename_cost_centre(&mut self, id: CostCentreId, name: &str) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.rename_cost_centre(id, name))
+    }
+
+    pub fn delete_cost_centre(&mut self, id: CostCentreId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_cost_centre(id).map(|_| ()))
+    }
+
+    pub fn set_category_cost_centre(
+        &mut self,
+        category: AccountId,
+        cost_centre: Option<CostCentreId>,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            b.set_category_cost_centre(category, cost_centre)
+        })
+    }
+
+    pub fn add_drink_product(
+        &mut self,
+        draft: DrinkProductDraft,
+    ) -> Result<DrinkProductId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_drink_product(draft))
+    }
+
+    pub fn update_drink_product(
+        &mut self,
+        id: DrinkProductId,
+        draft: DrinkProductDraft,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.update_drink_product(id, draft))
+    }
+
+    pub fn delete_drink_product(&mut self, id: DrinkProductId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_drink_product(id).map(|_| ()))
+    }
+
+    pub fn set_drink_settings(&mut self, settings: DrinkSettings) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.set_drink_settings(settings))
     }
 
     // --- tickets (requirements §5.6) ---

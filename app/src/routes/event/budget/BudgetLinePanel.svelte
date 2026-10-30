@@ -15,6 +15,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
+	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -51,8 +52,12 @@
 	let quantity = $state('');
 	let unitPrice = $state<Cents | null>(null);
 	let complete = $state(false);
+	let costCentre = $state(0); // 0: none
+	const startsIn = (id: AccountId | null) =>
+		snapshot.accounts.find((a) => a.id === id)?.costCentre ?? 0;
 	untrack(() => {
 		category = line?.category ?? initialCategory;
+		costCentre = line ? (line.costCentre ?? 0) : startsIn(category);
 		description = line?.description ?? '';
 		complete = line?.complete ?? false;
 		const e = line?.estimate;
@@ -85,18 +90,14 @@
 	function draft(): BudgetLineDraft | null {
 		const missing = (field: string, message: string) => ((error = { field, message }), null);
 		if (category === null) return missing('category', 'choose a category');
+		const shared = { category, description, complete, costCentre: costCentre || null };
 		if (mode === 'amount') {
 			if (amount === null) return missing('estimate', 'enter an amount');
-			return { category, description, complete, estimate: { type: 'amount', amount } };
+			return { ...shared, estimate: { type: 'amount', amount } };
 		}
 		if (count === null) return missing('estimate.quantity', 'enter a whole number');
 		if (unitPrice === null) return missing('estimate.unitPrice', 'enter a price');
-		return {
-			category,
-			description,
-			complete,
-			estimate: { type: 'quantity', quantity: count, unitPrice }
-		};
+		return { ...shared, estimate: { type: 'quantity', quantity: count, unitPrice } };
 	}
 
 	async function save() {
@@ -156,10 +157,24 @@
 				options={categories}
 				addLabel="New expense category…"
 				error={fieldError('category')}
-				onchange={(v) => ((category = v), (error = null))}
+				onchange={(v) => {
+					if (v !== category) costCentre = startsIn(v);
+					category = v;
+					error = null;
+				}}
 				onadd={addCategory}
 			/>
 		</div>
+
+		<Select
+			label="Cost centre"
+			value={costCentre}
+			options={[
+				{ value: 0, label: 'None' },
+				...snapshot.costCentres.map((c) => ({ value: c.id, label: c.name }))
+			]}
+			onchange={(v) => (costCentre = v)}
+		/>
 
 		<div class="labelled">
 			<TextField

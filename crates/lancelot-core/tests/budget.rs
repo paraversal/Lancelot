@@ -9,6 +9,7 @@ use tempfile::TempDir;
 
 fn amount(category: AccountId, description: &str, estimate: &str) -> BudgetLineDraft {
     BudgetLineDraft {
+        cost_centre: None,
         category,
         description: description.into(),
         estimate: Estimate::Amount {
@@ -21,6 +22,7 @@ fn amount(category: AccountId, description: &str, estimate: &str) -> BudgetLineD
 fn linked(account: AccountId, value: &str, line: BudgetLineId) -> SplitLine {
     SplitLine {
         budget_line: Some(line),
+        cost_centre: None,
         ..split(account, value)
     }
 }
@@ -55,6 +57,7 @@ fn an_expense_line_forecasts_the_larger_of_estimate_and_actual() {
     book.update_budget_line(
         food,
         BudgetLineDraft {
+            cost_centre: None,
             complete: true,
             ..amount(kitchen, "Food", "1.000")
         },
@@ -64,6 +67,7 @@ fn an_expense_line_forecasts_the_larger_of_estimate_and_actual() {
     book.update_budget_line(
         food,
         BudgetLineDraft {
+            cost_centre: None,
             complete: true,
             ..amount(kitchen, "Food", "2.000")
         },
@@ -133,6 +137,7 @@ fn an_estimate_can_be_quantity_times_unit_price() {
     let drinks = expense(&book, "Drinks");
     let crates = book
         .add_budget_line(BudgetLineDraft {
+            cost_centre: None,
             estimate: Estimate::Quantity {
                 quantity: 40,
                 unit_price: eur("12,49"),
@@ -183,6 +188,7 @@ fn rejects_invalid_budget_lines() {
         }
     );
     let quantity = |quantity, unit_price| BudgetLineDraft {
+        cost_centre: None,
         estimate: Estimate::Quantity {
             quantity,
             unit_price,
@@ -310,6 +316,7 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
         .unwrap();
     let crates = store
         .add_budget_line(BudgetLineDraft {
+            cost_centre: None,
             estimate: Estimate::Quantity {
                 quantity: 40,
                 unit_price: eur("12,50"),
@@ -374,6 +381,7 @@ proptest! {
             let category = categories[c % categories.len()];
             let id = book
                 .add_budget_line(BudgetLineDraft {
+                    cost_centre: None,
                     category,
                     description: format!("line {i}"),
                     estimate: Estimate::Amount { amount: Cents::new(*cents).unwrap() },
@@ -394,6 +402,7 @@ proptest! {
                 amount: Cents::new(*cents).unwrap(),
                 memo: None,
                 budget_line,
+                cost_centre: None,
             };
             if book.account(category).unwrap().kind == AccountKind::Income {
                 earn(&mut book, vec![line]);

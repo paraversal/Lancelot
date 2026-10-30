@@ -5,12 +5,19 @@ CREATE TABLE meta (                    -- event_uuid, created_at, created_by, ne
   value TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE cost_centre (             -- R-CC-1, R-CC-2
+  id   INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT UNIQUE CHECK (role IN ('drinks'))
+) STRICT;
+
 CREATE TABLE account (
   id    INTEGER PRIMARY KEY,
   kind  TEXT NOT NULL CHECK (kind IN ('asset','person','income','expense','opening')),
   name  TEXT NOT NULL,
-  role  TEXT UNIQUE CHECK (role IN ('verein','cash_box','opening','tickets','ticket_fees','ticket_refunds')),
+  role  TEXT UNIQUE CHECK (role IN ('verein','cash_box','opening','tickets','ticket_fees','ticket_refunds','pfand')),
   asset_type TEXT CHECK (asset_type IN ('bank','cash')),   -- set exactly for assets
+  cost_centre_id INTEGER REFERENCES cost_centre(id),       -- what a new line of this category starts with
   CHECK ((kind = 'asset') = (asset_type IS NOT NULL))
 ) STRICT;
 
@@ -26,7 +33,9 @@ CREATE TABLE event (                   -- exactly one row
   closing_overrides TEXT NOT NULL DEFAULT '[]',  -- JSON
   ticket_tier_column  TEXT NOT NULL DEFAULT 'Ticket',     -- R-TKT-3
   ticket_order_column TEXT NOT NULL DEFAULT 'Order ID',
-  ticket_date_column  TEXT
+  ticket_date_column  TEXT,
+  drink_supplier      TEXT,                               -- R-DRK-5
+  price_per_strich    INTEGER CHECK (price_per_strich >= 0)  -- R-DRK-6
 ) STRICT;
 
 CREATE TABLE person (                  -- 1:1 extension of an account of kind 'person'
@@ -61,7 +70,16 @@ CREATE TABLE budget_line (             -- R-BUD-1; planning data only (R-BUD-5)
   quantity    INTEGER CHECK (quantity > 0),       -- or as quantity × unit price
   unit_price  INTEGER CHECK (unit_price >= 0),
   complete    INTEGER NOT NULL DEFAULT 0 CHECK (complete IN (0,1)),
+  cost_centre_id INTEGER REFERENCES cost_centre(id),
   CHECK ((amount IS NULL) = (quantity IS NOT NULL) AND (quantity IS NULL) = (unit_price IS NULL))
+) STRICT;
+
+CREATE TABLE drink_product (           -- R-DRK-5; the kept units and the cost are derived
+  id         INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  taken      INTEGER NOT NULL CHECK (taken >= 0),
+  returned   INTEGER NOT NULL CHECK (returned >= 0 AND returned <= taken),
+  unit_price INTEGER NOT NULL CHECK (unit_price >= 0)
 ) STRICT;
 
 CREATE TABLE ticket_tier (             -- R-TKT-1, R-TKT-10
@@ -128,10 +146,12 @@ CREATE TABLE line (
   amount       INTEGER NOT NULL CHECK (amount <> 0),
   memo         TEXT,
   budget_line_id INTEGER REFERENCES budget_line(id),   -- R-BUD-2
+  cost_centre_id INTEGER REFERENCES cost_centre(id),   -- R-CC-1
   UNIQUE (txn_id, position)
 ) STRICT;
 CREATE INDEX line_account ON line(account_id);
 CREATE INDEX line_budget_line ON line(budget_line_id);
+CREATE INDEX line_cost_centre ON line(cost_centre_id);
 
 CREATE TABLE closing_count (           -- R-ISO-3; opening counts are 'opening' transactions
   account_id INTEGER PRIMARY KEY REFERENCES account(id),
@@ -155,7 +175,8 @@ CREATE TABLE change_log (              -- R-TX-6
   id         INTEGER PRIMARY KEY,
   at         TEXT NOT NULL,            -- RFC 3339 UTC
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line',
-                                       -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation'
+                                       -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation',
+                                       -- 'cost_centre','drink_product'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

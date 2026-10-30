@@ -431,6 +431,7 @@ impl Book {
             amount,
             memo: None,
             budget_line: None,
+            cost_centre: None,
         };
 
         let mut wanted: BTreeMap<Origin, (Date, String, Option<String>, Vec<Line>)> =

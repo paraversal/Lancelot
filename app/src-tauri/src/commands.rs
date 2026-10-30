@@ -5,9 +5,10 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, EventDetails, ImportId,
-    ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, Resolution, TicketColumns,
-    TierDraft, TierId, TxnDraft, TxnId,
+    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, CostCentreId,
+    DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails, ImportId, ImportPreview,
+    ManualSaleDraft, ManualSaleId, Parsed, Person, Resolution, TicketColumns, TierDraft, TierId,
+    TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -262,6 +263,69 @@ pub async fn budget_line_update(
 #[tauri::command]
 pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) -> Result<OpenEvent> {
     with(&state, |s| s.delete_budget_line(id))
+}
+
+#[tauri::command]
+pub async fn cost_centre_add(state: State<'_, AppState>, name: String) -> Result<OpenEvent> {
+    with(&state, |s| s.add_cost_centre(&name))
+}
+
+#[tauri::command]
+pub async fn cost_centre_rename(
+    state: State<'_, AppState>,
+    id: CostCentreId,
+    name: String,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.rename_cost_centre(id, &name))
+}
+
+#[tauri::command]
+pub async fn cost_centre_delete(state: State<'_, AppState>, id: CostCentreId) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_cost_centre(id))
+}
+
+#[tauri::command]
+pub async fn category_set_cost_centre(
+    state: State<'_, AppState>,
+    category: AccountId,
+    cost_centre: Option<CostCentreId>,
+) -> Result<OpenEvent> {
+    with(&state, |s| {
+        s.set_category_cost_centre(category, cost_centre)
+    })
+}
+
+#[tauri::command]
+pub async fn drink_product_add(
+    state: State<'_, AppState>,
+    draft: DrinkProductDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_drink_product(draft))
+}
+
+#[tauri::command]
+pub async fn drink_product_update(
+    state: State<'_, AppState>,
+    id: DrinkProductId,
+    draft: DrinkProductDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_drink_product(id, draft))
+}
+
+#[tauri::command]
+pub async fn drink_product_delete(
+    state: State<'_, AppState>,
+    id: DrinkProductId,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_drink_product(id))
+}
+
+#[tauri::command]
+pub async fn drink_settings_set(
+    state: State<'_, AppState>,
+    settings: DrinkSettings,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.set_drink_settings(settings))
 }
 
 #[tauri::command]

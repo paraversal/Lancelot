@@ -15,6 +15,10 @@ import type { BackupInfo } from './generated/BackupInfo';
 import type { BlockerOverride } from './generated/BlockerOverride';
 import type { BudgetLineDraft } from './generated/BudgetLineDraft';
 import type { BudgetLineId } from './generated/BudgetLineId';
+import type { CostCentreId } from './generated/CostCentreId';
+import type { DrinkProductDraft } from './generated/DrinkProductDraft';
+import type { DrinkProductId } from './generated/DrinkProductId';
+import type { DrinkSettings } from './generated/DrinkSettings';
 import type { CancellationDraft } from './generated/CancellationDraft';
 import type { CancellationEdit } from './generated/CancellationEdit';
 import type { CancellationId } from './generated/CancellationId';
@@ -136,6 +140,21 @@ export const api = {
 		call<OpenEvent>('budget_line_update', { id, draft }),
 	/** The linked actuals stay and count as unbudgeted. */
 	deleteBudgetLine: (id: BudgetLineId) => call<OpenEvent>('budget_line_delete', { id }),
+
+	addCostCentre: (name: string) => call<OpenEvent>('cost_centre_add', { name }),
+	renameCostCentre: (id: CostCentreId, name: string) =>
+		call<OpenEvent>('cost_centre_rename', { id, name }),
+	/** What was tagged stays, without a tag. Not for Drinks. */
+	deleteCostCentre: (id: CostCentreId) => call<OpenEvent>('cost_centre_delete', { id }),
+	/** What a new line of the category starts with. */
+	setCategoryCostCentre: (category: AccountId, costCentre: CostCentreId | null) =>
+		call<OpenEvent>('category_set_cost_centre', { category, costCentre }),
+	addDrinkProduct: (draft: DrinkProductDraft) => call<OpenEvent>('drink_product_add', { draft }),
+	updateDrinkProduct: (id: DrinkProductId, draft: DrinkProductDraft) =>
+		call<OpenEvent>('drink_product_update', { id, draft }),
+	deleteDrinkProduct: (id: DrinkProductId) => call<OpenEvent>('drink_product_delete', { id }),
+	setDrinkSettings: (settings: DrinkSettings) =>
+		call<OpenEvent>('drink_settings_set', { settings }),
 
 	addTier: (draft: TierDraft) => call<OpenEvent>('tier_add', { draft }),
 	updateTier: (id: TierId, draft: TierDraft) => call<OpenEvent>('tier_update', { id, draft }),

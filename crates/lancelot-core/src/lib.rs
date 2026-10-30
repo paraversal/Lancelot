@@ -8,6 +8,7 @@ pub mod book;
 pub mod budget;
 mod csv;
 pub mod date;
+pub mod drinks;
 pub mod entry;
 pub mod error;
 pub mod export;
@@ -25,8 +26,11 @@ pub mod tickets;
 
 pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
 pub use book::{Book, BookParts, MAX_ATTACHMENT_SIZE, NextIds, Saved, Warning};
-pub use budget::{Budget, BudgetLineFigures, CategoryFigures, Figures};
+pub use budget::{Budget, BudgetLineFigures, CategoryFigures, CostCentreFigures, Figures};
 pub use date::{DateError, format_date, parse_date};
+pub use drinks::{
+    DrinkProduct, DrinkProductDraft, DrinkProductFigures, DrinkSettings, Drinks, InvoiceCheck,
+};
 pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, txn_amount};
 pub use error::DomainError;
 pub use export::transactions_csv;
@@ -38,8 +42,9 @@ pub use ledger::{
 };
 pub use model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, Estimate, Event, EventDetails,
-    ImportId, Line, ManualSaleId, Origin, Person, Role, TierId, Txn, TxnId, TxnKind,
+    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre, CostCentreId,
+    CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, ImportId, Line, ManualSaleId,
+    Origin, Person, Role, TierId, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};

@@ -9,10 +9,11 @@ use std::path::{Path, PathBuf};
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride,
     BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId,
-    DomainError, EventDetails, EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE,
-    ManualSaleDraft, ManualSaleId, Parsed, Person, Report, Resolution, Store, StoreOptions,
-    TicketColumns, TierDraft, TierId, TxnDraft, TxnId, backup_time, event_uuid_of, format_date,
-    list_backups, parse_amount, parse_date,
+    CostCentreId, DomainError, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
+    EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE, ManualSaleDraft, ManualSaleId,
+    Parsed, Person, Report, Resolution, Store, StoreOptions, TicketColumns, TierDraft, TierId,
+    TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups, parse_amount,
+    parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -416,6 +417,46 @@ impl Service {
     /// Deletes a tier that no import and no manual sale uses.
     pub fn delete_tier(&mut self, id: TierId) -> Result<OpenEvent> {
         self.change(|s| Ok(s.delete_tier(id)?))
+    }
+
+    pub fn add_cost_centre(&mut self, name: &str) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.add_cost_centre(name).map(|_| ())?))
+    }
+
+    pub fn rename_cost_centre(&mut self, id: CostCentreId, name: &str) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.rename_cost_centre(id, name)?))
+    }
+
+    pub fn delete_cost_centre(&mut self, id: CostCentreId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_cost_centre(id)?))
+    }
+
+    pub fn set_category_cost_centre(
+        &mut self,
+        category: AccountId,
+        cost_centre: Option<CostCentreId>,
+    ) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.set_category_cost_centre(category, cost_centre)?))
+    }
+
+    pub fn add_drink_product(&mut self, draft: DrinkProductDraft) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.add_drink_product(draft).map(|_| ())?))
+    }
+
+    pub fn update_drink_product(
+        &mut self,
+        id: DrinkProductId,
+        draft: DrinkProductDraft,
+    ) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.update_drink_product(id, draft)?))
+    }
+
+    pub fn delete_drink_product(&mut self, id: DrinkProductId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_drink_product(id)?))
+    }
+
+    pub fn set_drink_settings(&mut self, settings: DrinkSettings) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.set_drink_settings(settings)?))
     }
 
     pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<OpenEvent> {
@@ -851,12 +892,14 @@ mod tests {
                         amount: cents(24_890),
                         memo: None,
                         budget_line: None,
+                        cost_centre: None,
                     },
                     SplitLine {
                         account: mobility,
                         amount: cents(6_350),
                         memo: None,
                         budget_line: None,
+                        cost_centre: None,
                     },
                 ],
             },
@@ -910,6 +953,7 @@ mod tests {
                     amount: lancelot_core::Cents::new(500).unwrap(),
                     memo: None,
                     budget_line: None,
+                    cost_centre: None,
                 }],
             },
             total: None,
@@ -991,6 +1035,7 @@ mod tests {
             .account
             .id;
         let draft = |amount| lancelot_core::BudgetLineDraft {
+            cost_centre: None,
             category: kitchen,
             description: "Food".into(),
             estimate: lancelot_core::Estimate::Amount {
@@ -1006,6 +1051,7 @@ mod tests {
         assert_eq!(open.snapshot.budget.expense.estimate.get(), 120_000);
         let err = s
             .add_budget_line(lancelot_core::BudgetLineDraft {
+                cost_centre: None,
                 description: " ".into(),
                 ..draft(1)
             })
@@ -1272,6 +1318,7 @@ mod tests {
                     amount: lancelot_core::Cents::new(21_240).unwrap(),
                     memo: None,
                     budget_line: None,
+                    cost_centre: None,
                 }],
             },
             total: None,

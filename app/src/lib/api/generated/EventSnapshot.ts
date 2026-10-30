@@ -4,6 +4,9 @@ import type { Budget } from "./Budget";
 import type { BudgetLine } from "./BudgetLine";
 import type { CashStatus } from "./CashStatus";
 import type { ClosingCount } from "./ClosingCount";
+import type { CostCentre } from "./CostCentre";
+import type { DrinkProduct } from "./DrinkProduct";
+import type { Drinks } from "./Drinks";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
 import type { OpenItem } from "./OpenItem";
@@ -44,4 +47,16 @@ tickets: Tickets,
  * The projected result and break-even (R-TKT-9), once there is a budget and while the
  * event is open.
  */
-profitability: Profitability | null, };
+profitability: Profitability | null, 
+/**
+ * In creation order; the Drinks cost centre is always there (R-CC-2).
+ */
+costCentres: Array<CostCentre>, 
+/**
+ * The commission records, in creation order (R-DRK-5).
+ */
+drinkProducts: Array<DrinkProduct>, 
+/**
+ * The figures of the records and the invoice check.
+ */
+drinks: Drinks, };

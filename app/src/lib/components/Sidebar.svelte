@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The event's sidebar: name and dates, the pages with their counts, and the file name, which
-	// opens Settings. Drinks joins later in phase 2.
+	// opens Settings.
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { markerTravel } from '../motion/effects';
@@ -26,6 +26,7 @@
 			count: conflicts || snapshot.tickets.tiers.length || null,
 			attention: conflicts > 0
 		},
+		{ href: '/event/drinks', label: 'Drinks', count: snapshot.drinkProducts.length || null },
 		{ href: '/event/budget', label: 'Budget', count: snapshot.budgetLines.length || null }
 	]);
 	const dates = $derived(

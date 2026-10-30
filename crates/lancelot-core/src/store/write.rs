@@ -13,9 +13,11 @@ use time::OffsetDateTime;
 use super::StoreError;
 use super::codec::{date_text, enum_text, timestamp_text};
 use crate::book::Book;
+use crate::drinks::DrinkProduct;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineId, CancellationId,
-    ClosingCount, Estimate, ImportId, ManualSaleId, Origin, Person, TierId, Txn, TxnId,
+    ClosingCount, CostCentre, CostCentreId, DrinkProductId, Estimate, ImportId, ManualSaleId,
+    Origin, Person, TierId, Txn, TxnId,
 };
 use crate::tickets::{Cancellation, ManualSale, TicketImport, Tier};
 
@@ -98,7 +100,26 @@ pub(crate) fn persist(
         at: timestamp_text(now)?,
     };
 
-    // Accounts and persons first: everything else refers to them.
+    // Cost centres first: categories, budget lines and transaction lines refer to them; deleted
+    // ones go last.
+    fn cost_centres(b: Option<&Book>) -> Vec<(CostCentreId, &CostCentre)> {
+        b.map(|b| b.cost_centres().map(|c| (c.id, c)).collect())
+            .unwrap_or_default()
+    }
+    let centre_changes = diff(cost_centres(before), cost_centres(Some(after)));
+    for (id, change) in &centre_changes {
+        if let Change::Create(c) | Change::Update(_, c) = change {
+            let role = c.role.as_ref().map(enum_text).transpose()?;
+            conn.execute(
+                "INSERT INTO cost_centre (id, name, role) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (id) DO UPDATE SET name = excluded.name, role = excluded.role",
+                params![id.0, c.name, role],
+            )?;
+            log.write("cost_centre", id.0, change)?;
+        }
+    }
+
+    // Accounts and persons next: everything else refers to them.
     fn accounts(b: Option<&Book>) -> Vec<(AccountId, &Account)> {
         b.map(|b| b.accounts().map(|a| (a.id, a)).collect())
             .unwrap_or_default()
@@ -109,8 +130,16 @@ pub(crate) fn persist(
                 let role = a.role.as_ref().map(enum_text).transpose()?;
                 let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                 conn.execute(
-                    "INSERT INTO account (id, kind, name, role, asset_type) VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![id.0, enum_text(&a.kind)?, a.name, role, asset_type],
+                    "INSERT INTO account (id, kind, name, role, asset_type, cost_centre_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        id.0,
+                        enum_text(&a.kind)?,
+                        a.name,
+                        role,
+                        asset_type,
+                        a.cost_centre.map(|c| c.0)
+                    ],
                 )?;
             }
             Change::Update(_, a) => {
@@ -118,8 +147,9 @@ pub(crate) fn persist(
                 let role = a.role.as_ref().map(enum_text).transpose()?;
                 let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                 conn.execute(
-                    "UPDATE account SET name = ?2, role = ?3, asset_type = ?4 WHERE id = ?1",
-                    params![id.0, a.name, role, asset_type],
+                    "UPDATE account SET name = ?2, role = ?3, asset_type = ?4, cost_centre_id = ?5
+                     WHERE id = ?1",
+                    params![id.0, a.name, role, asset_type, a.cost_centre.map(|c| c.0)],
                 )?;
             }
             Change::Delete(_) => {
@@ -164,8 +194,9 @@ pub(crate) fn persist(
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
                                 default_reimbursement_account_id, closing_overrides,
-                                ticket_tier_column, ticket_order_column, ticket_date_column)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                                ticket_tier_column, ticket_order_column, ticket_date_column,
+                                drink_supplier, price_per_strich)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
                location = excluded.location, notes = excluded.notes, closed_at = excluded.closed_at,
@@ -173,7 +204,9 @@ pub(crate) fn persist(
                closing_overrides = excluded.closing_overrides,
                ticket_tier_column = excluded.ticket_tier_column,
                ticket_order_column = excluded.ticket_order_column,
-               ticket_date_column = excluded.ticket_date_column",
+               ticket_date_column = excluded.ticket_date_column,
+               drink_supplier = excluded.drink_supplier,
+               price_per_strich = excluded.price_per_strich",
             params![
                 d.name,
                 d.starts_on.map(date_text),
@@ -186,6 +219,8 @@ pub(crate) fn persist(
                 columns.tier,
                 columns.order,
                 columns.sale_date,
+                event.drinks.supplier,
+                event.drinks.price_per_strich.map(|p| p.get()),
             ],
         )?;
         match before.map(|b| b.event()) {
@@ -230,18 +265,52 @@ pub(crate) fn persist(
                     } => (None, Some(i64::from(quantity)), Some(unit_price.get())),
                 };
                 conn.execute(
-                    "INSERT INTO budget_line (id, category_id, description, amount, quantity, unit_price, complete)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    "INSERT INTO budget_line (id, category_id, description, amount, quantity, unit_price, complete, cost_centre_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                      ON CONFLICT (id) DO UPDATE SET
                        category_id = excluded.category_id, description = excluded.description,
                        amount = excluded.amount, quantity = excluded.quantity,
-                       unit_price = excluded.unit_price, complete = excluded.complete",
-                    params![id.0, d.category.0, d.description, amount, quantity, unit_price, d.complete],
+                       unit_price = excluded.unit_price, complete = excluded.complete,
+                       cost_centre_id = excluded.cost_centre_id",
+                    params![
+                        id.0,
+                        d.category.0,
+                        d.description,
+                        amount,
+                        quantity,
+                        unit_price,
+                        d.complete,
+                        d.cost_centre.map(|c| c.0)
+                    ],
                 )?;
                 log.write("budget_line", id.0, change)?;
             }
             Change::Delete(_) => {}
         }
+    }
+
+    fn products(b: Option<&Book>) -> Vec<(DrinkProductId, &DrinkProduct)> {
+        b.map(|b| b.drink_products().map(|p| (p.id, p)).collect())
+            .unwrap_or_default()
+    }
+    for (id, change) in diff(products(before), products(Some(after))) {
+        match &change {
+            Change::Create(p) | Change::Update(_, p) => {
+                let d = &p.draft;
+                conn.execute(
+                    "INSERT INTO drink_product (id, name, taken, returned, unit_price)
+                     VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT (id) DO UPDATE SET
+                       name = excluded.name, taken = excluded.taken, returned = excluded.returned,
+                       unit_price = excluded.unit_price",
+                    params![id.0, d.name, d.taken, d.returned, d.unit_price.get()],
+                )?;
+            }
+            Change::Delete(_) => {
+                conn.execute("DELETE FROM drink_product WHERE id = ?1", [id.0])?;
+            }
+        }
+        log.write("drink_product", id.0, &change)?;
     }
 
     // Tickets before the transactions generated from them; deleted ones after.
@@ -434,6 +503,13 @@ pub(crate) fn persist(
         }
     }
 
+    for (id, change) in &centre_changes {
+        if let Change::Delete(_) = change {
+            conn.execute("DELETE FROM cost_centre WHERE id = ?1", [id.0])?;
+            log.write("cost_centre", id.0, change)?;
+        }
+    }
+
     // New attachments, with their bytes.
     for (id, change) in &attachment_changes {
         if let Change::Create(a) = change {
@@ -489,6 +565,8 @@ pub(crate) fn persist(
             ("next_import_id", next.import),
             ("next_manual_sale_id", next.manual_sale),
             ("next_cancellation_id", next.cancellation),
+            ("next_cost_centre_id", next.cost_centre),
+            ("next_drink_product_id", next.drink_product),
         ] {
             conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
@@ -502,15 +580,16 @@ pub(crate) fn persist(
 fn write_lines(conn: &Connection, t: &Txn) -> Result<(), StoreError> {
     for (position, l) in t.lines.iter().enumerate() {
         conn.execute(
-            "INSERT INTO line (txn_id, position, account_id, amount, memo, budget_line_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO line (txn_id, position, account_id, amount, memo, budget_line_id, cost_centre_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 t.id.0,
                 position as i64,
                 l.account.0,
                 l.amount.get(),
                 l.memo,
-                l.budget_line.map(|b| b.0)
+                l.budget_line.map(|b| b.0),
+                l.cost_centre.map(|c| c.0)
             ],
         )?;
     }
