@@ -3,11 +3,12 @@ import type { CancellationView } from "./CancellationView";
 import type { ImportSummary } from "./ImportSummary";
 import type { ManualSaleView } from "./ManualSaleView";
 import type { OrderConflict } from "./OrderConflict";
+import type { SalesPoint } from "./SalesPoint";
 import type { TicketTotals } from "./TicketTotals";
 import type { TierFigures } from "./TierFigures";
 
 /**
- * Every ticket figure the UI shows (R-TKT-8 follows in M8).
+ * Every ticket figure the UI shows.
  */
 export type Tickets = { 
 /**
@@ -29,4 +30,8 @@ conflicts: Array<OrderConflict>,
 /**
  * Oldest first.
  */
-cancellations: Array<CancellationView>, };
+cancellations: Array<CancellationView>, 
+/**
+ * Sales over time, oldest first (R-TKT-8).
+ */
+sales: Array<SalesPoint>, };

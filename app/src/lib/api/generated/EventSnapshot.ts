@@ -10,6 +10,7 @@ import type { OpenItem } from "./OpenItem";
 import type { Payouts } from "./Payouts";
 import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
+import type { Profitability } from "./Profitability";
 import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
@@ -38,4 +39,9 @@ budget: Budget,
 /**
  * Tiers, imports and manual sales with their figures (R-TKT-1…7).
  */
-tickets: Tickets, };
+tickets: Tickets, 
+/**
+ * The projected result and break-even (R-TKT-9), once there is a budget and while the
+ * event is open.
+ */
+profitability: Profitability | null, };

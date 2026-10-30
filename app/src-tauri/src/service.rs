@@ -423,10 +423,10 @@ impl Service {
     }
 
     /// Reads a ticket sheet from disk and shows what importing it would change (R-TKT-5).
-    pub fn preview_tickets(&self, path: &Path) -> Result<ImportPreview> {
+    pub fn preview_tickets(&self, path: &Path, date: time::Date) -> Result<ImportPreview> {
         let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
         let (name, data) = read_sheet_file(path)?;
-        Ok(open.store.preview_ticket_import(&name, &data)?)
+        Ok(open.store.preview_ticket_import(&name, &data, date)?)
     }
 
     /// Imports a ticket sheet as the snapshot of `date`. `sha256` is the file the preview
@@ -439,7 +439,7 @@ impl Service {
     ) -> Result<OpenEvent> {
         let (name, data) = read_sheet_file(path)?;
         self.change(|s| {
-            if s.preview_ticket_import(&name, &data)?.sha256 != sha256 {
+            if s.preview_ticket_import(&name, &data, date)?.sha256 != sha256 {
                 return Err(ApiError::new(
                     "file_changed",
                     "the file changed since it was read; read it again",
@@ -1035,10 +1035,10 @@ mod tests {
         s.add_tier(tier("Early Bird", 2_500)).unwrap();
 
         // Regular is not a tier yet: the preview names it and the import is refused.
-        let sheet = fixtures.join("import-1.ods");
-        let preview = s.preview_tickets(&sheet).unwrap();
-        assert_eq!(preview.unknown[0].name, "Regular");
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
+        let sheet = fixtures.join("import-1.ods");
+        let preview = s.preview_tickets(&sheet, june(1)).unwrap();
+        assert_eq!(preview.unknown[0].name, "Regular");
         let err = s
             .import_tickets(&sheet, june(1), &preview.sha256)
             .unwrap_err();
@@ -1047,7 +1047,7 @@ mod tests {
         let open = s.add_tier(tier("Regular", 3_200)).unwrap();
         let regular = open.snapshot.tickets.tiers[1].tier.id;
         s.add_tier(tier("Supporter", 4_500)).unwrap();
-        let preview = s.preview_tickets(&sheet).unwrap();
+        let preview = s.preview_tickets(&sheet, june(1)).unwrap();
         assert!(preview.unknown.is_empty());
         // A file that is not the one previewed is not imported.
         let err = s.import_tickets(&sheet, june(1), "0000").unwrap_err();
@@ -1096,7 +1096,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(open.snapshot.event.ticket_columns.tier, "Kategorie");
-        assert!(s.preview_tickets(&sheet).is_err());
+        assert!(s.preview_tickets(&sheet, june(9)).is_err());
     }
 
     #[test]
@@ -1120,7 +1120,7 @@ mod tests {
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let import = |s: &mut Service, name: &str, day| {
             let path = fixtures.join(name);
-            let sha = s.preview_tickets(&path).unwrap().sha256;
+            let sha = s.preview_tickets(&path, june(day)).unwrap().sha256;
             s.import_tickets(&path, june(day), &sha).unwrap()
         };
         import(&mut s, "import-1.ods", 1);

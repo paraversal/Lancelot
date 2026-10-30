@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -236,9 +236,25 @@ Built in three steps, each in its own pull request.
 
 ### M8 · Ticket statistics and profitability
 
-- [ ] A single "sales over time" source. It is fed by import snapshots now and can switch to a sale date column later (R-TKT-8).
-- [ ] Stacked bars per snapshot, sold vs quota, revenue and cancellations.
-- [ ] Projected result and break-even, both overall and per tier (R-TKT-9). The ticket block appears on the Overview.
+Built in three steps, each in its own pull request.
+
+**M8a · Statistics core**
+
+- [x] Imports count in date order: the one with the latest date is the current sheet, and an older file only adds to the curve. The preview takes the snapshot date, counts from the import before it and says whether it becomes current.
+- [x] A single "sales over time" source (`sales.rs`), fed by import snapshots now and able to switch to a sale date column later (R-TKT-8). One point per import, plus a last one for manual sales and refunds dated later, so the curve ends on the current figures.
+- [x] Places against the quota: a cancelled ticket frees its place, whatever the refund, and stays sold for the money. The Tickets page shows places against the quota.
+- [x] Projected result and break-even, overall and per tier, with the places left (R-TKT-9). The projected result is the forecast, and the ticket categories forecast what is booked, so an estimate on them no longer counts the money twice.
+- [x] Property tests: the curve ends on the current figures, whatever the sheets and their dates, and the break-even count is the smallest that closes the gap.
+
+**M8b · Tickets page**
+
+- [x] Designs in `UI.fig`: the Tickets frame and `Tickets / Statistics`, with revenue, cancellations, break-even per tier and the states of the block.
+- [x] The break-even block beside the tiers, or under them with a panel open: the amount missing, about how many tickets close it, the places left when they fall short, and the count per tier. Without sales the estimate uses the average of the tiers; without tiers there is `+ Tier` (R-TKT-9).
+- [x] Stacked bars per snapshot, by places against the quota with the cancelled on top, or by net income (R-TKT-8).
+
+**M8c · Overview**
+
+- [x] The ticket block on the Overview: places against the quota, leading to the Tickets page. The break-even stands under the forecast while there is a gap, with the places left when they fall short (R-TKT-9).
 
 ### M9 · Cost centres and Drinks
 
@@ -275,4 +291,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M8: ticket statistics and profitability. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
+M9: cost centres and Drinks. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.

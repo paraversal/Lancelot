@@ -19,6 +19,7 @@
 	import Lock from '#lib/motion/Lock.svelte';
 	import { describe } from '#lib/openItems.ts';
 	import { session } from '#lib/state/session.svelte.ts';
+	import { totalQuota } from '#lib/tickets.ts';
 	import ClosePanel from './ClosePanel.svelte';
 	import CountPanel from './CountPanel.svelte';
 
@@ -29,6 +30,19 @@
 	const budget = $derived(snapshot.budget);
 	// The forecast (R-BUD-4) needs a budget, and means nothing once the event is closed.
 	const forecast = $derived(snapshot.budgetLines.length > 0 && !session.closed);
+	// What it takes to break even (R-TKT-9), once there is a gap and a tier to close it.
+	const breakEven = $derived(
+		snapshot.profitability?.gap && snapshot.profitability.tickets !== null
+			? snapshot.profitability
+			: null
+	);
+	const short = $derived(
+		breakEven?.placesLeft != null && breakEven.tickets! > breakEven.placesLeft
+	);
+	const tickets = $derived(snapshot.tickets);
+	const quota = $derived(totalQuota(tickets.tiers));
+	const hasTickets = $derived(tickets.tiers.length > 0);
+	const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 	let counting = $state<number | null>(null);
 	const a5 = $derived(level('A5'));
@@ -176,17 +190,51 @@
 						class:minus={budget.result.forecast < 0}
 						><MovingAmount value={budget.result.forecast} {format} sign="always" level={a5} /></span
 					>
-					<span class="note">planned {formatAmount(budget.result.estimate, format, 'always')}</span>
+					{#if breakEven}
+						<span class="note">
+							~{count(breakEven.tickets!, 'ticket', 'tickets')} to break even
+							{#if short}<span class="attention"
+									>· {count(breakEven.placesLeft ?? 0, 'place', 'places')} left</span
+								>{/if}
+						</span>
+					{:else}
+						<span class="note"
+							>planned {formatAmount(budget.result.estimate, format, 'always')}</span
+						>
+					{/if}
 				</button>
 			{/if}
-			<div class="figure">
-				<span class="label">Income</span>
-				<span class="total"><MovingAmount value={totals.income} {format} level={a5} /></span>
-			</div>
-			<div class="figure">
-				<span class="label">Expenses</span>
-				<span class="total"><MovingAmount value={totals.expense} {format} level={a5} /></span>
-			</div>
+			{#if hasTickets}
+				<button
+					type="button"
+					class="figure tickets"
+					data-testid="tickets"
+					onclick={() => goto('/event/tickets')}
+				>
+					<span class="label">Tickets<Icon name="chev" size={12} /></span>
+					<span class="total"
+						>{tickets.total.places}{#if quota !== null}{' '}<span class="quota">/ {quota}</span
+							>{/if}</span
+					>
+					{#if quota !== null}
+						<span class="bar" class:over={tickets.total.places > quota}>
+							<span style:width="{quota ? Math.min(100, (tickets.total.places / quota) * 100) : 0}%"
+							></span>
+						</span>
+					{/if}
+				</button>
+			{/if}
+			<!-- Beside both the forecast and the tickets, the In and Out rows carry these totals. -->
+			{#if !(forecast && hasTickets)}
+				<div class="figure">
+					<span class="label">Income</span>
+					<span class="total"><MovingAmount value={totals.income} {format} level={a5} /></span>
+				</div>
+				<div class="figure">
+					<span class="label">Expenses</span>
+					<span class="total"><MovingAmount value={totals.expense} {format} level={a5} /></span>
+				</div>
+			{/if}
 		</div>
 
 		{#if totals.income || totals.expense}
@@ -410,7 +458,8 @@
 		color: var(--color-ink-muted);
 	}
 
-	.forecast {
+	.forecast,
+	.tickets {
 		margin: 0;
 		border-top: none;
 		border-right: none;
@@ -422,9 +471,41 @@
 		cursor: pointer;
 	}
 
-	.forecast:hover .label {
+	.forecast:hover .label,
+	.tickets:hover .label {
 		text-decoration: underline;
 		text-underline-offset: 3px;
+	}
+
+	/* The bar gives way when a panel leaves the hero too little room. */
+	.tickets {
+		min-width: 170px;
+	}
+
+	.quota {
+		font-weight: 400;
+		color: var(--color-ink-muted);
+	}
+
+	.bar {
+		display: block;
+		width: 200px;
+		max-width: 100%;
+		height: 6px;
+		overflow: hidden;
+		border-radius: 3px;
+		background: var(--color-rule);
+	}
+
+	.bar span {
+		display: block;
+		height: 100%;
+		border-radius: 3px;
+		background: var(--color-ink);
+	}
+
+	.bar.over {
+		outline: 1px solid var(--color-attention);
 	}
 
 	.result {

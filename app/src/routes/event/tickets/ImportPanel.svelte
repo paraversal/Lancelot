@@ -38,27 +38,33 @@
 	const columns = $derived(snapshot.event.ticketColumns);
 
 	let path = $state<string | null>(null);
-	let date = $state<string | null>(new Date().toISOString().slice(0, 10));
+	const today = new Date().toISOString().slice(0, 10);
+	let date = $state<string | null>(today);
 	let preview = $state<ImportPreview | null>(null);
 	let reading = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
+	let reads = 0;
 	untrack(() => {
 		path = initialPath;
 		if (path) read();
 	});
 
+	// The changes depend on the date, so typing one reads again; only the last read counts.
 	async function read() {
 		if (!path) return;
+		const mine = ++reads;
 		reading = true;
 		error = null;
 		try {
-			preview = await api.previewTickets(path);
+			const read = await api.previewTickets(path, date ?? today);
+			if (mine === reads) preview = read;
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
+			if (mine !== reads) return;
 			preview = null;
 			error = { field: 'file', message: e.message };
 		} finally {
-			reading = false;
+			if (mine === reads) reading = false;
 		}
 	}
 
@@ -188,7 +194,10 @@
 					value={date}
 					{format}
 					required
-					oninput={(v) => (date = v)}
+					oninput={(v) => {
+						date = v;
+						if (v) read();
+					}}
 					oncommit={(v) => (date = v ?? date)}
 				/>
 			</div>
@@ -221,6 +230,13 @@
 					</div>
 				</div>
 			{/each}
+
+			{#if !preview.current}
+				<p class="older" role="note">
+					Dated before the latest import: it only adds to the sales over time, and the income stays
+					as it is.
+				</p>
+			{/if}
 
 			<div class="changes">
 				<div class="row head">
@@ -278,6 +294,7 @@
 					</div>
 				</div>
 			{/each}
+			<p class="note">The import with the latest date is the current sheet.</p>
 		</div>
 	{/if}
 
@@ -476,6 +493,18 @@
 	.delta.muted {
 		font-weight: 400;
 		color: var(--color-ink-muted);
+	}
+
+	.note {
+		margin: 0;
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+	}
+
+	.older {
+		margin: 0;
+		font-size: var(--type-xs);
+		color: var(--color-attention);
 	}
 
 	.problems {

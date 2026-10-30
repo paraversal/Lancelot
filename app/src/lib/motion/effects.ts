@@ -335,6 +335,17 @@ export function growBar(node: HTMLElement, level: Level, i = 0) {
 	});
 }
 
+/** D2: a column growing from the bottom, as the sales per import do. */
+export function growColumn(node: Element, level: Level, i = 0, count = 1) {
+	if (level === 'off') return;
+	const playful = isPlayful(level);
+	play(node, [{ transform: 'scaleY(0)' }, { transform: 'scaleY(1)' }], {
+		duration: playful ? 520 : 360,
+		delay: playful ? i * Math.min(40, 240 / count) : 0,
+		easing: playful ? easing('spring-soft') : easing('ease-out')
+	});
+}
+
 /** D4: "Matches the books" popping in. */
 export function popIn(_node: Element, { level }: { level: Level }): TransitionConfig {
 	if (level === 'off') return NONE;

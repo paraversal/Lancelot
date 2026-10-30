@@ -2,8 +2,9 @@
 //! what they add up to.
 //!
 //! The sheet is the source of truth for ticket income (R-TKT-11). Each import is kept as a
-//! snapshot of its orders, so later milestones can draw sales over time (R-TKT-8), and tickets
-//! that left the sheet become conflicts (R-TKT-12). Conflicts are derived from the imports; only
+//! snapshot of its orders, which gives the sales over time ([`crate::sales`]), and tickets that
+//! left the sheet become conflicts (R-TKT-12). Imports count in the order of their dates, so a
+//! file imported after the fact takes its place in the past. Conflicts are derived from the imports; only
 //! their resolutions are stored, as [`Cancellation`]s. The income and the refunds are generated
 //! by [`crate::Book`] (R-TKT-6, R-TKT-7, R-TKT-15).
 
@@ -16,6 +17,7 @@ use ts_rs::TS;
 use crate::error::DomainError;
 use crate::model::{AccountId, CancellationId, ImportId, ManualSaleId, Origin, TierId, TxnId};
 use crate::money::{BP_FULL, Cents, MoneyError, percent_bp, try_sum};
+use crate::sales::{SalesPoint, sales_over_time};
 use crate::sheet::{RowProblem, Sheet};
 
 /// The sheet's column names (R-TKT-3), saved in the event. Matched ignoring case.
@@ -25,7 +27,7 @@ use crate::sheet::{RowProblem, Sheet};
 pub struct TicketColumns {
     pub tier: String,
     pub order: String,
-    /// Not read yet: the statistics switch to sale dates once the sheet has them (R-TKT-8).
+    /// Not read yet: the sales over time switch to sale dates once the sheet has them (R-TKT-8).
     pub sale_date: Option<String>,
 }
 
@@ -263,10 +265,13 @@ pub(crate) fn orders(sheet: &Sheet, tiers: &BTreeMap<TierId, Tier>) -> Orders {
 pub struct ImportPreview {
     pub filename: String,
     pub sha256: String,
-    /// The same file as the latest import.
+    /// The same file as the import the changes are counted from.
     pub same_file: bool,
-    /// The import the changes are counted from.
+    /// The import the changes are counted from: the latest one up to the snapshot date.
     pub previous: Option<ImportId>,
+    /// Whether it becomes the sheet the income comes from. If an import is dated later, that one
+    /// stays current and this one only adds to the sales over time.
+    pub current: bool,
     /// Tickets in the sheet that belong to a known tier.
     pub tickets: u32,
     /// Tier names that match no tier or alias. They block the import until mapped.
@@ -310,6 +315,7 @@ pub(crate) fn preview(
     sheet: &Sheet,
     tiers: &BTreeMap<TierId, Tier>,
     previous: Option<&TicketImport>,
+    current: bool,
 ) -> ImportPreview {
     let Orders { orders, unknown } = orders(sheet, tiers);
     let key = |o: &OrderCount| (o.order.clone(), o.tier);
@@ -352,6 +358,7 @@ pub(crate) fn preview(
         sha256: sheet.sha256.clone(),
         same_file: previous.is_some_and(|p| p.sha256 == sheet.sha256),
         previous: previous.map(|p| p.id),
+        current,
         tickets: orders.iter().map(|o| o.count).sum(),
         unknown,
         problems: sheet.problems.clone(),
@@ -424,6 +431,13 @@ pub(crate) fn clean_tier(
     Ok(draft)
 }
 
+/// The imports in the order they count in: by date, then by id. The last one is the current one.
+pub(crate) fn by_date(imports: &BTreeMap<ImportId, TicketImport>) -> Vec<&TicketImport> {
+    let mut ordered: Vec<&TicketImport> = imports.values().collect();
+    ordered.sort_by_key(|i| (i.date, i.id));
+    ordered
+}
+
 /// Tickets that left the sheet, per order and tier, set against their resolutions.
 pub(crate) struct Reckoning {
     /// Unresolved tickets per order and tier, and the import that last removed some.
@@ -433,17 +447,22 @@ pub(crate) struct Reckoning {
     pub gone: BTreeMap<CancellationId, u32>,
     /// Cancelled tickets no longer in the sheet per tier: still sold (R-TKT-15).
     pub cancelled: BTreeMap<TierId, u32>,
+    /// Sold tickets per tier whose place is free again: every cancelled one, whether it left the
+    /// sheet or not and whatever the refund. Corrections were never sold.
+    pub freed: BTreeMap<TierId, u32>,
 }
 
 /// An order's tickets of a tier are missing when it has fewer than it ever had, so tickets that
-/// come back fill the gap first and a growing tier hides nothing (R-TKT-12).
+/// come back fill the gap first and a growing tier hides nothing (R-TKT-12). `imports` come in
+/// the order of [`by_date`]. With `until`, a place is free only from its cancellation's date on.
 pub(crate) fn reckon(
-    imports: &BTreeMap<ImportId, TicketImport>,
+    imports: &[&TicketImport],
     cancellations: &BTreeMap<CancellationId, Cancellation>,
+    until: Option<Date>,
 ) -> Reckoning {
     // (most ever, now, the import that last lowered it)
     let mut seen: BTreeMap<(&str, TierId), (u32, u32, ImportId)> = BTreeMap::new();
-    for import in imports.values() {
+    for import in imports {
         let now: BTreeMap<(&str, TierId), u32> = import
             .orders
             .iter()
@@ -468,8 +487,11 @@ pub(crate) fn reckon(
         .map(|(key, s)| (*key, s.0 - s.1))
         .filter(|(_, missing)| *missing > 0)
         .collect();
+    let mut in_sheet: BTreeMap<(&str, TierId), u32> =
+        seen.iter().map(|(key, s)| (*key, s.1)).collect();
     let mut gone = BTreeMap::new();
     let mut cancelled: BTreeMap<TierId, u32> = BTreeMap::new();
+    let mut freed: BTreeMap<TierId, u32> = BTreeMap::new();
     for c in cancellations.values() {
         let mut count = 0;
         if let Some(order) = &c.order
@@ -481,6 +503,21 @@ pub(crate) fn reckon(
         gone.insert(c.id, count);
         if c.terms.is_some() && count > 0 {
             *cancelled.entry(c.tier).or_insert(0) += count;
+        }
+        if c.terms.is_some_and(|t| until.is_none_or(|d| t.date <= d)) {
+            // Tickets it holds in the sheet, unless the order no longer has them. On a manual
+            // sale, all of them.
+            let staying = match &c.order {
+                Some(order) => in_sheet
+                    .get_mut(&(order.as_str(), c.tier))
+                    .map_or(0, |held| {
+                        let staying = (c.count - count).min(*held);
+                        *held -= staying;
+                        staying
+                    }),
+                None => c.count,
+            };
+            *freed.entry(c.tier).or_insert(0) += count + staying;
         }
     }
     let unresolved = left
@@ -495,6 +532,7 @@ pub(crate) fn reckon(
         unresolved,
         gone,
         cancelled,
+        freed,
     }
 }
 
@@ -567,7 +605,7 @@ pub struct CancellationView {
     pub txn: Option<TxnId>,
 }
 
-/// Every ticket figure the UI shows (R-TKT-8 follows in M8).
+/// Every ticket figure the UI shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
@@ -583,6 +621,8 @@ pub struct Tickets {
     pub conflicts: Vec<OrderConflict>,
     /// Oldest first.
     pub cancellations: Vec<CancellationView>,
+    /// Sales over time, oldest first (R-TKT-8).
+    pub sales: Vec<SalesPoint>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -606,6 +646,9 @@ pub struct TicketTotals {
     pub manual: u32,
     /// All three together.
     pub sold: u32,
+    /// Places taken against the quota: sold minus every cancelled ticket, also the ones still
+    /// in the sheet or on a manual sale.
+    pub places: u32,
     /// Removed from the sheet without a resolution: not sold for now (R-TKT-16).
     pub unresolved: u32,
     /// Sold × price.
@@ -653,29 +696,16 @@ impl Tickets {
 
     pub(crate) fn compute(
         tiers: &BTreeMap<TierId, Tier>,
-        imports: &BTreeMap<ImportId, TicketImport>,
+        imports_by_id: &BTreeMap<ImportId, TicketImport>,
         sales: &BTreeMap<ManualSaleId, ManualSale>,
         cancellations: &BTreeMap<CancellationId, Cancellation>,
         generated: &BTreeMap<Origin, TxnId>,
         verein: Option<AccountId>,
     ) -> Result<Tickets, DomainError> {
-        let reckoning = reckon(imports, cancellations);
-        let sheet = imports
-            .values()
-            .last()
-            .map(|i| i.counts())
-            .unwrap_or_default();
-        let mut manual: BTreeMap<TierId, u32> = BTreeMap::new();
-        for s in sales.values() {
-            *manual.entry(s.draft.tier).or_insert(0) += s.draft.count;
-        }
-        let mut unresolved: BTreeMap<TierId, u32> = BTreeMap::new();
-        for ((_, tier), (count, _)) in &reckoning.unresolved {
-            *unresolved.entry(*tier).or_insert(0) += count;
-        }
+        let imports = by_date(imports_by_id);
+        let reckoning = reckon(&imports, cancellations, None);
 
         let mut views = Vec::new();
-        let mut refunds: BTreeMap<TierId, Cents> = BTreeMap::new();
         for c in cancellations.values() {
             let price = tiers.get(&c.tier).map_or(Cents::ZERO, |t| t.draft.price);
             let per_ticket = match &c.terms {
@@ -683,8 +713,6 @@ impl Tickets {
                 None => Cents::ZERO,
             };
             let refund = per_ticket.checked_mul(i64::from(c.count))?;
-            let sum = refunds.entry(c.tier).or_default();
-            *sum = sum.checked_add(refund)?;
             views.push(CancellationView {
                 order: c.order.clone(),
                 gone_now: reckoning.gone.get(&c.id).copied().unwrap_or(0),
@@ -701,47 +729,19 @@ impl Tickets {
             });
         }
 
-        let mut figures = Vec::new();
-        for t in tiers.values() {
-            let in_sheet = sheet.get(&t.id).copied().unwrap_or(0);
-            let cancelled = reckoning.cancelled.get(&t.id).copied().unwrap_or(0);
-            let manual = manual.get(&t.id).copied().unwrap_or(0);
-            let sold = in_sheet + cancelled + manual;
-            let gross = t.draft.price.checked_mul(i64::from(sold))?;
-            let fees = t.fee()?.checked_mul(i64::from(in_sheet + cancelled))?;
-            let refunds = refunds.get(&t.id).copied().unwrap_or_default();
-            figures.push(TierFigures {
-                tier: t.clone(),
-                figures: TicketTotals {
-                    sheet: in_sheet,
-                    cancelled,
-                    manual,
-                    sold,
-                    unresolved: unresolved.get(&t.id).copied().unwrap_or(0),
-                    gross,
-                    fees,
-                    refunds,
-                    net: gross.checked_sub(fees)?.checked_sub(refunds)?,
-                },
-            });
-        }
-        let sum = |f: fn(&TicketTotals) -> Cents| try_sum(figures.iter().map(|t| f(&t.figures)));
-        let count = |f: fn(&TicketTotals) -> u32| figures.iter().map(|t| f(&t.figures)).sum();
-        let total = TicketTotals {
-            sheet: count(|t| t.sheet),
-            cancelled: count(|t| t.cancelled),
-            manual: count(|t| t.manual),
-            sold: count(|t| t.sold),
-            unresolved: count(|t| t.unresolved),
-            gross: sum(|t| t.gross)?,
-            fees: sum(|t| t.fees)?,
-            refunds: sum(|t| t.refunds)?,
-            net: sum(|t| t.net)?,
-        };
-        let conflicts = order_conflicts(&reckoning, imports, cancellations);
+        let (per_tier, total) = figures_at(tiers, &imports, sales, cancellations, None)?;
+        let figures = per_tier
+            .into_iter()
+            .filter_map(|(id, figures)| {
+                let tier = tiers.get(&id)?.clone();
+                Some(TierFigures { tier, figures })
+            })
+            .collect();
+        let conflicts = order_conflicts(&reckoning, &imports, cancellations);
+        let sales_points = sales_over_time(tiers, &imports, sales, cancellations)?;
 
         let imports = imports
-            .values()
+            .iter()
             .map(|i| {
                 let counts: Vec<TierCount> = i
                     .counts()
@@ -749,7 +749,7 @@ impl Tickets {
                     .map(|(tier, count)| TierCount { tier, count })
                     .collect();
                 ImportSummary {
-                    import: i.clone(),
+                    import: (*i).clone(),
                     tickets: counts.iter().map(|c| c.count).sum(),
                     counts,
                 }
@@ -776,8 +776,83 @@ impl Tickets {
             manual_sales,
             conflicts,
             cancellations: views,
+            sales: sales_points,
         })
     }
+}
+
+/// Tickets and money per tier, in creation order, and in total, with the sheets known at one
+/// moment: `imports` in the order of [`by_date`], and manual sales and refunds up to `until`.
+pub(crate) fn figures_at(
+    tiers: &BTreeMap<TierId, Tier>,
+    imports: &[&TicketImport],
+    sales: &BTreeMap<ManualSaleId, ManualSale>,
+    cancellations: &BTreeMap<CancellationId, Cancellation>,
+    until: Option<Date>,
+) -> Result<(Vec<(TierId, TicketTotals)>, TicketTotals), DomainError> {
+    let by_then = |date: Date| until.is_none_or(|d| date <= d);
+    let reckoning = reckon(imports, cancellations, until);
+    let sheet = imports.last().map(|i| i.counts()).unwrap_or_default();
+    let mut manual: BTreeMap<TierId, u32> = BTreeMap::new();
+    for s in sales.values().filter(|s| by_then(s.draft.date)) {
+        *manual.entry(s.draft.tier).or_insert(0) += s.draft.count;
+    }
+    let mut unresolved: BTreeMap<TierId, u32> = BTreeMap::new();
+    for ((_, tier), (count, _)) in &reckoning.unresolved {
+        *unresolved.entry(*tier).or_insert(0) += count;
+    }
+    let mut refunds: BTreeMap<TierId, Cents> = BTreeMap::new();
+    for c in cancellations.values() {
+        let Some(terms) = c.terms.filter(|t| by_then(t.date)) else {
+            continue;
+        };
+        let price = tiers.get(&c.tier).map_or(Cents::ZERO, |t| t.draft.price);
+        let refund = percent_bp(price, terms.refund_bp)?.checked_mul(i64::from(c.count))?;
+        let sum = refunds.entry(c.tier).or_default();
+        *sum = sum.checked_add(refund)?;
+    }
+
+    let mut figures = Vec::new();
+    for t in tiers.values() {
+        let in_sheet = sheet.get(&t.id).copied().unwrap_or(0);
+        let cancelled = reckoning.cancelled.get(&t.id).copied().unwrap_or(0);
+        let manual = manual.get(&t.id).copied().unwrap_or(0);
+        let sold = in_sheet + cancelled + manual;
+        let gross = t.draft.price.checked_mul(i64::from(sold))?;
+        let fees = t.fee()?.checked_mul(i64::from(in_sheet + cancelled))?;
+        let refunds = refunds.get(&t.id).copied().unwrap_or_default();
+        figures.push((
+            t.id,
+            TicketTotals {
+                sheet: in_sheet,
+                cancelled,
+                manual,
+                sold,
+                // A cancellation can be dated before its manual sale.
+                places: sold.saturating_sub(reckoning.freed.get(&t.id).copied().unwrap_or(0)),
+                unresolved: unresolved.get(&t.id).copied().unwrap_or(0),
+                gross,
+                fees,
+                refunds,
+                net: gross.checked_sub(fees)?.checked_sub(refunds)?,
+            },
+        ));
+    }
+    let sum = |f: fn(&TicketTotals) -> Cents| try_sum(figures.iter().map(|(_, t)| f(t)));
+    let count = |f: fn(&TicketTotals) -> u32| figures.iter().map(|(_, t)| f(t)).sum();
+    let total = TicketTotals {
+        sheet: count(|t| t.sheet),
+        cancelled: count(|t| t.cancelled),
+        manual: count(|t| t.manual),
+        sold: count(|t| t.sold),
+        places: count(|t| t.places),
+        unresolved: count(|t| t.unresolved),
+        gross: sum(|t| t.gross)?,
+        fees: sum(|t| t.fees)?,
+        refunds: sum(|t| t.refunds)?,
+        net: sum(|t| t.net)?,
+    };
+    Ok((figures, total))
 }
 
 /// Who pays a refund nobody chose a payer for: whoever received the money (R-TKT-15).
@@ -796,7 +871,7 @@ pub(crate) fn default_payer(
 /// order gained meanwhile.
 fn order_conflicts(
     reckoning: &Reckoning,
-    imports: &BTreeMap<ImportId, TicketImport>,
+    imports: &[&TicketImport],
     cancellations: &BTreeMap<CancellationId, Cancellation>,
 ) -> Vec<OrderConflict> {
     let mut conflicts: BTreeMap<&str, OrderConflict> = BTreeMap::new();
@@ -834,10 +909,15 @@ fn order_conflicts(
             });
     }
 
-    let latest = imports.values().next_back();
+    let latest = imports.last().copied();
     for (order, conflict) in &mut conflicts {
-        let since = conflict.removed.iter().map(|r| r.since).max();
-        let before = since.and_then(|since| imports.range(..since).next_back().map(|(_, i)| i));
+        // The import before the one that last removed something.
+        let since = conflict
+            .removed
+            .iter()
+            .filter_map(|r| imports.iter().position(|i| i.id == r.since))
+            .max();
+        let before = since.and_then(|at| at.checked_sub(1)).map(|at| imports[at]);
         let of = |i: Option<&TicketImport>, tier: TierId| {
             i.into_iter()
                 .flat_map(|i| &i.orders)
@@ -961,6 +1041,7 @@ mod tests {
             ]),
             &tiers,
             Some(&first),
+            true,
         );
         assert_eq!(
             p.tiers,

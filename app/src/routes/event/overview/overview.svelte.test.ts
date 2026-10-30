@@ -70,6 +70,92 @@ describe('Overview', () => {
 		expect(screen.queryByTestId('forecast')).toBeNull();
 	});
 
+	describe('with tickets', () => {
+		const tier = (id: number, quota: number | null, places: number) =>
+			({
+				...structuredClone(snapshot.tickets.total),
+				id,
+				name: `T${id}`,
+				price: 2000,
+				feeBp: 0,
+				quota,
+				aliases: [],
+				places
+			}) as EventSnapshot['tickets']['tiers'][number];
+		const open = (
+			tiers: EventSnapshot['tickets']['tiers'],
+			profitability: Partial<NonNullable<EventSnapshot['profitability']>> = {}
+		) => {
+			const next = structuredClone(snapshot);
+			next.tickets.tiers = tiers;
+			next.tickets.total.places = tiers.reduce((n, t) => n + t.places, 0);
+			next.profitability = { ...next.profitability!, ...profitability };
+			session.update({ ...session.event!, snapshot: next });
+			render(Overview);
+		};
+
+		it('shows places against the quota and leads to the tickets', async () => {
+			open([tier(1, 200, 150), tier(2, 100, 64)]);
+			const figure = screen.getByTestId('tickets');
+			expect(text(figure)).toBe('Tickets 214 / 300');
+			expect(figure.querySelector<HTMLElement>('.bar span')!.style.width).toBe(
+				`${(214 / 300) * 100}%`
+			);
+			await fireEvent.click(figure);
+			expect(goto).toHaveBeenCalledWith('/event/tickets');
+		});
+
+		it('has no quota or bar when a tier has no quota', () => {
+			open([tier(1, 200, 150), tier(2, null, 64)]);
+			const figure = screen.getByTestId('tickets');
+			expect(text(figure)).toBe('Tickets 214');
+			expect(figure.querySelector('.bar')).toBeNull();
+		});
+
+		it('is absent without tiers', () => {
+			open([]);
+			expect(screen.queryByTestId('tickets')).toBeNull();
+			expect(screen.getByText('Income')).toBeTruthy();
+		});
+
+		it('shows the break-even under the forecast while there is a gap', () => {
+			open([tier(1, 200, 150)], { gap: 21200, tickets: 9, placesLeft: 50 });
+			expect(text(screen.getByTestId('forecast'))).toBe(
+				'Forecast +1.765,00 € ~9 tickets to break even'
+			);
+		});
+
+		it('says when the places left fall short', () => {
+			open([tier(1, 200, 199)], { gap: 21200, tickets: 9, placesLeft: 1 });
+			expect(text(screen.getByTestId('forecast'))).toContain(
+				'~9 tickets to break even · 1 place left'
+			);
+		});
+
+		it('keeps the plan once break-even is reached', () => {
+			open([tier(1, 200, 150)], { gap: 0, tickets: 0, placesLeft: 50 });
+			expect(text(screen.getByTestId('forecast'))).toBe('Forecast +1.765,00 € planned +2.305,00 €');
+		});
+
+		it('leaves income and expenses to the bars beside forecast and tickets', () => {
+			open([tier(1, 200, 150)]);
+			expect(screen.queryByText('Income')).toBeNull();
+			expect(screen.queryByText('Expenses')).toBeNull();
+		});
+
+		it('keeps them when the forecast is gone', () => {
+			const next = structuredClone(snapshot);
+			next.tickets.tiers = [tier(1, 200, 150)];
+			next.tickets.total.places = 150;
+			next.budgetLines = [];
+			next.profitability = null;
+			session.update({ ...session.event!, snapshot: next });
+			render(Overview);
+			expect(screen.getByTestId('tickets')).toBeTruthy();
+			expect(screen.getByText('Income')).toBeTruthy();
+		});
+	});
+
 	it('leads from an open item to its fix', async () => {
 		render(Overview);
 		await fireEvent.click(screen.getByText('Anna is owed'));

@@ -292,8 +292,13 @@ pub async fn ticket_columns_set(
 }
 
 #[tauri::command]
-pub async fn tickets_preview(state: State<'_, AppState>, path: PathBuf) -> Result<ImportPreview> {
-    with(&state, |s| s.preview_tickets(&path))
+pub async fn tickets_preview(
+    state: State<'_, AppState>,
+    path: PathBuf,
+    date: String,
+) -> Result<ImportPreview> {
+    let date = lancelot_core::parse_date(&date)?;
+    with(&state, |s| s.preview_tickets(&path, date))
 }
 
 #[tauri::command]

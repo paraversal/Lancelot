@@ -1,6 +1,8 @@
 // Ticket helpers for the Tickets page. Fees are basis points (R-TKT-10): `250` is 2,5 %. The
 // fee field takes a percentage with at most two decimals; the core checks it against the price.
 import type { NumberFormat } from './api/generated/NumberFormat';
+import type { SalesPoint } from './api/generated/SalesPoint';
+import type { TierFigures } from './api/generated/TierFigures';
 import type { Tickets } from './api/generated/Tickets';
 
 /** `2,5 %` (De) or `2.5%` (En), without trailing zeros. */
@@ -50,4 +52,52 @@ export function shortDay(iso: string): string {
 		day: 'numeric',
 		month: 'short'
 	});
+}
+
+export type SalesView = 'tickets' | 'revenue';
+
+/** One column of the sales chart. A segment's `tier` is its index among the tiers. */
+export type SalesBar = {
+	point: SalesPoint;
+	/** Places in tickets, net income in revenue, as written over the column. */
+	value: number;
+	segments: { tier: number; value: number }[];
+	/** Sold but no longer taking a place. Only in tickets. */
+	cancelled: number;
+	/** The height to scale: the segments and what was cancelled. */
+	size: number;
+};
+
+/** What the chart draws per point: places by tier under the cancelled, or net income by tier. */
+export function salesBars(points: SalesPoint[], view: SalesView): SalesBar[] {
+	return points.map((point) => {
+		const segments = point.tiers.map((t, tier) => ({
+			tier,
+			value: view === 'tickets' ? t.places : Math.max(0, t.net)
+		}));
+		const cancelled = view === 'tickets' ? point.total.sold - point.total.places : 0;
+		return {
+			point,
+			value: view === 'tickets' ? point.total.places : point.total.net,
+			segments,
+			cancelled,
+			size: segments.reduce((n, s) => n + s.value, cancelled)
+		};
+	});
+}
+
+/** The places of all tiers, or null when a tier has no quota and the total means nothing. */
+export function totalQuota(tiers: TierFigures[]): number | null {
+	if (!tiers.length) return null;
+	let total = 0;
+	for (const t of tiers) {
+		if (t.quota === null) return null;
+		total += t.quota;
+	}
+	return total;
+}
+
+/** Which date labels fit: every `step`th, counted from the last, which always shows. */
+export function labelStep(count: number, width: number, labelWidth = 48): number {
+	return Math.max(1, Math.ceil(count / Math.max(1, Math.floor(width / labelWidth))));
 }
