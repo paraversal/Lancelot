@@ -19,6 +19,11 @@ import type { OpenEvent } from '../generated/OpenEvent';
 import type { RecentEvent } from '../generated/RecentEvent';
 import type { ImportPreview } from '../generated/ImportPreview';
 import type { Line } from '../generated/Line';
+import type { CancellationDraft } from '../generated/CancellationDraft';
+import type { CancellationEdit } from '../generated/CancellationEdit';
+import type { CancellationView } from '../generated/CancellationView';
+import type { RefundTerms } from '../generated/RefundTerms';
+import type { Resolution } from '../generated/Resolution';
 import type { ManualSaleDraft } from '../generated/ManualSaleDraft';
 import type { TicketColumns } from '../generated/TicketColumns';
 import type { TierDraft } from '../generated/TierDraft';
@@ -424,8 +429,9 @@ function rebudget(s: EventSnapshot) {
 }
 
 // Tickets in the mock. The ticket sheets are made up: each "file" is a list of (order, tier)
-// rows, so the import panel shows unknown tiers, removals and unread rows. Figures and the
-// generated income follow the core's rules (R-TKT-6, R-TKT-7); balances are not recomputed.
+// rows, so the import panel shows unknown tiers, removals and unread rows. Figures, conflicts
+// and the generated income follow the core's rules (R-TKT-6, R-TKT-7, R-TKT-12 to R-TKT-16);
+// balances are not recomputed.
 const SHEETS: Record<string, { rows: Record<string, number>; problems: number[] }> = {
 	'tickets-02-06.ods': { rows: { 'Early Bird': 40, Regular: 60, Supporter: 8 }, problems: [] },
 	'tickets-09-06.ods': {
@@ -544,6 +550,55 @@ function checkSale(s: EventSnapshot, d: ManualSaleDraft): ManualSaleDraft {
 	return { ...d, reference: d.reference?.trim() || null };
 }
 
+/** The core's `reckon`: what left the sheet, set against the resolutions, and the conflicts. */
+function reckon(s: EventSnapshot) {
+	const seen = new Map<string, { most: number; now: number; since: number }>();
+	for (const i of s.tickets.imports) {
+		const orders = importOrders.get(i.id) ?? new Map<string, number>();
+		for (const [key, v] of seen) {
+			const now = orders.get(key) ?? 0;
+			if (now < v.now) v.since = i.id;
+			v.now = now;
+		}
+		for (const [key, now] of orders) {
+			const v = seen.get(key) ?? { most: 0, now: 0, since: i.id };
+			v.most = Math.max(v.most, now);
+			v.now = now;
+			seen.set(key, v);
+		}
+	}
+	const left = new Map([...seen].map(([key, v]) => [key, v.most - v.now]));
+	const gone = new Map<number, number>();
+	const cancelled = new Map<number, number>();
+	for (const c of s.tickets.cancellations) {
+		const key = `${c.order}|${c.tier}`;
+		const count = c.order !== null ? Math.min(c.gone, left.get(key) ?? 0) : 0;
+		if (c.order !== null) left.set(key, (left.get(key) ?? 0) - count);
+		gone.set(c.id, count);
+		if (c.terms && count) cancelled.set(c.tier, (cancelled.get(c.tier) ?? 0) + count);
+	}
+	const conflicts = new Map<string, EventSnapshot['tickets']['conflicts'][number]>();
+	const unresolved = new Map<number, number>();
+	for (const [key, count] of [...left].sort(([a], [b]) => (a < b ? -1 : 1))) {
+		if (count <= 0) continue;
+		const [order, tier] = [key.split('|')[0], Number(key.split('|')[1])];
+		unresolved.set(tier, (unresolved.get(tier) ?? 0) + count);
+		let rest = count;
+		const matches = [];
+		for (const c of s.tickets.cancellations) {
+			const free = c.count - c.gone;
+			if (!c.terms || c.order !== order || c.tier !== tier || !free || !rest) continue;
+			const n = Math.min(free, rest);
+			rest -= n;
+			matches.push({ cancellation: c.id, count: n, refundBp: c.terms.refundBp });
+		}
+		const conflict = conflicts.get(order) ?? { order, removed: [], added: [] };
+		conflict.removed.push({ tier, count, since: seen.get(key)!.since, matches });
+		conflicts.set(order, conflict);
+	}
+	return { gone, cancelled, unresolved, conflicts: [...conflicts.values()] };
+}
+
 function retickets(s: EventSnapshot) {
 	const latest = s.tickets.imports.at(-1);
 	const sheet = new Map<number, number>();
@@ -552,24 +607,55 @@ function retickets(s: EventSnapshot) {
 		sheet.set(tier, (sheet.get(tier) ?? 0) + n);
 	}
 	const fee = (t: { price: number; feeBp: number }) => Math.round((t.price * t.feeBp) / 10_000);
+	const reckoning = reckon(s);
+	const priceOf = (tier: number) => s.tickets.tiers.find((t) => t.id === tier)?.price ?? 0;
+	const roleOf = (r: string) => s.accounts.find((a) => a.role === r)?.id;
+	for (const c of s.tickets.cancellations) {
+		c.goneNow = reckoning.gone.get(c.id) ?? 0;
+		c.perTicket = c.terms ? Math.round((priceOf(c.tier) * c.terms.refundBp) / 10_000) : 0;
+		c.refund = c.perTicket * c.count;
+		const sale = s.tickets.manualSales.find((m) => m.id === c.sale);
+		c.payer = c.terms ? (c.terms.payer ?? sale?.person ?? roleOf('verein')!) : null;
+	}
+	s.tickets.conflicts = reckoning.conflicts;
+	const conflictLines = reckoning.conflicts.reduce((n, c) => n + c.removed.length, 0);
+	s.openItems = s.openItems.filter((i) => i.type !== 'ticketConflicts');
+	if (conflictLines) s.openItems.push({ type: 'ticketConflicts', count: conflictLines });
 	s.tickets.tiers = s.tickets.tiers.map((t) => {
 		const fromSheet = sheet.get(t.id) ?? 0;
 		const manual = s.tickets.manualSales
 			.filter((m) => m.tier === t.id)
 			.reduce((n, m) => n + m.count, 0);
-		const gross = t.price * (fromSheet + manual);
-		const fees = fee(t) * fromSheet;
+		const cancelled = reckoning.cancelled.get(t.id) ?? 0;
+		const gross = t.price * (fromSheet + cancelled + manual);
+		const fees = fee(t) * (fromSheet + cancelled);
+		const refunds = s.tickets.cancellations
+			.filter((c) => c.tier === t.id)
+			.reduce((n, c) => n + c.refund, 0);
 		return {
 			...t,
 			sheet: fromSheet,
+			cancelled,
 			manual,
-			sold: fromSheet + manual,
+			sold: fromSheet + cancelled + manual,
+			unresolved: reckoning.unresolved.get(t.id) ?? 0,
 			gross,
 			fees,
-			net: gross - fees
+			refunds,
+			net: gross - fees - refunds
 		};
 	});
-	const total = { sheet: 0, manual: 0, sold: 0, gross: 0, fees: 0, net: 0 };
+	const total = {
+		sheet: 0,
+		cancelled: 0,
+		manual: 0,
+		sold: 0,
+		unresolved: 0,
+		gross: 0,
+		fees: 0,
+		refunds: 0,
+		net: 0
+	};
 	for (const t of s.tickets.tiers)
 		for (const k of Object.keys(total) as (keyof typeof total)[]) total[k] += t[k];
 	s.tickets.total = total;
@@ -615,8 +701,9 @@ function retickets(s: EventSnapshot) {
 			attachments: []
 		});
 	for (const t of s.tickets.tiers) {
-		if (!latest || !t.sheet || !t.price) continue;
-		const lines = [line(income, -t.price * t.sheet)];
+		const count = t.sheet + t.cancelled;
+		if (!latest || !count || !t.price) continue;
+		const lines = [line(income, -t.price * count)];
 		if (t.fees) {
 			let fees = role('ticket_fees');
 			if (fees === undefined) {
@@ -632,8 +719,8 @@ function retickets(s: EventSnapshot) {
 			}
 			lines.push(line(fees, t.fees));
 		}
-		lines.push(line(verein, t.price * t.sheet - t.fees));
-		add({ type: 'ticketImport', tier: t.id }, latest.date, `${t.sheet} × ${t.name}`, null, lines);
+		lines.push(line(verein, t.price * count - t.fees));
+		add({ type: 'ticketImport', tier: t.id }, latest.date, `${count} × ${t.name}`, null, lines);
 	}
 	for (const m of s.tickets.manualSales) {
 		const t = s.tickets.tiers.find((x) => x.id === m.tier)!;
@@ -644,12 +731,82 @@ function retickets(s: EventSnapshot) {
 			line(m.person, m.gross)
 		]);
 	}
+	for (const c of s.tickets.cancellations) {
+		const origin: TxnDraftOrigin = { type: 'ticketRefund', cancellation: c.id };
+		c.txn = c.refund ? (existing.get(key(origin)) ?? next) : null;
+		if (!c.refund || !c.terms) continue;
+		let refunds = role('ticket_refunds');
+		if (refunds === undefined) {
+			refunds = Math.max(...s.accounts.map((a) => a.id)) + 1;
+			s.accounts.push({
+				id: refunds,
+				kind: 'income',
+				name: 'Ticket refunds',
+				role: 'ticket_refunds',
+				assetType: null,
+				balance: 0
+			});
+		}
+		const name = s.tickets.tiers.find((t) => t.id === c.tier)?.name ?? '';
+		add(origin, c.terms.date, `Refund ${c.count} × ${name}`, c.note, [
+			line(refunds, c.refund),
+			line(c.payer!, -c.refund)
+		]);
+	}
 	s.txns = [...s.txns.filter((t) => t.origin.type === 'manual'), ...wanted].sort((a, b) =>
 		a.date === b.date ? a.id - b.id : a.date < b.date ? -1 : 1
 	);
 }
 
 type TxnDraftOrigin = EventSnapshot['txns'][number]['origin'];
+
+function blankCancellation(): CancellationView {
+	return {
+		id: 0,
+		tier: 0,
+		count: 0,
+		order: null,
+		sale: null,
+		gone: 0,
+		note: null,
+		terms: null,
+		goneNow: 0,
+		perTicket: 0,
+		refund: 0,
+		payer: null,
+		txn: null
+	};
+}
+
+function checkCancellation(
+	s: EventSnapshot,
+	tier: number,
+	order: string | null,
+	sale: number | null,
+	count: number,
+	terms: RefundTerms,
+	id: number | null
+) {
+	if (!(count > 0))
+		fail('non_positive_amount', 'amount must be greater than zero', { field: 'count' });
+	if (terms.refundBp > 10_000)
+		fail('refund_too_high', 'the refund must be between 0 and 100 %', { field: 'refundBp' });
+	let available = s.tickets.manualSales.find((m) => m.id === sale)?.count ?? 0;
+	if (order !== null) {
+		available = 0;
+		for (const orders of importOrders.values())
+			available = Math.max(available, orders.get(`${order}|${tier}`) ?? 0);
+		if (!available)
+			fail('unknown_order', 'no such order with tickets of this tier in the sheet', {
+				field: 'order'
+			});
+	}
+	const taken = s.tickets.cancellations
+		.filter((c) => c.id !== id && c.order === order && c.sale === sale && c.tier === tier)
+		.reduce((n, c) => n + c.count, 0);
+	if (taken + count > available)
+		fail('too_many_tickets', 'that is more tickets than are left to cancel', { field: 'count' });
+}
 
 const commands: Record<string, (a: Args) => unknown> = {
 	app_info: () => ({ version: 'dev', schemaVersion: 1 }),
@@ -797,10 +954,13 @@ const commands: Record<string, (a: Args) => unknown> = {
 				id,
 				...draft,
 				sheet: 0,
+				cancelled: 0,
 				manual: 0,
 				sold: 0,
+				unresolved: 0,
 				gross: 0,
 				fees: 0,
+				refunds: 0,
 				net: 0
 			});
 			retickets(s);
@@ -890,7 +1050,79 @@ const commands: Record<string, (a: Args) => unknown> = {
 		}),
 	manual_sale_delete: (a) =>
 		changed((s) => {
+			if (s.tickets.cancellations.some((c) => c.sale === a.id))
+				fail('sale_has_cancellations', 'this sale has cancellations: delete them first');
 			s.tickets.manualSales = s.tickets.manualSales.filter((m) => m.id !== a.id);
+			retickets(s);
+		}),
+	cancellation_add: (a) =>
+		changed((s) => {
+			const d = a.draft as CancellationDraft;
+			const sale =
+				d.source.type === 'sale'
+					? s.tickets.manualSales.find((m) => d.source.type === 'sale' && m.id === d.source.sale)
+					: undefined;
+			const order = d.source.type === 'order' ? d.source.order.trim() : null;
+			const tier = d.source.type === 'order' ? d.source.tier : sale?.tier;
+			if (tier === undefined) fail('unknown_manual_sale', 'unknown manual sale');
+			checkCancellation(s, tier, order, sale?.id ?? null, d.count, d.terms, null);
+			s.tickets.cancellations.push({
+				...blankCancellation(),
+				id: Math.max(0, ...s.tickets.cancellations.map((c) => c.id)) + 1,
+				tier,
+				count: d.count,
+				order,
+				sale: sale?.id ?? null,
+				note: d.note?.trim() || null,
+				terms: d.terms
+			});
+			retickets(s);
+		}),
+	cancellation_update: (a) =>
+		changed((s) => {
+			const c = s.tickets.cancellations.find((x) => x.id === a.id);
+			if (!c) fail('unknown_cancellation', 'unknown cancellation');
+			const e = a.edit as CancellationEdit;
+			checkCancellation(s, c.tier, c.order, c.sale, e.count, e.terms, c.id);
+			Object.assign(c, { count: e.count, terms: e.terms, note: e.note?.trim() || null });
+			retickets(s);
+		}),
+	cancellation_delete: (a) =>
+		changed((s) => {
+			s.tickets.cancellations = s.tickets.cancellations.filter((c) => c.id !== a.id);
+			retickets(s);
+		}),
+	conflict_resolve: (a) =>
+		changed((s) => {
+			const [order, tier] = [a.order as string, a.tier as number];
+			const r = a.resolution as Resolution;
+			const open =
+				s.tickets.conflicts.find((c) => c.order === order)?.removed.find((x) => x.tier === tier)
+					?.count ?? 0;
+			if (!(r.count > 0))
+				fail('non_positive_amount', 'amount must be greater than zero', { field: 'count' });
+			if (r.count > open)
+				fail('too_many_tickets', 'that is more tickets than are left to cancel', {
+					field: 'count'
+				});
+			if (r.type === 'match') {
+				const c = s.tickets.cancellations.find((x) => x.id === r.cancellation);
+				if (!c) fail('unknown_cancellation', 'unknown cancellation');
+				c.gone += r.count;
+			} else {
+				const terms = r.type === 'refund' ? r.terms : null;
+				if (terms) checkCancellation(s, tier, order, null, r.count, terms, null);
+				s.tickets.cancellations.push({
+					...blankCancellation(),
+					id: Math.max(0, ...s.tickets.cancellations.map((c) => c.id)) + 1,
+					tier,
+					count: r.count,
+					order,
+					gone: r.count,
+					note: r.note?.trim() || null,
+					terms
+				});
+			}
 			retickets(s);
 		}),
 	payouts_export_csv: () => null,

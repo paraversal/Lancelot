@@ -5,8 +5,9 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, EventDetails, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed,
-    Person, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
+    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, EventDetails, ImportId,
+    ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, Resolution, TicketColumns,
+    TierDraft, TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -336,6 +337,41 @@ pub async fn manual_sale_update(
 #[tauri::command]
 pub async fn manual_sale_delete(state: State<'_, AppState>, id: ManualSaleId) -> Result<OpenEvent> {
     with(&state, |s| s.delete_manual_sale(id))
+}
+
+#[tauri::command]
+pub async fn cancellation_add(
+    state: State<'_, AppState>,
+    draft: CancellationDraft,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.add_cancellation(draft))
+}
+
+#[tauri::command]
+pub async fn cancellation_update(
+    state: State<'_, AppState>,
+    id: CancellationId,
+    edit: CancellationEdit,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.update_cancellation(id, edit))
+}
+
+#[tauri::command]
+pub async fn cancellation_delete(
+    state: State<'_, AppState>,
+    id: CancellationId,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.delete_cancellation(id))
+}
+
+#[tauri::command]
+pub async fn conflict_resolve(
+    state: State<'_, AppState>,
+    order: String,
+    tier: TierId,
+    resolution: Resolution,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.resolve_conflict(&order, tier, resolution))
 }
 
 #[tauri::command]

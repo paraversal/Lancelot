@@ -14,10 +14,10 @@ use super::StoreError;
 use super::codec::{date_text, enum_text, timestamp_text};
 use crate::book::Book;
 use crate::model::{
-    Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineId, ClosingCount, Estimate,
-    ImportId, ManualSaleId, Origin, Person, TierId, Txn, TxnId,
+    Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineId, CancellationId,
+    ClosingCount, Estimate, ImportId, ManualSaleId, Origin, Person, TierId, Txn, TxnId,
 };
-use crate::tickets::{ManualSale, TicketImport, Tier};
+use crate::tickets::{Cancellation, ManualSale, TicketImport, Tier};
 
 enum Change<'a, V> {
     Create(&'a V),
@@ -329,6 +329,44 @@ pub(crate) fn persist(
         }
     }
 
+    fn cancellations(b: Option<&Book>) -> Vec<(CancellationId, &Cancellation)> {
+        b.map(|b| b.cancellations().map(|c| (c.id, c)).collect())
+            .unwrap_or_default()
+    }
+    let cancellation_changes = diff(cancellations(before), cancellations(Some(after)));
+    for (id, change) in &cancellation_changes {
+        if let Change::Create(c) | Change::Update(_, c) = change {
+            let terms = c.terms.as_ref();
+            conn.execute(
+                "INSERT INTO ticket_cancellation
+                   (id, tier_id, count, order_id, sale_id, gone, note, refund_bp, date, payer_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT (id) DO UPDATE SET
+                   count = excluded.count, gone = excluded.gone, note = excluded.note,
+                   refund_bp = excluded.refund_bp, date = excluded.date, payer_id = excluded.payer_id",
+                params![
+                    id.0,
+                    c.tier.0,
+                    c.count,
+                    c.order,
+                    c.sale.map(|s| s.0),
+                    c.gone,
+                    c.note,
+                    terms.map(|r| r.refund_bp),
+                    terms.map(|r| date_text(r.date)),
+                    terms.and_then(|r| r.payer).map(|a| a.0)
+                ],
+            )?;
+        }
+    }
+    // Before any sale it refers to goes.
+    for (id, change) in &cancellation_changes {
+        if let Change::Delete(_) = change {
+            conn.execute("DELETE FROM ticket_cancellation WHERE id = ?1", [id.0])?;
+        }
+        log.write("ticket_cancellation", id.0, change)?;
+    }
+
     // Transactions: unseal, replace the lines, seal (R-COR-2).
     fn txns(b: Option<&Book>) -> Vec<(TxnId, &Txn)> {
         b.map(|b| b.txns().map(|t| (t.id, t)).collect())
@@ -450,6 +488,7 @@ pub(crate) fn persist(
             ("next_tier_id", next.tier),
             ("next_import_id", next.import),
             ("next_manual_sale_id", next.manual_sale),
+            ("next_cancellation_id", next.cancellation),
         ] {
             conn.execute(
                 "INSERT OR REPLACE INTO meta (key, value) VALUES (?1, ?2)",
@@ -479,11 +518,12 @@ fn write_lines(conn: &Connection, t: &Txn) -> Result<(), StoreError> {
     Ok(())
 }
 
-/// A transaction's origin as stored: its kind and the tier or sale it comes from.
+/// A transaction's origin as stored: its kind and the tier, sale or cancellation it comes from.
 fn origin_text(origin: Origin) -> (&'static str, Option<i64>) {
     match origin {
         Origin::Manual => ("manual", None),
         Origin::TicketImport { tier } => ("ticket_import", Some(tier.0)),
         Origin::TicketSale { sale } => ("ticket_sale", Some(sale.0)),
+        Origin::TicketRefund { cancellation } => ("ticket_refund", Some(cancellation.0)),
     }
 }

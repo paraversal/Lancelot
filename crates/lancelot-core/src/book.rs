@@ -18,9 +18,9 @@ use crate::model::{
     BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, Line, Person, Role,
     Txn, TxnId, TxnKind,
 };
-use crate::model::{ImportId, ManualSaleId, Origin, TierId};
+use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
-use crate::tickets::{ManualSale, TicketImport, Tickets, Tier};
+use crate::tickets::{Cancellation, ManualSale, TicketImport, Tickets, Tier};
 
 mod tickets;
 
@@ -49,14 +49,15 @@ pub struct Book {
     tiers: BTreeMap<TierId, Tier>,
     imports: BTreeMap<ImportId, TicketImport>,
     manual_sales: BTreeMap<ManualSaleId, ManualSale>,
+    cancellations: BTreeMap<CancellationId, Cancellation>,
     next: NextIds,
     ledger: Ledger,
     budget: Budget,
     tickets: Tickets,
 }
 
-/// The ids the next new account, transaction, attachment, budget line, tier, import and manual
-/// sale get. Ids are never reused, so the change log stays unambiguous after deletions.
+/// The ids the next new account, transaction, attachment, budget line, tier, import, manual
+/// sale and cancellation get. Ids are never reused, so the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
@@ -66,6 +67,7 @@ pub struct NextIds {
     pub tier: i64,
     pub import: i64,
     pub manual_sale: i64,
+    pub cancellation: i64,
 }
 
 /// A book taken apart into its stored pieces. [`Book::from_parts`] checks them all.
@@ -81,6 +83,7 @@ pub struct BookParts {
     pub tiers: Vec<Tier>,
     pub imports: Vec<TicketImport>,
     pub manual_sales: Vec<ManualSale>,
+    pub cancellations: Vec<Cancellation>,
     pub next: NextIds,
 }
 
@@ -122,6 +125,7 @@ impl Book {
             tiers: BTreeMap::new(),
             imports: BTreeMap::new(),
             manual_sales: BTreeMap::new(),
+            cancellations: BTreeMap::new(),
             next: NextIds {
                 account: 1,
                 txn: 1,
@@ -130,6 +134,7 @@ impl Book {
                 tier: 1,
                 import: 1,
                 manual_sale: 1,
+                cancellation: 1,
             },
             ledger: Ledger::default(),
             budget: Budget::default(),
@@ -176,14 +181,11 @@ impl Book {
             .all(|a| (a.kind == AccountKind::Opening) == (a.role == Some(Role::Opening)));
         let roles_ok = accounts.values().all(|a| match a.role {
             Some(Role::Verein | Role::CashBox) => a.kind == AccountKind::Asset,
-            Some(Role::Tickets) => a.kind == AccountKind::Income,
+            Some(Role::Tickets | Role::TicketRefunds) => a.kind == AccountKind::Income,
             Some(Role::TicketFees) => a.kind == AccountKind::Expense,
             Some(Role::Opening) | None => true,
         });
-        let fee_accounts = accounts
-            .values()
-            .filter(|a| a.role == Some(Role::TicketFees))
-            .count();
+        let once = |role| accounts.values().filter(|a| a.role == Some(role)).count() <= 1;
         let types_ok = accounts
             .values()
             .all(|a| a.asset_type.is_some() == (a.kind == AccountKind::Asset));
@@ -194,7 +196,8 @@ impl Book {
         if !opening_ok
             || !roles_ok
             || !types_ok
-            || fee_accounts > 1
+            || !once(Role::TicketFees)
+            || !once(Role::TicketRefunds)
             || names.len() != accounts.len()
         {
             return Err(bad("account kinds, roles or names are inconsistent"));
@@ -258,10 +261,11 @@ impl Book {
             return Err(bad("default reimbursement account is not an asset"));
         }
 
-        let (tiers, imports, manual_sales) = tickets::check_parts(
+        let (tiers, imports, manual_sales, cancellations) = tickets::check_parts(
             parts.tiers,
             parts.imports,
             parts.manual_sales,
+            parts.cancellations,
             &parts.next,
             &accounts,
         )?;
@@ -277,6 +281,7 @@ impl Book {
             tiers,
             imports,
             manual_sales,
+            cancellations,
             next: parts.next,
             ledger: Ledger::default(),
             budget: Budget::default(),
@@ -835,23 +840,26 @@ impl Book {
         Ok(value)
     }
 
-    /// Recomputes the ledger, the budget and the ticket figures.
+    /// Recomputes the ticket figures, the ledger and the budget.
     fn recompute(&mut self) -> Result<(), DomainError> {
+        self.tickets = Tickets::compute(
+            &self.tiers,
+            &self.imports,
+            &self.manual_sales,
+            &self.cancellations,
+            &self.generated_txns(),
+            self.account_by_role(Role::Verein).map(|a| a.id),
+        )?;
         let with_attachments: BTreeSet<TxnId> = self.attachments.values().map(|a| a.txn).collect();
         self.ledger = Ledger::compute(LedgerInput {
             accounts: &self.accounts,
             txns: &self.txns,
             closing_counts: &self.closing_counts,
             with_attachments: &with_attachments,
+            ticket_conflicts: self.tickets.conflict_count(),
         })?;
         self.budget =
             Budget::compute(&self.accounts, &self.budget_lines, &self.txns, &self.ledger)?;
-        self.tickets = Tickets::compute(
-            &self.tiers,
-            &self.imports,
-            &self.manual_sales,
-            &self.sale_txns(),
-        )?;
         Ok(())
     }
 

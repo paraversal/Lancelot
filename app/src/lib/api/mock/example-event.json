@@ -1258,13 +1258,18 @@
     "tiers": [],
     "total": {
       "sheet": 0,
+      "cancelled": 0,
       "manual": 0,
       "sold": 0,
+      "unresolved": 0,
       "gross": 0,
       "fees": 0,
+      "refunds": 0,
       "net": 0
     },
     "imports": [],
-    "manualSales": []
+    "manualSales": [],
+    "conflicts": [],
+    "cancellations": []
   }
 }

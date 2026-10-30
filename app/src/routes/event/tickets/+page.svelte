@@ -1,11 +1,14 @@
 <script lang="ts">
 	// Tickets (requirements §5.6): the tiers with sold vs quota, gross and net, from the latest
-	// import of the sheet and the manual sales. Every figure comes from the core. A tier, the
-	// import and a manual sale each open in the panel on the right. Conflicts (M7c), break-even
-	// and sales per import (M8) join the page later.
+	// import of the sheet and the manual sales. Every figure comes from the core. Tickets that left
+	// the sheet are conflicts on top, each a card to resolve (R-TKT-13). A tier, the import, a manual
+	// sale and a cancellation each open in the panel on the right. Break-even and sales per import
+	// (M8) join the page later.
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { SHEET_EXTENSIONS, chooseTicketSheet } from '#lib/api/dialogs.ts';
+	import type { CancellationId } from '#lib/api/generated/CancellationId.ts';
+	import type { CancellationView } from '#lib/api/generated/CancellationView.ts';
 	import type { ManualSaleId } from '#lib/api/generated/ManualSaleId.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import { tierColor } from '#lib/colors.ts';
@@ -14,7 +17,9 @@
 	import { onFileDrop } from '#lib/dragdrop.ts';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { formatFee, shortDay } from '#lib/tickets.ts';
+	import { conflictCount, formatFee, shortDay } from '#lib/tickets.ts';
+	import CancellationPanel from './CancellationPanel.svelte';
+	import ConflictCard from './ConflictCard.svelte';
 	import ImportPanel from './ImportPanel.svelte';
 	import SalePanel from './SalePanel.svelte';
 	import TierPanel from './TierPanel.svelte';
@@ -23,11 +28,13 @@
 	const format = $derived(session.format);
 	const tickets = $derived(snapshot.tickets);
 	const latest = $derived(tickets.imports.at(-1) ?? null);
+	const conflicts = $derived(conflictCount(tickets));
 
 	type Open =
 		| { type: 'tier'; id: TierId | null; name?: string; then?: string | null }
 		| { type: 'import'; path: string | null }
-		| { type: 'sale'; id: ManualSaleId | null };
+		| { type: 'sale'; id: ManualSaleId | null }
+		| { type: 'cancellation'; id: CancellationId | null };
 	let panel = $state<Open | null>(null);
 	let panelKey = $state(0);
 	let dragging = $state(false);
@@ -55,13 +62,25 @@
 		})
 	);
 
-	// Opened from elsewhere, e.g. generated income in the ledger: `?tier=2` or `?sale=3`.
+	// Opened from elsewhere, e.g. generated income in the ledger: `?tier=2`, `?sale=3` or
+	// `?cancellation=4`.
 	onMount(() => {
 		const tier = Number(page.url.searchParams.get('tier'));
 		const sale = Number(page.url.searchParams.get('sale'));
+		const cancellation = Number(page.url.searchParams.get('cancellation'));
 		if (tickets.tiers.some((t) => t.id === tier)) show({ type: 'tier', id: tier });
 		else if (tickets.manualSales.some((m) => m.id === sale)) show({ type: 'sale', id: sale });
+		else if (tickets.cancellations.some((c) => c.id === cancellation))
+			show({ type: 'cancellation', id: cancellation });
 	});
+
+	const tierName = (id: TierId) => tickets.tiers.find((t) => t.id === id)?.name ?? '';
+	function cancellationText(c: CancellationView) {
+		const what = `${c.count} × ${tierName(c.tier)}`;
+		const from = c.order !== null ? `Order ${c.order}` : 'Manual sale';
+		const how = c.terms ? `${formatFee(c.terms.refundBp, format)} refund` : 'Correction';
+		return `${from} · ${what} · ${how}`;
+	}
 
 	async function importSheet() {
 		const path = await chooseTicketSheet();
@@ -122,6 +141,22 @@
 				<span>.ods · .xlsx · .csv</span>
 			</div>
 		{:else}
+			{#if tickets.conflicts.length}
+				<section class="conflicts" aria-label="Conflicts">
+					<h2>Conflicts <span class="badge">{conflicts}</span></h2>
+					{#each tickets.conflicts as conflict (conflict.order)}
+						<article class="card">
+							<strong>Order {conflict.order}</strong>
+							{#each conflict.removed as removed (removed.tier)}
+								{#key `${removed.count}|${removed.matches.length}`}
+									<ConflictCard {conflict} {removed} />
+								{/key}
+							{/each}
+						</article>
+					{/each}
+				</section>
+			{/if}
+
 			<div class="rows" role="table" aria-label="Tiers">
 				<div class="row head" role="row">
 					<span class="name"></span>
@@ -142,6 +177,7 @@
 							<span class="dot" style:background={tierColor(i)}></span>
 							<span class="label">{t.name}</span>
 							{#if t.manual}<span class="manual">+{t.manual} manual</span>{/if}
+							{#if t.unresolved}<span class="unresolved">−{t.unresolved} open</span>{/if}
 						</span>
 						<span class="num price">{formatAmount(t.price, format)}</span>
 						<span class="num fee">{formatFee(t.feeBp, format)}</span>
@@ -180,12 +216,52 @@
 							<span class="num">{formatAmount(-tickets.total.fees, format)}</span>
 						</div>
 					{/if}
+					{#if tickets.total.refunds}
+						<div class="row total" role="row">
+							<span class="name">Refunds</span>
+							<span class="num">{formatAmount(-tickets.total.refunds, format)}</span>
+						</div>
+					{/if}
 					<div class="row total strong" role="row">
 						<span class="name">Ticket income</span>
 						<span class="num">{formatAmount(tickets.total.net, format)}</span>
 					</div>
+					{#if conflicts}
+						<p class="warning" role="note">
+							{tickets.total.unresolved} removed {tickets.total.unresolved === 1
+								? 'ticket is'
+								: 'tickets are'} not counted until the conflicts are resolved
+						</p>
+					{/if}
 				{/if}
 			</div>
+
+			{#if tickets.cancellations.length || (latest && !session.closed) || (tickets.manualSales.length && !session.closed)}
+				<div class="rows cancellations" aria-label="Cancellations">
+					<div class="row head"><span class="name">Cancellations</span></div>
+					{#each tickets.cancellations as c (c.id)}
+						<button
+							type="button"
+							class="row cancellation"
+							class:selected={panel?.type === 'cancellation' && panel.id === c.id}
+							onclick={() => show({ type: 'cancellation', id: c.id })}
+						>
+							<span class="name"><span class="label">{cancellationText(c)}</span></span>
+							<span class="num">{c.refund ? formatAmount(-c.refund, format) : '–'}</span>
+						</button>
+					{/each}
+					{#if !session.closed}
+						<button
+							type="button"
+							class="row add"
+							class:selected={panel?.type === 'cancellation' && panel.id === null}
+							onclick={() => show({ type: 'cancellation', id: null })}
+						>
+							<Icon name="plus" size={14} />Cancellation
+						</button>
+					{/if}
+				</div>
+			{/if}
 		{/if}
 	</section>
 
@@ -209,6 +285,8 @@
 				onopen={(id) => show({ type: 'sale', id })}
 				onclose={() => show(null)}
 			/>
+		{:else if panel?.type === 'cancellation'}
+			<CancellationPanel id={panel.id} onclose={() => show(null)} />
 		{/if}
 	{/key}
 </div>
@@ -273,6 +351,62 @@
 		display: flex;
 		flex-direction: column;
 		max-width: 560px;
+	}
+
+	.conflicts {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+		max-width: 560px;
+	}
+
+	h2 {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		margin: 0;
+		font-size: var(--type-sm);
+		font-weight: 600;
+	}
+
+	.badge {
+		padding: 0 6px;
+		border-radius: 9px;
+		background: var(--color-attention);
+		font-size: var(--type-xs);
+		color: var(--color-paper);
+	}
+
+	.card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-3);
+		padding: var(--spacing-4);
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-md);
+	}
+
+	.unresolved {
+		flex: none;
+		font-size: var(--type-xs);
+		font-weight: 400;
+		color: var(--color-attention);
+	}
+
+	.warning {
+		margin: 8px 0 0;
+		font-size: 13px;
+		color: var(--color-attention);
+	}
+
+	.cancellation {
+		min-height: 40px;
+		font-size: 13px;
+	}
+
+	button.cancellation:hover .label {
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 
 	.row {

@@ -1,6 +1,7 @@
 // Ticket helpers for the Tickets page. Fees are basis points (R-TKT-10): `250` is 2,5 %. The
 // fee field takes a percentage with at most two decimals; the core checks it against the price.
 import type { NumberFormat } from './api/generated/NumberFormat';
+import type { Tickets } from './api/generated/Tickets';
 
 /** `2,5 %` (De) or `2.5%` (En), without trailing zeros. */
 export function formatFee(bp: number, format: NumberFormat): string {
@@ -26,6 +27,14 @@ export function parseFee(input: string): number | null {
 /** The fee on one ticket, rounded half-up like the core's `percent_bp`. */
 export function feePerTicket(price: number, bp: number): number {
 	return Math.round((price * bp) / 10_000);
+}
+
+/** The refund on one ticket: the same rounding as the fee, per ticket (R-TKT-15). */
+export const refundPerTicket = feePerTicket;
+
+/** Conflicts per order and tier: the navigation badge. */
+export function conflictCount(tickets: Tickets): number {
+	return tickets.conflicts.reduce((n, c) => n + c.removed.length, 0);
 }
 
 /** A count or quota: digits only. Empty is null; anything else is NaN. */

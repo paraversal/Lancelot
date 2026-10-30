@@ -34,10 +34,13 @@ use crate::model::{
     AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, EventDetails,
     Person, TxnId,
 };
-use crate::model::{ImportId, ManualSaleId, TierId};
+use crate::model::{CancellationId, ImportId, ManualSaleId, TierId};
 use crate::money::Cents;
 use crate::sheet::read_sheet;
-use crate::tickets::{ImportPreview, ManualSaleDraft, TicketColumns, TierDraft};
+use crate::tickets::{
+    CancellationDraft, CancellationEdit, ImportPreview, ManualSaleDraft, Resolution, TicketColumns,
+    TierDraft,
+};
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
 /// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`.
@@ -476,6 +479,36 @@ impl Store {
 
     pub fn delete_manual_sale(&mut self, id: ManualSaleId) -> Result<(), StoreError> {
         self.apply(&BTreeMap::new(), |b| b.delete_manual_sale(id).map(|_| ()))
+    }
+
+    pub fn add_cancellation(
+        &mut self,
+        draft: CancellationDraft,
+    ) -> Result<CancellationId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.add_cancellation(draft))
+    }
+
+    pub fn update_cancellation(
+        &mut self,
+        id: CancellationId,
+        edit: CancellationEdit,
+    ) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.update_cancellation(id, edit))
+    }
+
+    pub fn delete_cancellation(&mut self, id: CancellationId) -> Result<(), StoreError> {
+        self.apply(&BTreeMap::new(), |b| b.delete_cancellation(id).map(|_| ()))
+    }
+
+    pub fn resolve_conflict(
+        &mut self,
+        order: &str,
+        tier: TierId,
+        resolution: Resolution,
+    ) -> Result<CancellationId, StoreError> {
+        self.apply(&BTreeMap::new(), |b| {
+            b.resolve_conflict(order, tier, resolution)
+        })
     }
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), StoreError> {

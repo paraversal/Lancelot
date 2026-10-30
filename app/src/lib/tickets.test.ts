@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
-import { feeInput, feePerTicket, formatFee, parseCount, parseFee } from './tickets';
+import type { Tickets } from './api/generated/Tickets';
+import {
+	conflictCount,
+	feeInput,
+	feePerTicket,
+	formatFee,
+	parseCount,
+	parseFee,
+	refundPerTicket
+} from './tickets';
+
+describe('conflicts', () => {
+	it('count per order and tier', () => {
+		const removed = (tier: number) => ({ tier, count: 2, since: 1, matches: [] });
+		const tickets = {
+			conflicts: [
+				{ order: '1', removed: [removed(1), removed(2)], added: [] },
+				{ order: '2', removed: [removed(1)], added: [] }
+			]
+		} as unknown as Tickets;
+		expect(conflictCount(tickets)).toBe(3);
+	});
+
+	it('refund half-up per ticket, like the core', () => {
+		expect(refundPerTicket(25, 5000)).toBe(13);
+		expect(refundPerTicket(3200, 5000)).toBe(1600);
+		expect(refundPerTicket(3200, 0)).toBe(0);
+	});
+});
 
 describe('fees', () => {
 	it('read a percentage in either format as basis points', () => {

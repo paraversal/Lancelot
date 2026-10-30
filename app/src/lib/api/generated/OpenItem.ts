@@ -4,7 +4,7 @@ import type { Cents } from "./Cents";
 import type { TxnId } from "./TxnId";
 
 /**
- * Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches and
- * ticket conflicts join in phase 2.
+ * Something that keeps the event from being closed (R-SET-5). Reconciliation mismatches join
+ * in phase 2.
  */
-export type OpenItem = { "type": "personBalance", person: AccountId, net: Cents, } | { "type": "missingReceipt", txn: TxnId, } | { "type": "closingCountMissing", account: AccountId, } | { "type": "cashDifference", account: AccountId, difference: Cents, };
+export type OpenItem = { "type": "personBalance", person: AccountId, net: Cents, } | { "type": "missingReceipt", txn: TxnId, } | { "type": "closingCountMissing", account: AccountId, } | { "type": "cashDifference", account: AccountId, difference: Cents, } | { "type": "ticketConflicts", count: number, };

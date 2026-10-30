@@ -46,6 +46,11 @@ pub struct TierId(#[ts(type = "number")] pub i64);
 #[serde(transparent)]
 pub struct ImportId(#[ts(type = "number")] pub i64);
 
+/// Identifies a ticket cancellation or correction (R-TKT-13, R-TKT-14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct CancellationId(#[ts(type = "number")] pub i64);
+
 /// Identifies a manual ticket sale (R-TKT-7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -89,6 +94,8 @@ pub enum Role {
     Tickets,
     /// The expense category of platform fees, made when a tier first has a fee (R-TKT-6).
     TicketFees,
+    /// The income category of refunds, made with the first refund (R-TKT-15).
+    TicketRefunds,
 }
 
 /// What an asset account holds. Cash accounts are counted at the start and the end (R-ISO-3).
@@ -180,6 +187,8 @@ pub enum Origin {
     TicketImport { tier: TierId },
     /// A manual ticket sale.
     TicketSale { sale: ManualSaleId },
+    /// The refund of a cancellation: negative income (R-TKT-15).
+    TicketRefund { cancellation: CancellationId },
 }
 
 impl Origin {

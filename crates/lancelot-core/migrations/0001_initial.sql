@@ -9,7 +9,7 @@ CREATE TABLE account (
   id    INTEGER PRIMARY KEY,
   kind  TEXT NOT NULL CHECK (kind IN ('asset','person','income','expense','opening')),
   name  TEXT NOT NULL,
-  role  TEXT UNIQUE CHECK (role IN ('verein','cash_box','opening','tickets','ticket_fees')),
+  role  TEXT UNIQUE CHECK (role IN ('verein','cash_box','opening','tickets','ticket_fees','ticket_refunds')),
   asset_type TEXT CHECK (asset_type IN ('bank','cash')),   -- set exactly for assets
   CHECK ((kind = 'asset') = (asset_type IS NOT NULL))
 ) STRICT;
@@ -46,8 +46,8 @@ CREATE TABLE txn (
   counterparty TEXT,
   notes        TEXT,
   origin       TEXT NOT NULL DEFAULT 'manual'
-               CHECK (origin IN ('manual','ticket_import','ticket_sale')),
-  origin_id    INTEGER,                -- the tier or the manual sale it is generated from (R-TKT-6)
+               CHECK (origin IN ('manual','ticket_import','ticket_sale','ticket_refund')),
+  origin_id    INTEGER,                -- the tier, manual sale or cancellation it is generated from (R-TKT-6)
   sealed       INTEGER NOT NULL DEFAULT 0 CHECK (sealed IN (0,1)),
   CHECK ((origin = 'manual') = (origin_id IS NULL)),
   UNIQUE (origin, origin_id)
@@ -104,6 +104,22 @@ CREATE TABLE ticket_manual_sale (      -- R-TKT-7
   reference TEXT
 ) STRICT;
 
+CREATE TABLE ticket_cancellation (     -- R-TKT-13, R-TKT-14; conflicts are derived from the imports
+  id        INTEGER PRIMARY KEY,
+  tier_id   INTEGER NOT NULL REFERENCES ticket_tier(id),
+  count     INTEGER NOT NULL CHECK (count > 0),
+  order_id  TEXT,                      -- a sheet order, or
+  sale_id   INTEGER REFERENCES ticket_manual_sale(id),  -- a manual sale
+  gone      INTEGER NOT NULL DEFAULT 0 CHECK (gone BETWEEN 0 AND count),  -- confirmed as left the sheet
+  note      TEXT,
+  refund_bp INTEGER CHECK (refund_bp BETWEEN 0 AND 10000),  -- NULL: a correction, without a refund
+  date      TEXT,
+  payer_id  INTEGER REFERENCES account(id),                 -- NULL: whoever received the money
+  CHECK ((order_id IS NULL) <> (sale_id IS NULL)),
+  CHECK ((refund_bp IS NULL) = (date IS NULL)),
+  CHECK (refund_bp IS NOT NULL OR (payer_id IS NULL AND order_id IS NOT NULL AND gone = count))
+) STRICT;
+
 CREATE TABLE line (
   id           INTEGER PRIMARY KEY,
   txn_id       INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
@@ -139,7 +155,7 @@ CREATE TABLE change_log (              -- R-TX-6
   id         INTEGER PRIMARY KEY,
   at         TEXT NOT NULL,            -- RFC 3339 UTC
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line',
-                                       -- 'ticket_tier','ticket_import','ticket_manual_sale'
+                                       -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is in progress: the ticket core and the Tickets screen are done, conflicts are next. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. It builds on [requirements v0.9](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -213,7 +213,7 @@ Built in three steps, each in its own pull request.
   - [x] Unknown tiers block the import.
   - [x] Rows that cannot be read are listed.
   - Covers R-TKT-3, R-TKT-4, R-TKT-17 and R-TKT-18.
-- [x] Re-import with a change preview per tier and per order. Every import is kept as a snapshot: file name, hash, date (changeable) and its tickets per (order ID, tier); the file itself is not stored, and order IDs stay out of the snapshot and the change log. Covers R-TKT-5 and the data for R-TKT-8.
+- [x] Re-import with a change preview per tier and per order. Every import is kept as a snapshot: file name, hash, date (changeable) and its tickets per (order ID, tier); the file itself is not stored, and order IDs stay out of the change log. Covers R-TKT-5 and the data for R-TKT-8.
 - [x] Generated income per tier from the latest import, with a fee line in `Ticket fees`, marked as generated and read-only (R-TKT-6). Manual sales to a person (R-TKT-7). A file whose ticket income differs from its tickets does not open.
 - [x] Fixtures: a series of `.ods` sheets with additions, a removal, a tier change and an unknown tier, plus `.xlsx` and `.csv` (`scripts/ticket-fixtures.py`).
 
@@ -226,11 +226,12 @@ Built in three steps, each in its own pull request.
 
 **M7c · Conflicts**
 
-- [ ] Conflicts from removals between consecutive imports, by (order ID, tier); the preview already lists them.
-- [ ] Conflicts view with a navigation badge.
-- [ ] Refund 0–100 %, match or correction, booked to `Ticket refunds`.
-- [ ] Manual cancellations with automatic matching.
-- [ ] Choice of refund payer.
+- [x] Conflicts from removals between imports, by (order ID, tier): an order is short when it has fewer tickets than it ever had, so tickets that return close the gap and a growing tier hides nothing. Only the resolutions are stored.
+- [x] Conflict cards on top of the Tickets page, grouped by order, with a badge in the navigation and an open item that blocks closing. Until resolved, the tickets are not sold, and the totals say so.
+- [x] Refund 0–100 %, match or correction, wholly or in part, booked to `Ticket refunds` as generated, read-only negative income. Fees stay; a person's refund comes out of what they hold.
+- [x] Manual cancellations on an order or a manual sale, in a panel listed under the tiers. A conflict on the same order and tier offers them for confirming. Deleting a resolution opens the conflict again.
+- [x] Choice of refund payer: whoever received the money, or any account or person.
+- [x] Property test: whatever the sheets and resolutions, the books balance, the figures match the ledger and a file loads back the same.
 - Covers R-TKT-12 to R-TKT-16.
 
 ### M8 · Ticket statistics and profitability
@@ -274,4 +275,4 @@ Built in three steps, each in its own pull request.
 
 ## Next step
 
-M7c: ticket conflicts, the card on top of the Tickets frame in `UI.fig`. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.
+M8: ticket statistics and profitability. The Budget screen still needs its design (M6b). The M5 parallel run happens at the next event, alongside it.

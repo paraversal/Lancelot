@@ -37,8 +37,8 @@ pub use ledger::{
 };
 pub use model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BudgetLine,
-    BudgetLineDraft, BudgetLineId, ClosingCount, Estimate, Event, EventDetails, ImportId, Line,
-    ManualSaleId, Origin, Person, Role, TierId, Txn, TxnId, TxnKind,
+    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, Estimate, Event, EventDetails,
+    ImportId, Line, ManualSaleId, Origin, Person, Role, TierId, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
@@ -49,8 +49,10 @@ pub use store::{
     list_backups,
 };
 pub use tickets::{
-    ImportPreview, ManualSale, ManualSaleDraft, TicketColumns, TicketImport, TicketTotals, Tickets,
-    Tier, TierDraft,
+    Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
+    ConflictMatch, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict, RefundTerms,
+    RemovedTickets, Resolution, TicketColumns, TicketImport, TicketTotals, Tickets, Tier,
+    TierDraft,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

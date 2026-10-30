@@ -8,10 +8,11 @@ use std::path::{Path, PathBuf};
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride,
-    BudgetLineDraft, BudgetLineId, DomainError, EventDetails, EventSnapshot, ImportId,
-    ImportPreview, MAX_ATTACHMENT_SIZE, ManualSaleDraft, ManualSaleId, Parsed, Person, Report,
-    Store, StoreOptions, TicketColumns, TierDraft, TierId, TxnDraft, TxnId, backup_time,
-    event_uuid_of, format_date, list_backups, parse_amount, parse_date,
+    BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId,
+    DomainError, EventDetails, EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE,
+    ManualSaleDraft, ManualSaleId, Parsed, Person, Report, Resolution, Store, StoreOptions,
+    TicketColumns, TierDraft, TierId, TxnDraft, TxnId, backup_time, event_uuid_of, format_date,
+    list_backups, parse_amount, parse_date,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -472,6 +473,37 @@ impl Service {
         self.change(|s| Ok(s.delete_manual_sale(id)?))
     }
 
+    pub fn add_cancellation(&mut self, draft: CancellationDraft) -> Result<OpenEvent> {
+        self.change(|s| {
+            s.add_cancellation(draft)?;
+            Ok(())
+        })
+    }
+
+    pub fn update_cancellation(
+        &mut self,
+        id: CancellationId,
+        edit: CancellationEdit,
+    ) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.update_cancellation(id, edit)?))
+    }
+
+    pub fn delete_cancellation(&mut self, id: CancellationId) -> Result<OpenEvent> {
+        self.change(|s| Ok(s.delete_cancellation(id)?))
+    }
+
+    pub fn resolve_conflict(
+        &mut self,
+        order: &str,
+        tier: TierId,
+        resolution: Resolution,
+    ) -> Result<OpenEvent> {
+        self.change(|s| {
+            s.resolve_conflict(order, tier, resolution)?;
+            Ok(())
+        })
+    }
+
     /// Checks an IBAN as it is typed (R-PER-2).
     pub fn check_iban(&self, input: &str) -> Result<CheckedIban> {
         let iban = lancelot_core::validate_iban(input)?;
@@ -602,7 +634,7 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lancelot_core::NumberFormat;
+    use lancelot_core::{CancellationSource, NumberFormat, OpenItem, RefundTerms};
     use tempfile::TempDir;
 
     fn details(name: &str) -> EventDetails {
@@ -1065,6 +1097,141 @@ mod tests {
             .unwrap();
         assert_eq!(open.snapshot.event.ticket_columns.tier, "Kategorie");
         assert!(s.preview_tickets(&sheet).is_err());
+    }
+
+    #[test]
+    fn resolves_ticket_conflicts_and_records_cancellations() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/tickets");
+        let tier = |name: &str, price| TierDraft {
+            name: name.into(),
+            price: lancelot_core::Cents::new(price).unwrap(),
+            fee_bp: 0,
+            quota: None,
+            aliases: Vec::new(),
+        };
+        s.add_tier(tier("Early Bird", 2_500)).unwrap();
+        let open = s.add_tier(tier("Regular", 3_200)).unwrap();
+        let regular = open.snapshot.tickets.tiers[1].tier.id;
+        s.add_tier(tier("Supporter", 4_500)).unwrap();
+        let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
+        let import = |s: &mut Service, name: &str, day| {
+            let path = fixtures.join(name);
+            let sha = s.preview_tickets(&path).unwrap().sha256;
+            s.import_tickets(&path, june(day), &sha).unwrap()
+        };
+        import(&mut s, "import-1.ods", 1);
+        let terms = RefundTerms {
+            refund_bp: 5_000,
+            date: june(3),
+            payer: None,
+        };
+
+        // Recorded while the order is still in the sheet.
+        let open = s
+            .add_cancellation(CancellationDraft {
+                source: CancellationSource::Order {
+                    order: "4711".into(),
+                    tier: regular,
+                },
+                count: 1,
+                terms,
+                note: None,
+            })
+            .unwrap();
+        let id = open.snapshot.tickets.cancellations[0].cancellation.id;
+        assert!(open.snapshot.tickets.conflicts.is_empty());
+        let err = s
+            .add_cancellation(CancellationDraft {
+                source: CancellationSource::Order {
+                    order: "nope".into(),
+                    tier: regular,
+                },
+                count: 1,
+                terms,
+                note: None,
+            })
+            .unwrap_err();
+        assert_eq!(err.code, "unknown_order");
+        assert_eq!(err.field.as_deref(), Some("order"));
+
+        // Orders 4702 and 4711 leave; the cancellation waits on 4711.
+        let open = import(&mut s, "import-2.ods", 2);
+        let conflicts = &open.snapshot.tickets.conflicts;
+        assert_eq!(conflicts[1].order, "4711");
+        assert_eq!(conflicts[1].removed[0].matches[0].cancellation, id);
+        assert!(
+            open.snapshot
+                .open_items
+                .contains(&OpenItem::TicketConflicts { count: 2 })
+        );
+
+        let open = s
+            .resolve_conflict(
+                "4711",
+                regular,
+                Resolution::Match {
+                    cancellation: id,
+                    count: 1,
+                },
+            )
+            .unwrap();
+        assert_eq!(open.snapshot.tickets.total.cancelled, 1);
+        let open = s
+            .resolve_conflict(
+                "4711",
+                regular,
+                Resolution::Correction {
+                    count: 1,
+                    note: None,
+                },
+            )
+            .unwrap();
+        let correction = open.snapshot.tickets.cancellations[1].cancellation.id;
+        let open = s
+            .resolve_conflict(
+                "4702",
+                regular,
+                Resolution::Refund {
+                    count: 1,
+                    terms,
+                    note: Some("called in".into()),
+                },
+            )
+            .unwrap();
+        assert!(open.snapshot.tickets.conflicts.is_empty());
+        assert_eq!(open.snapshot.tickets.total.refunds.get(), 3_200);
+
+        let err = s
+            .update_cancellation(
+                correction,
+                CancellationEdit {
+                    count: 1,
+                    terms,
+                    note: None,
+                },
+            )
+            .unwrap_err();
+        assert_eq!(err.code, "correction_not_editable");
+        let open = s
+            .update_cancellation(
+                id,
+                CancellationEdit {
+                    count: 1,
+                    terms: RefundTerms {
+                        refund_bp: 10_000,
+                        ..terms
+                    },
+                    note: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(open.snapshot.tickets.total.refunds.get(), 4_800);
+        let open = s.delete_cancellation(correction).unwrap();
+        assert_eq!(open.snapshot.tickets.conflicts.len(), 1);
     }
 
     #[test]

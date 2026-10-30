@@ -8,16 +8,24 @@
 	import type { OpenEvent } from '../api/generated/OpenEvent';
 	import { formatDateRange } from '../format';
 	import { session } from '../state/session.svelte';
+	import { conflictCount } from '../tickets';
 	import Icon from './Icon.svelte';
 
 	let { event }: { event: OpenEvent } = $props();
 
 	const snapshot = $derived(event.snapshot);
+	// Open ticket conflicts take the place of the count, as a badge (R-TKT-13).
+	const conflicts = $derived(conflictCount(snapshot.tickets));
 	const items = $derived([
 		{ href: '/event/overview', label: 'Overview', count: null },
 		{ href: '/event/ledger', label: 'Ledger', count: snapshot.txns.length || null },
 		{ href: '/event/people', label: 'People', count: snapshot.persons.length || null },
-		{ href: '/event/tickets', label: 'Tickets', count: snapshot.tickets.tiers.length || null },
+		{
+			href: '/event/tickets',
+			label: 'Tickets',
+			count: conflicts || snapshot.tickets.tiers.length || null,
+			attention: conflicts > 0
+		},
 		{ href: '/event/budget', label: 'Budget', count: snapshot.budgetLines.length || null }
 	]);
 	const dates = $derived(
@@ -69,7 +77,12 @@
 			<li>
 				<a href={item.href} aria-current={current.startsWith(item.href) ? 'page' : undefined}>
 					{item.label}
-					{#if item.count}<span class="count">{item.count}</span>{/if}
+					{#if item.count}<span
+							class="count"
+							class:attention={'attention' in item && item.attention}
+							title={'attention' in item && item.attention ? 'Ticket conflicts' : undefined}
+							>{item.count}</span
+						>{/if}
 				</a>
 			</li>
 		{/each}
@@ -173,6 +186,14 @@
 		font-size: var(--type-xs);
 		font-weight: 400;
 		color: var(--color-ink-muted);
+	}
+
+	.count.attention {
+		padding: 0 6px;
+		border-radius: 9px;
+		background: var(--color-attention);
+		font-weight: 600;
+		color: var(--color-paper);
 	}
 
 	.file {
