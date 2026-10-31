@@ -17,6 +17,10 @@ Today tickets come from a sheet or a data source, each a plugin. Other groups ma
 
 Plugins are built in today (technical design §10). When another group wants its own, a loader follows: JavaScript in a sandboxed iframe, with a manifest of permissions, the context over messages, and network access through the data sources. The first step is testing that an iframe can't reach Tauri's commands. The Drinks plugin should then need little change.
 
+## Data sources in the event file
+
+A data source is set up per computer: its details are in `data-sources.json` in the app's data folder and its token in the keychain, so a shared event file can't pull until the source is set up again. Storing the details in the `.lancelot` file would let them travel with the event, but anyone given the file could read the provider's URL and field names. The token stays in the keychain either way.
+
 ## Motion trial
 
 `lib/motion/choices.ts`, every strength of about 25 effects and the `/design/motion` trial page stay for now, so animations can still be tried out. Once the choices feel settled, keep the chosen effects and a full-or-reduced switch, and remove the rest (about 1,100 lines). Git keeps them. This changes nothing visible.
