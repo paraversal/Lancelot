@@ -23,7 +23,7 @@ crates/lancelot-service/   commands on the open event, settings, API types (no T
 crates/lancelot-bridge/    development only: the commands over local HTTP for a plain browser
 app/src-tauri/             Tauri 2 shell: commands, dialogs, drag-and-drop
 docs/                      requirements, roadmap, design, technical design
-fixtures/                  ticket sheets (.ods), receipts, format cases; the frozen sample event; Strichliste CSVs later
+fixtures/                  ticket sheets (.ods), receipts, format cases; the sample event
 ```
 
 ---
@@ -337,6 +337,13 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 - [x] `fixtures/events/sample-v1.lancelot` is checked in, with tickets, imports, cancellations, checkpoints, drinks, attachments and a closed event: rows in every table and every transaction kind. A test keeps it opening with its figures written out (F14). From here on every schema change is a migration, and a test fails if `0001_initial.sql` is edited.
 
+### Stage 7 · Drinks as a built-in plugin
+
+- [x] The schema is unfrozen until the first real event is entered, so `0001_initial.sql` is edited directly and the sample regenerated. The sample's money figures stay as they were written out.
+- [x] `plugin_record` and `Book::apply_plugin_changes`: records in the event file, with change log and read-back, copied by templates by scope. The core no longer knows about drinks (technical design §10).
+- [x] `lib/plugins`: `PluginContext`, the host, the registry, and sections on cost centre pages and in Settings. A test keeps plugins behind the context.
+- [x] Drinks in `lib/plugins/drinks`, on any cost centre, with donation prices, left-over and logged counts, expected against collected, and an invoice proposed through the normal form. A new event starts without drinks.
+
 ### After the next event
 
 - [ ] Decide whether a small change history view is worth having. If not, reduce R-TX-6. The log keeps being written until then (F21).
@@ -345,7 +352,7 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 ## Phase 3
 
-- **M11 · Strichliste.** A plain CSV import, tally display with expected vs actual revenue and unpaid amounts, and a per-event toggle (R-STR-1 to R-STR-5).
+- **M11 · Drink sales import.** Fill the logged counts in the drinks plugin from a file, then from an API, with a preview, name matching and a mapping that keeps only per-product totals (R-DRK-6). It needs a sample of the drinks app's export.
 - **M12 · SEPA.** Export the payout list as pain.001 XML (R-PER-6).
 - **M13 · Polished reports.** A typeset settlement PDF that follows the design system.
 - **M14 · Receipt OCR** (optional): pre-fill amount, date and counterparty from an attached receipt. It must run locally.

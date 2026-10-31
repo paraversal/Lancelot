@@ -11,7 +11,7 @@ The app should feel like a well-kept paper ledger at a community event. It is ca
 1. **No gradients, no shadows.** Depth comes from rules (1 px lines) and the sunk sidebar tone.
 2. **No coloured edge accents** (the "fingernail" strip on the side of cards or rows).
 3. **One type face: Familjen Grotesk, weights 400 and 600.** Sizes: 12, 14, 16, 22, 40.
-4. **Show, don't tell.** Labels name things. No sentences that explain a view, no empty-state prose, no "Here you can…" hints. A hint line exists only when it carries data (e.g. `= 1.234,50 €` under an amount, `~9 tickets`).
+4. **Show, don't tell.** Labels name things. No sentences that explain a view, no empty-state prose, no "Here you can…" hints. A hint line exists only when it carries data (e.g. `= 1.234,50 €` under an amount, `~9 tickets`), or when the words alone don't say what to type (the counts of a drinks product).
 5. **Rules and whitespace instead of cards.** A card is allowed only when it holds more than one figure and is a unit of work. Example: the open ticket conflict, which has its own controls. A plugin always sits in its own card: white, a rule around it, radius 16, its name and a "Plugin" tag in the header. That rounder corner belongs to plugins alone, so they read as added to the app rather than part of it.
 6. **Inviting, a little quirky, never forced.** The quirks are the marker highlight, the tally marks and the warm paper tone.
 

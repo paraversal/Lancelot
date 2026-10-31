@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.10 · 2026-10-31
+Status: draft v0.11 · 2026-10-31
 
 ## 1. Purpose
 
@@ -44,9 +44,9 @@ Mathematical correctness is **not** a non-goal. It is the top priority.
 | **Reimbursement**                      | Paying an advance back to the person. Default source: the Verein account.                                                                                                                                                                                                                                                                                                                                         |
 | **Category**                           | The kind of income or expense. Every transaction line has one (Tickets, Kitchen, Mobility, Drinks, General, …).                                                                                                                                                                                                                                                                                                   |
 | **Budget line**                        | A planned income or expense with an estimated amount.                                                                                                                                                                                                                                                                                                                                                             |
-| **Cost centre**                        | A sub-area of an event with its own profit and loss. Drinks is the first one.                                                                                                                                                                                                                                                                                                                                     |
+| **Cost centre**                        | A sub-area of an event with its own profit and loss, such as Drinks.                                                                                                                                                                                                                                                                                                                                     |
 | **Commission goods (Kommissionsware)** | Goods taken from a supplier with the right to return unsold units. Only what is kept is paid for.                                                                                                                                                                                                                                                                                                                 |
-| **Strich / Strichliste**               | A tally mark one person makes per drink, recorded under their name. At the end of the event people pay according to their Striche, at one fixed price per Strich.                                                                                                                                                                                                                                                 |
+| **Strich / Strichliste**               | A tally mark on a paper list, worth a fixed amount of money (for example 0,50 €), so it doesn't say which drink it was for. Lancelot treats a Strich as a product with a donation price and a logged count (§5.9).                                                                                                                                                                                                                                                 |
 
 ## 4. Domain model
 
@@ -102,7 +102,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 ### 5.2 Accounts
 
 - **R-ACC-1** Configurable asset accounts per event, each either **bank** or **cash**. They are added, renamed and switched between bank and cash in Settings. Defaults: Verein account (bank), Cash box (cash). Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
-- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, Drink donations, General; expenses Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General.
+- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, General; expenses Kitchen, Mobility, Venue, Tech, General. The drinks plugin's setup adds Drink donations, Drinks and Pfand (§5.9).
 - **R-ACC-3** Every account shows its derived balance and its transaction history.
 - **R-ACC-4** **Reconciliation checkpoints**: the user enters "statement shows X on date D" for an asset account. Lancelot flags any mismatch with the computed balance at D. On a net-movement account this compares the net movement for the event, not the absolute balance.
 
@@ -190,26 +190,24 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 - **R-PER-5** After the payout list has been paid, the user can record all of its reimbursements in one action.
 - **R-PER-6** Optional, later: export the payout list as SEPA pain.001 XML for batch upload.
 
-### 5.8 Cost centres and Drinks
+### 5.8 Cost centres
 
 - **R-CC-1** Any transaction line or budget line can be tagged with a cost centre. Each cost centre has its own P&L: income minus expenses tagged to it. Each has its own page, listed in the sidebar under the pages: income, expenses, result and the tagged lines.
-- **R-CC-2** A **Drinks** cost centre and a **Pfand** category are created by default and named in the drink settings. Both can be deleted, and another can take their place. The drinks' cost centre stays while it holds records; its page adds them with the invoice check.
-- **R-DRK-1** Drinks are bought on commission. The supplier bills after the return, so the drinks cost is normally one invoice for the drinks actually kept.
-- **R-DRK-2** Pfand is recorded as its own expense category (`Pfand`) in the Drinks cost centre. It only occurs for drinks that could not be returned because only full crates can be returned. Pfand on drinks that were sold and returned as empties is not tracked.
-- **R-DRK-3** Drink revenue is recorded as income `Drink donations`, wherever it was collected (cash box, held account, Verein account).
-- **R-DRK-4** The Drinks P&L shows: cost (drinks + Pfand), revenue (donations), and the result (profit or loss).
-- **R-DRK-5** Optional per-product records: product, units taken, units returned, units kept, and price per unit. These let the tool check the supplier invoice and compute the cost per drink.
-- **R-DRK-6** **Price per Strich** is a single event setting. It applies to all drinks.
+- **R-CC-2** A new event has no cost centres. Plugins can add sections to a cost centre's page (technical design §10).
 
-### 5.9 Strichliste (optional, pluggable)
+### 5.9 Drinks (built-in plugin)
 
-- **R-STR-1** A generic **Strichliste provider interface**, so that a provider for any service can be written later. The plan for now is simply a CSV import; the interface is added when a second source appears.
-- **R-STR-2** A provider delivers a list of tallies: person name, count, product (optional), timestamp (optional).
-- **R-STR-3** If tallies are present, the Drinks view additionally shows:
-  - the expected revenue (Σ Striche × price per Strich, R-DRK-6) against the actual donations, and
-  - per person, the Striche and amount due, with an optional "paid" checkbox.
-- **R-STR-4** Strichliste data is informational only. It never creates transactions automatically, because the real money is what was actually collected.
-- **R-STR-5** The whole feature can be turned off per event, which hides it from the UI.
+The plugin is called **Stock and sales**. It is optional: Settings → Plugins switches it per event, and it shows in a frame marked as a plugin. It can be attached to any cost centre. "Set up Drinks" creates a Drinks cost centre with its categories. Everything below is informational: it never creates transactions, and an event settles the same without it, because the real money is what was actually collected.
+
+- **R-DRK-1** Drinks are bought on commission. The supplier bills after the return, so the drinks cost is normally one invoice for the units not returned.
+- **R-DRK-2** Pfand is recorded as its own expense category. It only occurs for drinks that could not be returned because only full crates can be returned. Pfand on drinks that were sold and returned as empties is not tracked.
+- **R-DRK-3** Drink revenue is recorded as income on the cost centre, usually `Drink donations`, wherever it was collected (cash box, held account, Verein account).
+- **R-DRK-4** The cost centre's page shows cost, revenue and the result (R-CC-1). That result includes everything billed, also what is left over.
+- **R-DRK-5** Optional records per product: cost per unit, donation per unit, units taken, returned and left over, and units logged. `Billed = taken − returned`, `gone = billed − left over`, `unaccounted = gone − logged`. A blank left over counts as zero. Unaccounted is not proof of dishonesty: it can also be crew drinks or breakage.
+- **R-DRK-6** `Logged = imported + typed in`, never below zero. The typed-in part may be negative, for a correction. A sales import replaces only the imported part. Importing is not built yet.
+- **R-DRK-7** **Expected donations** are logged × donation per unit, shown against the income actually collected. A paper list is one product, `Strich`, with its value as the donation, no stock and only a logged count. Expected donations still work; the other products show no logged figure and no unaccounted figure.
+- **R-DRK-8** **Invoice check:** the expenses tagged to the cost centre whose counterparty is the supplier, without Pfand, against the billed cost. "Book invoice" opens the normal expense form, pre-filled. Without a supplier it asks for one and goes straight on.
+- **R-DRK-9** Cost per drink is the cost of what is gone per unit gone, so left-over stock doesn't count.
 
 ### 5.10 Settlement report
 
@@ -261,7 +259,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 | Storage      | **SQLite**, one `.lancelot` file per event, attachments as BLOBs                                            | One portable file, transactional writes, open format, trivial backup.                                   |
 | Money type   | `Cents(i64)` newtype in Rust. Crosses the IPC boundary as an integer, formatted for display in the UI only. | Rules out float errors by construction.                                                                 |
 | PDF export   | The webview's print dialog, with `typst` as an option for the polished report (M13)                         | Decided in the [technical design](technical-design.md).                                                 |
-| Strichliste  | A CSV import in core                                                                                        | Matches R-STR-1.                                                                                        |
+| Sales log    | The drinks plugin; a file or API import when the app's export is known                                      | R-DRK-6. Only per-product totals are kept, so the file doesn't record who drank what.                   |
 | Excel import | `calamine` crate in Rust (reads .xlsx/.xls/.ods)                                                            | Pure Rust, read-only, no Office installation needed.                                                    |
 | Charts       | Hand-written SVG components, no library                                                                     | The design needs only simple bars. Decided in the [technical design](technical-design.md).              |
 
@@ -276,8 +274,8 @@ The Tauri approach has one real cost: the IPC boundary between Svelte and Rust. 
 ## 9. Phasing
 
 1. **MVP**: event file, accounts, typed transaction entry with splits, attachments, persons with IBAN and netting, reimbursements and repayments, person overview, payout list, settlement report, integrity check. Ticket income is entered manually.
-2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records, reconciliation checkpoints, templates from previous events.
-3. **Phase 3**: Strichliste interface and CSV import, SEPA XML export, polished PDF reports, receipt OCR.
+2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records (now the drinks plugin), reconciliation checkpoints, templates from previous events.
+3. **Phase 3**: drink sales import, SEPA XML export, polished PDF reports, receipt OCR.
 
 ## 10. Remaining open points
 
