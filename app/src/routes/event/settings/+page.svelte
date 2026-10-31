@@ -22,6 +22,9 @@
 	import Check from '#lib/motion/Check.svelte';
 	import Lock from '#lib/motion/Lock.svelte';
 	import { level, reduced } from '#lib/motion/mode.svelte.ts';
+	import { pluginContext, pluginEnabled, setPluginEnabled } from '#lib/plugins/host.ts';
+	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	// The layout only renders pages while an event is open.
@@ -230,12 +233,6 @@
 			source = null;
 		});
 
-	// Which cost centre and category the drink records use; either can be none.
-	const drinks = $derived(open.snapshot.drinkSettings);
-	const expenses = $derived(categories.filter((a) => a.kind === 'expense'));
-	const setDrinks = (patch: Partial<typeof drinks>) =>
-		run(() => session.change(() => api.setDrinkSettings({ ...drinks, ...patch })));
-
 	const issues = $derived(open.integrity.issues.length);
 	const shortPath = $derived(open.path.replace(/^\/Users\/[^/]+/, '~'));
 	const checked = $derived(
@@ -417,23 +414,6 @@
 					{#if !closed}
 						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
 					{/if}
-					<div class="form-pair">
-						<Select
-							label="Drinks are in"
-							value={drinks.costCentre ?? 0}
-							options={centreOptions}
-							onchange={(v) => setDrinks({ costCentre: v === 0 ? null : v })}
-						/>
-						<Select
-							label="Pfand category"
-							value={drinks.pfand ?? 0}
-							options={[
-								{ value: 0, label: 'None' },
-								...expenses.map((a) => ({ value: a.id, label: a.name }))
-							]}
-							onchange={(v) => setDrinks({ pfand: v === 0 ? null : v })}
-						/>
-					</div>
 					<div class="labelled">
 						<span class="form-label">Categories start in</span>
 						<ul class="accounts starts">
@@ -458,6 +438,35 @@
 							{/each}
 						</ul>
 					</div>
+				</section>
+
+				<section>
+					<h2>Plugins</h2>
+					<p class="plugins-note">
+						Optional additions to the app. Switching one off hides it for this event and keeps its
+						data in the file.
+					</p>
+					{#each plugins as plugin (plugin.id)}
+						{@const on = pluginEnabled(plugin.id)}
+						<PluginFrame name={plugin.name} description={plugin.description}>
+							{#snippet actions()}
+								<label class="toggle">
+									<input
+										type="checkbox"
+										checked={on}
+										onchange={(e) => {
+											const { checked } = e.currentTarget;
+											run(() => setPluginEnabled(plugin.id, checked));
+										}}
+									/>
+									On
+								</label>
+							{/snippet}
+							{#if on && plugin.SettingsSection}
+								<plugin.SettingsSection ctx={pluginContext(plugin.id)} />
+							{/if}
+						</PluginFrame>
+					{/each}
 				</section>
 			</div>
 		</fieldset>
@@ -648,6 +657,12 @@
 		border-bottom: 1px solid var(--color-rule);
 		font-size: var(--type-md);
 		font-weight: 600;
+	}
+
+	.plugins-note {
+		margin: 0;
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
 	}
 
 	.labelled {

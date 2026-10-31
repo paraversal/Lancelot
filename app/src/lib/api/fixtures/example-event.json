@@ -18,12 +18,6 @@
     "enabled": true,
     "account": 1
   },
-  "drinkSettings": {
-    "supplier": "Hoffmann",
-    "pricePerStrich": 100,
-    "costCentre": 1,
-    "pfand": 9
-  },
   "accounts": [
     {
       "id": 1,
@@ -68,16 +62,6 @@
     {
       "id": 5,
       "kind": "income",
-      "name": "Drink donations",
-      "role": null,
-      "assetType": null,
-      "netMovement": false,
-      "costCentre": 1,
-      "balance": 81250
-    },
-    {
-      "id": 6,
-      "kind": "income",
       "name": "General",
       "role": null,
       "assetType": null,
@@ -86,7 +70,7 @@
       "balance": 5000
     },
     {
-      "id": 7,
+      "id": 6,
       "kind": "expense",
       "name": "Kitchen",
       "role": null,
@@ -96,27 +80,7 @@
       "balance": 210000
     },
     {
-      "id": 8,
-      "kind": "expense",
-      "name": "Drinks",
-      "role": null,
-      "assetType": null,
-      "netMovement": false,
-      "costCentre": 1,
-      "balance": 45200
-    },
-    {
-      "id": 9,
-      "kind": "expense",
-      "name": "Pfand",
-      "role": null,
-      "assetType": null,
-      "netMovement": false,
-      "costCentre": 1,
-      "balance": 3200
-    },
-    {
-      "id": 10,
+      "id": 7,
       "kind": "expense",
       "name": "Mobility",
       "role": null,
@@ -126,7 +90,7 @@
       "balance": 0
     },
     {
-      "id": 11,
+      "id": 8,
       "kind": "expense",
       "name": "Venue",
       "role": null,
@@ -136,7 +100,7 @@
       "balance": 180000
     },
     {
-      "id": 12,
+      "id": 9,
       "kind": "expense",
       "name": "Tech",
       "role": null,
@@ -146,7 +110,7 @@
       "balance": 61000
     },
     {
-      "id": 13,
+      "id": 10,
       "kind": "expense",
       "name": "General",
       "role": null,
@@ -154,6 +118,36 @@
       "netMovement": false,
       "costCentre": null,
       "balance": 36850
+    },
+    {
+      "id": 11,
+      "kind": "income",
+      "name": "Drink donations",
+      "role": null,
+      "assetType": null,
+      "netMovement": false,
+      "costCentre": 1,
+      "balance": 81250
+    },
+    {
+      "id": 12,
+      "kind": "expense",
+      "name": "Drinks",
+      "role": null,
+      "assetType": null,
+      "netMovement": false,
+      "costCentre": 1,
+      "balance": 45200
+    },
+    {
+      "id": 13,
+      "kind": "expense",
+      "name": "Pfand",
+      "role": null,
+      "assetType": null,
+      "netMovement": false,
+      "costCentre": 1,
+      "balance": 3200
     },
     {
       "id": 14,
@@ -418,7 +412,7 @@
       "notes": null,
       "lines": [
         {
-          "account": 5,
+          "account": 11,
           "amount": -81250,
           "budgetLine": 2,
           "costCentre": 1
@@ -440,7 +434,7 @@
         "destination": 2,
         "lines": [
           {
-            "account": 5,
+            "account": 11,
             "amount": 81250,
             "budgetLine": 2,
             "costCentre": 1
@@ -460,7 +454,7 @@
       "notes": null,
       "lines": [
         {
-          "account": 6,
+          "account": 5,
           "amount": -5000,
           "budgetLine": null,
           "costCentre": null
@@ -482,7 +476,7 @@
         "destination": 2,
         "lines": [
           {
-            "account": 6,
+            "account": 5,
             "amount": 5000,
             "budgetLine": null,
             "costCentre": null
@@ -508,13 +502,13 @@
           "costCentre": null
         },
         {
-          "account": 8,
+          "account": 12,
           "amount": 42000,
           "budgetLine": 6,
           "costCentre": 1
         },
         {
-          "account": 9,
+          "account": 13,
           "amount": 3200,
           "budgetLine": null,
           "costCentre": 1
@@ -540,13 +534,13 @@
         "payer": 1,
         "lines": [
           {
-            "account": 8,
+            "account": 12,
             "amount": 42000,
             "budgetLine": 6,
             "costCentre": 1
           },
           {
-            "account": 9,
+            "account": 13,
             "amount": 3200,
             "budgetLine": null,
             "costCentre": 1
@@ -572,7 +566,7 @@
           "costCentre": null
         },
         {
-          "account": 11,
+          "account": 8,
           "amount": 180000,
           "budgetLine": 3,
           "costCentre": null
@@ -598,7 +592,7 @@
         "payer": 1,
         "lines": [
           {
-            "account": 11,
+            "account": 8,
             "amount": 180000,
             "budgetLine": 3,
             "costCentre": null
@@ -624,7 +618,7 @@
           "costCentre": null
         },
         {
-          "account": 12,
+          "account": 9,
           "amount": 50000,
           "budgetLine": 7,
           "costCentre": null
@@ -650,7 +644,7 @@
         "payer": 1,
         "lines": [
           {
-            "account": 12,
+            "account": 9,
             "amount": 50000,
             "budgetLine": 7,
             "costCentre": null
@@ -676,7 +670,7 @@
           "costCentre": null
         },
         {
-          "account": 7,
+          "account": 6,
           "amount": 109850,
           "budgetLine": 4,
           "costCentre": null
@@ -702,7 +696,7 @@
         "payer": 1,
         "lines": [
           {
-            "account": 7,
+            "account": 6,
             "amount": 109850,
             "budgetLine": 4,
             "costCentre": null
@@ -728,7 +722,7 @@
           "costCentre": null
         },
         {
-          "account": 13,
+          "account": 10,
           "amount": 22500,
           "budgetLine": 8,
           "costCentre": null
@@ -754,7 +748,7 @@
         "payer": 1,
         "lines": [
           {
-            "account": 13,
+            "account": 10,
             "amount": 22500,
             "budgetLine": 8,
             "costCentre": null
@@ -780,13 +774,13 @@
           "costCentre": null
         },
         {
-          "account": 7,
+          "account": 6,
           "amount": 34275,
           "budgetLine": 5,
           "costCentre": null
         },
         {
-          "account": 13,
+          "account": 10,
           "amount": 4850,
           "budgetLine": null,
           "costCentre": null
@@ -812,13 +806,13 @@
         "payer": 2,
         "lines": [
           {
-            "account": 7,
+            "account": 6,
             "amount": 34275,
             "budgetLine": 5,
             "costCentre": null
           },
           {
-            "account": 13,
+            "account": 10,
             "amount": 4850,
             "budgetLine": null,
             "costCentre": null
@@ -844,7 +838,7 @@
           "costCentre": null
         },
         {
-          "account": 7,
+          "account": 6,
           "amount": 22635,
           "budgetLine": 5,
           "costCentre": null
@@ -870,7 +864,7 @@
         "payer": 2,
         "lines": [
           {
-            "account": 7,
+            "account": 6,
             "amount": 22635,
             "budgetLine": 5,
             "costCentre": null
@@ -896,7 +890,7 @@
           "costCentre": null
         },
         {
-          "account": 7,
+          "account": 6,
           "amount": 31240,
           "budgetLine": 5,
           "costCentre": null
@@ -922,7 +916,7 @@
         "payer": 14,
         "lines": [
           {
-            "account": 7,
+            "account": 6,
             "amount": 31240,
             "budgetLine": 5,
             "costCentre": null
@@ -948,7 +942,7 @@
           "costCentre": null
         },
         {
-          "account": 12,
+          "account": 9,
           "amount": 11000,
           "budgetLine": null,
           "costCentre": null
@@ -974,7 +968,7 @@
         "payer": 15,
         "lines": [
           {
-            "account": 12,
+            "account": 9,
             "amount": 11000,
             "budgetLine": null,
             "costCentre": null
@@ -1000,7 +994,7 @@
           "costCentre": null
         },
         {
-          "account": 7,
+          "account": 6,
           "amount": 12000,
           "budgetLine": 5,
           "costCentre": null
@@ -1026,7 +1020,7 @@
         "payer": 16,
         "lines": [
           {
-            "account": 7,
+            "account": 6,
             "amount": 12000,
             "budgetLine": 5,
             "costCentre": null
@@ -1052,7 +1046,7 @@
           "costCentre": null
         },
         {
-          "account": 13,
+          "account": 10,
           "amount": 9500,
           "budgetLine": null,
           "costCentre": null
@@ -1078,7 +1072,7 @@
         "payer": 17,
         "lines": [
           {
-            "account": 13,
+            "account": 10,
             "amount": 9500,
             "budgetLine": null,
             "costCentre": null
@@ -1104,7 +1098,7 @@
           "costCentre": null
         },
         {
-          "account": 8,
+          "account": 12,
           "amount": 3200,
           "budgetLine": null,
           "costCentre": 1
@@ -1120,7 +1114,7 @@
         "payer": 2,
         "lines": [
           {
-            "account": 8,
+            "account": 12,
             "amount": 3200,
             "budgetLine": null,
             "costCentre": 1
@@ -1366,7 +1360,7 @@
     },
     {
       "id": 2,
-      "category": 5,
+      "category": 11,
       "description": "Bar donations",
       "estimate": {
         "type": "amount",
@@ -1377,7 +1371,7 @@
     },
     {
       "id": 3,
-      "category": 11,
+      "category": 8,
       "description": "Hall rent",
       "estimate": {
         "type": "amount",
@@ -1388,7 +1382,7 @@
     },
     {
       "id": 4,
-      "category": 7,
+      "category": 6,
       "description": "Catering",
       "estimate": {
         "type": "amount",
@@ -1399,7 +1393,7 @@
     },
     {
       "id": 5,
-      "category": 7,
+      "category": 6,
       "description": "Groceries",
       "estimate": {
         "type": "quantity",
@@ -1411,7 +1405,7 @@
     },
     {
       "id": 6,
-      "category": 8,
+      "category": 12,
       "description": "Drink crates",
       "estimate": {
         "type": "quantity",
@@ -1423,7 +1417,7 @@
     },
     {
       "id": 7,
-      "category": 12,
+      "category": 9,
       "description": "PA rental",
       "estimate": {
         "type": "amount",
@@ -1434,7 +1428,7 @@
     },
     {
       "id": 8,
-      "category": 13,
+      "category": 10,
       "description": "Insurance",
       "estimate": {
         "type": "amount",
@@ -1445,7 +1439,7 @@
     },
     {
       "id": 9,
-      "category": 10,
+      "category": 7,
       "description": "Van rental",
       "estimate": {
         "type": "amount",
@@ -1522,66 +1516,66 @@
       },
       {
         "category": 5,
-        "estimate": 70000,
-        "actual": 81250,
-        "forecast": 70000,
-        "unbudgeted": 0
-      },
-      {
-        "category": 6,
         "estimate": 0,
         "actual": 5000,
         "forecast": 5000,
         "unbudgeted": 5000
       },
       {
-        "category": 7,
+        "category": 6,
         "estimate": 185000,
         "actual": 210000,
         "forecast": 210000,
         "unbudgeted": 0
       },
       {
-        "category": 8,
-        "estimate": 42000,
-        "actual": 45200,
-        "forecast": 45200,
-        "unbudgeted": 3200
-      },
-      {
-        "category": 9,
-        "estimate": 0,
-        "actual": 3200,
-        "forecast": 3200,
-        "unbudgeted": 3200
-      },
-      {
-        "category": 10,
+        "category": 7,
         "estimate": 15000,
         "actual": 0,
         "forecast": 15000,
         "unbudgeted": 0
       },
       {
-        "category": 11,
+        "category": 8,
         "estimate": 180000,
         "actual": 180000,
         "forecast": 180000,
         "unbudgeted": 0
       },
       {
-        "category": 12,
+        "category": 9,
         "estimate": 45000,
         "actual": 61000,
         "forecast": 61000,
         "unbudgeted": 11000
       },
       {
-        "category": 13,
+        "category": 10,
         "estimate": 22500,
         "actual": 36850,
         "forecast": 36850,
         "unbudgeted": 14350
+      },
+      {
+        "category": 11,
+        "estimate": 70000,
+        "actual": 81250,
+        "forecast": 70000,
+        "unbudgeted": 0
+      },
+      {
+        "category": 12,
+        "estimate": 42000,
+        "actual": 45200,
+        "forecast": 45200,
+        "unbudgeted": 3200
+      },
+      {
+        "category": 13,
+        "estimate": 0,
+        "actual": 3200,
+        "forecast": 3200,
+        "unbudgeted": 3200
       }
     ],
     "income": {
@@ -1604,21 +1598,21 @@
         "costCentre": 1,
         "categories": [
           {
-            "category": 5,
+            "category": 11,
             "estimate": 70000,
             "actual": 81250,
             "forecast": 70000,
             "unbudgeted": 0
           },
           {
-            "category": 8,
+            "category": 12,
             "estimate": 42000,
             "actual": 45200,
             "forecast": 45200,
             "unbudgeted": 3200
           },
           {
-            "category": 9,
+            "category": 13,
             "estimate": 0,
             "actual": 3200,
             "forecast": 3200,
@@ -1676,78 +1670,141 @@
       "name": "Drinks"
     }
   ],
-  "drinkProducts": [
+  "pluginRecords": [
     {
       "id": 1,
-      "name": "Club-Mate 0,5",
-      "taken": 240,
-      "returned": 96,
-      "unitPrice": 115
+      "plugin": "drinks",
+      "key": "centre:1",
+      "scope": "setup",
+      "value": {
+        "pfand": 13,
+        "supplier": "Hoffmann"
+      }
     },
     {
       "id": 2,
-      "name": "Pils 0,33",
-      "taken": 480,
-      "returned": 312,
-      "unitPrice": 95
+      "plugin": "drinks",
+      "key": "product:1",
+      "scope": "setup",
+      "value": {
+        "centre": 1,
+        "cost": 115,
+        "donation": 250,
+        "name": "Club-Mate 0,5"
+      }
     },
     {
       "id": 3,
-      "name": "Radler 0,33",
-      "taken": 120,
-      "returned": 72,
-      "unitPrice": 95
+      "plugin": "drinks",
+      "key": "count:1",
+      "scope": "records",
+      "value": {
+        "imported": null,
+        "leftOver": 4,
+        "manual": 138,
+        "returned": 96,
+        "taken": 240
+      }
     },
     {
       "id": 4,
-      "name": "Apfelschorle 1,0",
-      "taken": 72,
-      "returned": 48,
-      "unitPrice": 140
+      "plugin": "drinks",
+      "key": "product:2",
+      "scope": "setup",
+      "value": {
+        "centre": 1,
+        "cost": 95,
+        "donation": 200,
+        "name": "Pils 0,33"
+      }
     },
     {
       "id": 5,
-      "name": "Water 1,0",
-      "taken": 96,
-      "returned": 70,
-      "unitPrice": 60
-    }
-  ],
-  "drinks": {
-    "products": [
-      {
-        "product": 1,
-        "kept": 144,
-        "cost": 16560
-      },
-      {
-        "product": 2,
-        "kept": 168,
-        "cost": 15960
-      },
-      {
-        "product": 3,
-        "kept": 48,
-        "cost": 4560
-      },
-      {
-        "product": 4,
-        "kept": 24,
-        "cost": 3360
-      },
-      {
-        "product": 5,
-        "kept": 26,
-        "cost": 1560
+      "plugin": "drinks",
+      "key": "count:2",
+      "scope": "records",
+      "value": {
+        "imported": null,
+        "leftOver": 0,
+        "manual": 165,
+        "returned": 312,
+        "taken": 480
       }
-    ],
-    "kept": 410,
-    "cost": 42000,
-    "costPerDrink": 102,
-    "invoice": {
-      "amount": 45200,
-      "pfand": 3200,
-      "difference": 0
+    },
+    {
+      "id": 6,
+      "plugin": "drinks",
+      "key": "product:3",
+      "scope": "setup",
+      "value": {
+        "centre": 1,
+        "cost": 95,
+        "donation": 200,
+        "name": "Radler 0,33"
+      }
+    },
+    {
+      "id": 7,
+      "plugin": "drinks",
+      "key": "count:3",
+      "scope": "records",
+      "value": {
+        "imported": null,
+        "leftOver": 2,
+        "manual": 45,
+        "returned": 72,
+        "taken": 120
+      }
+    },
+    {
+      "id": 8,
+      "plugin": "drinks",
+      "key": "product:4",
+      "scope": "setup",
+      "value": {
+        "centre": 1,
+        "cost": 140,
+        "donation": 300,
+        "name": "Apfelschorle 1,0"
+      }
+    },
+    {
+      "id": 9,
+      "plugin": "drinks",
+      "key": "count:4",
+      "scope": "records",
+      "value": {
+        "imported": null,
+        "leftOver": 2,
+        "manual": 22,
+        "returned": 48,
+        "taken": 72
+      }
+    },
+    {
+      "id": 10,
+      "plugin": "drinks",
+      "key": "product:5",
+      "scope": "setup",
+      "value": {
+        "centre": 1,
+        "cost": 60,
+        "donation": 100,
+        "name": "Water 1,0"
+      }
+    },
+    {
+      "id": 11,
+      "plugin": "drinks",
+      "key": "count:5",
+      "scope": "records",
+      "value": {
+        "imported": null,
+        "leftOver": 6,
+        "manual": 20,
+        "returned": 70,
+        "taken": 96
+      }
     }
-  }
+  ]
 }

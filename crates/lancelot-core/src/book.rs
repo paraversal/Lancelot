@@ -9,26 +9,27 @@ use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::budget::Budget;
-use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
 use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, txn_amount, txn_follows_rules};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{Ledger, LedgerInput, TicketIncome};
 use crate::model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
-    BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId,
-    DrinkProductId, Estimate, Event, EventDetails, Line, OpenItem, Person, Reconciliation,
-    ReconciliationId, Role, Txn, TxnId, TxnKind,
+    BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId, Estimate,
+    Event, EventDetails, Line, OpenItem, Person, PluginRecordId, Reconciliation, ReconciliationId,
+    Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
+use crate::plugin::PluginRecord;
 use crate::sales::Profitability;
 use crate::tickets::{
     Cancellation, ManualSale, TicketColumns, TicketImport, TicketSettings, Tickets, Tier,
 };
 
-mod drinks;
+mod cost_centres;
+mod plugins;
 mod template;
 mod tickets;
 
@@ -39,13 +40,8 @@ pub use template::{CopyChoice, CopySummary, TemplateSummary};
 pub const MAX_ATTACHMENT_SIZE: u64 = 50 * 1024 * 1024;
 
 /// Default categories of a new event (R-ACC-2).
-const DEFAULT_INCOME: &[&str] = &["Tickets", "Drink donations", "General"];
-const DEFAULT_EXPENSE: &[&str] = &[
-    "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General",
-];
-
-/// The default categories that start in the Drinks cost centre (R-DRK-2, R-DRK-3).
-const DRINKS_CATEGORIES: &[&str] = &["Drink donations", "Drinks", "Pfand"];
+const DEFAULT_INCOME: &[&str] = &["Tickets", "General"];
+const DEFAULT_EXPENSE: &[&str] = &["Kitchen", "Mobility", "Venue", "Tech", "General"];
 
 /// The description of an opening transaction made by [`Book::set_opening_count`].
 const OPENING_DESCRIPTION: &str = "Opening count";
@@ -55,7 +51,6 @@ pub struct Book {
     event: Event,
     ticket_columns: TicketColumns,
     ticket_settings: TicketSettings,
-    drink_settings: DrinkSettings,
     accounts: BTreeMap<AccountId, Account>,
     persons: BTreeMap<AccountId, Person>,
     txns: BTreeMap<TxnId, Txn>,
@@ -68,19 +63,18 @@ pub struct Book {
     manual_sales: BTreeMap<ManualSaleId, ManualSale>,
     cancellations: BTreeMap<CancellationId, Cancellation>,
     cost_centres: BTreeMap<CostCentreId, CostCentre>,
-    drink_products: BTreeMap<DrinkProductId, DrinkProduct>,
+    plugin_records: BTreeMap<PluginRecordId, PluginRecord>,
     next: NextIds,
     ledger: Ledger,
     budget: Budget,
     tickets: Tickets,
-    drinks: Drinks,
     payouts: Payouts,
     /// Regardless of whether the event is closed: see [`Book::profitability`].
     profitability: Option<Profitability>,
 }
 
 /// The ids the next new account, transaction, attachment, budget line, tier, import, manual
-/// sale, cancellation, cost centre, product and checkpoint get. Ids are never reused, so the change log stays unambiguous after deletions.
+/// sale, cancellation, cost centre, plugin record and checkpoint get. Ids are never reused, so the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
@@ -92,7 +86,7 @@ pub struct NextIds {
     pub manual_sale: i64,
     pub cancellation: i64,
     pub cost_centre: i64,
-    pub drink_product: i64,
+    pub plugin_record: i64,
     pub reconciliation: i64,
 }
 
@@ -102,7 +96,6 @@ pub struct BookParts {
     pub event: Event,
     pub ticket_columns: TicketColumns,
     pub ticket_settings: TicketSettings,
-    pub drink_settings: DrinkSettings,
     pub accounts: Vec<Account>,
     pub persons: Vec<(AccountId, Person)>,
     pub txns: Vec<Txn>,
@@ -115,7 +108,7 @@ pub struct BookParts {
     pub manual_sales: Vec<ManualSale>,
     pub cancellations: Vec<Cancellation>,
     pub cost_centres: Vec<CostCentre>,
-    pub drink_products: Vec<DrinkProduct>,
+    pub plugin_records: Vec<PluginRecord>,
     pub next: NextIds,
 }
 
@@ -152,7 +145,6 @@ impl Book {
                 enabled: true,
                 account: None,
             },
-            drink_settings: DrinkSettings::default(),
             accounts: BTreeMap::new(),
             persons: BTreeMap::new(),
             txns: BTreeMap::new(),
@@ -165,7 +157,7 @@ impl Book {
             manual_sales: BTreeMap::new(),
             cancellations: BTreeMap::new(),
             cost_centres: BTreeMap::new(),
-            drink_products: BTreeMap::new(),
+            plugin_records: BTreeMap::new(),
             next: NextIds {
                 account: 1,
                 txn: 1,
@@ -176,17 +168,15 @@ impl Book {
                 manual_sale: 1,
                 cancellation: 1,
                 cost_centre: 1,
-                drink_product: 1,
+                plugin_record: 1,
                 reconciliation: 1,
             },
             ledger: Ledger::default(),
             budget: Budget::default(),
             tickets: Tickets::default(),
-            drinks: Drinks::default(),
             payouts: Payouts::default(),
             profitability: None,
         };
-        let drinks = book.insert_cost_centre("Drinks");
         let verein = book.insert_account(AccountKind::Asset, "Verein account", None);
         let cash = book.insert_account(AccountKind::Asset, "Cash box", None);
         book.insert_account(AccountKind::Opening, "Opening balance", None);
@@ -195,15 +185,7 @@ impl Book {
             book.insert_account(AccountKind::Income, name, role);
         }
         for name in DEFAULT_EXPENSE {
-            let id = book.insert_account(AccountKind::Expense, name, None);
-            if *name == "Pfand" {
-                book.drink_settings.pfand = Some(id);
-            }
-        }
-        for account in book.accounts.values_mut() {
-            if a_category(account.kind) && DRINKS_CATEGORIES.contains(&account.name.as_str()) {
-                account.cost_centre = Some(drinks);
-            }
+            book.insert_account(AccountKind::Expense, name, None);
         }
         if let Some(a) = book.accounts.get_mut(&verein) {
             a.net_movement = true;
@@ -211,7 +193,6 @@ impl Book {
         if let Some(a) = book.accounts.get_mut(&cash) {
             a.asset_type = Some(AssetType::Cash);
         }
-        book.drink_settings.cost_centre = Some(drinks);
         book.ticket_settings.account = Some(verein);
         book.event.default_reimbursement_account = verein;
         book.recompute()?;
@@ -270,7 +251,8 @@ impl Book {
             return Err(bad("account kinds, roles or names are inconsistent"));
         }
 
-        let cost_centres = drinks::check_cost_centres(parts.cost_centres, &parts.next, &accounts)?;
+        let cost_centres =
+            cost_centres::check_cost_centres(parts.cost_centres, &parts.next, &accounts)?;
 
         let mut persons = BTreeMap::new();
         for (id, p) in parts.persons {
@@ -350,16 +332,7 @@ impl Book {
             return Err(bad("default reimbursement account is not an asset"));
         }
 
-        let drink_products = drinks::check_products(parts.drink_products, &parts.next)?;
-        let settings = drinks::clean_settings(
-            parts.drink_settings.clone(),
-            &accounts,
-            &cost_centres,
-            &drink_products,
-        );
-        if settings.as_ref() != Ok(&parts.drink_settings) {
-            return Err(bad("drink settings are invalid"));
-        }
+        let plugin_records = plugins::check_records(parts.plugin_records, &parts.next)?;
 
         let (tiers, imports, manual_sales, cancellations) = tickets::check_parts(
             parts.tiers,
@@ -382,7 +355,6 @@ impl Book {
             event: parts.event,
             ticket_columns: parts.ticket_columns,
             ticket_settings,
-            drink_settings: parts.drink_settings,
             accounts,
             persons,
             txns,
@@ -395,12 +367,11 @@ impl Book {
             manual_sales,
             cancellations,
             cost_centres,
-            drink_products,
+            plugin_records,
             next: parts.next,
             ledger: Ledger::default(),
             budget: Budget::default(),
             tickets: Tickets::default(),
-            drinks: Drinks::default(),
             payouts: Payouts::default(),
             profitability: None,
         };
@@ -459,11 +430,6 @@ impl Book {
     /// The columns read from the ticket sheet (R-TKT-3).
     pub fn ticket_columns(&self) -> &TicketColumns {
         &self.ticket_columns
-    }
-
-    /// The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
-    pub fn drink_settings(&self) -> &DrinkSettings {
-        &self.drink_settings
     }
 
     pub fn event(&self) -> &Event {
@@ -619,8 +585,7 @@ impl Book {
     }
 
     /// Deletes an account or a person nothing refers to, such as a mistyped one (not the opening
-    /// account or a ticket category). Whatever is in use stays, so no figure changes. A Pfand
-    /// category nothing is booked to can go, and the setting with it.
+    /// account or a ticket category). Whatever is in use stays, so no figure changes.
     pub fn delete_account(&mut self, id: AccountId) -> Result<Account, DomainError> {
         self.change(|book| {
             let account = book
@@ -644,9 +609,6 @@ impl Book {
                     .any(|c| c.terms.is_some_and(|t| t.payer == Some(id)));
             if in_use {
                 return Err(DomainError::AccountInUse);
-            }
-            if book.drink_settings.pfand == Some(id) {
-                book.drink_settings.pfand = None;
             }
             book.persons.remove(&id);
             book.accounts
@@ -1263,7 +1225,6 @@ impl Book {
             &self.txns,
             &self.ledger,
         )?;
-        self.drinks = Drinks::compute(&self.drink_products, &self.drink_settings, &self.txns)?;
         self.payouts = payouts(self)?;
         self.profitability = if self.budget_lines.is_empty() || !self.ticket_settings.enabled {
             None

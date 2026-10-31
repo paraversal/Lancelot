@@ -16,6 +16,10 @@ Today tickets come from a sheet (`.ods`, `.xlsx` or `.csv`) with one row per tic
 
 **Do not build yet:** a provider trait or a source setting. With one source there is nothing to abstract, and the second one will show what the abstraction needs.
 
+## Third-party plugins
+
+Plugins are built in today (technical design §10). When another group wants its own, a loader follows: JavaScript in a sandboxed iframe, with a manifest of permissions, the context over messages, network access through the Rust layer and credentials in the OS keychain. The first step is testing that an iframe can't reach Tauri's commands. The Drinks plugin should then need little change.
+
 ## Motion trial
 
 `lib/motion/choices.ts`, every strength of about 25 effects and the `/design/motion` trial page stay for now, so animations can still be tried out. Once the choices feel settled, keep the chosen effects and a full-or-reduced switch, and remove the rest (about 1,100 lines). Git keeps them. This changes nothing visible.
@@ -30,4 +34,4 @@ A new form is one `Entry` variant, with no change to the load path. Candidates, 
 
 ## Decided against
 
-These do not fit a tool for one treasurer, and the changes above cover the realistic cases more simply: a plugin system, configurable workflows and event sourcing. Multi-event, multi-user and compliance features stay out of scope (requirements §1).
+These do not fit a tool for one treasurer, and the changes above cover the realistic cases more simply: configurable workflows and event sourcing. Multi-event, multi-user and compliance features stay out of scope (requirements §1).

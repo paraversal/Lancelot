@@ -79,7 +79,7 @@ fn an_expense_line_forecasts_the_larger_of_estimate_and_actual() {
 #[test]
 fn an_income_line_forecasts_the_smaller_of_estimate_and_actual() {
     let mut book = new_book();
-    let donations = income(&book, "Drink donations");
+    let donations = income(&book, "General");
     let bar = book
         .add_budget_line(amount(donations, "Bar", "2.000"))
         .unwrap();
@@ -134,7 +134,7 @@ fn categories_add_unbudgeted_actuals_on_top() {
 #[test]
 fn an_estimate_can_be_quantity_times_unit_price() {
     let mut book = new_book();
-    let drinks = expense(&book, "Drinks");
+    let drinks = expense(&book, "General");
     let crates = book
         .add_budget_line(BudgetLineDraft {
             cost_centre: None,
@@ -310,7 +310,7 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
 
     let kitchen = expense(store.book(), "Kitchen");
-    let drinks = expense(store.book(), "Drinks");
+    let drinks = expense(store.book(), "General");
     let food = store
         .change(|book| book.add_budget_line(amount(kitchen, "Food", "1.000")))
         .unwrap();

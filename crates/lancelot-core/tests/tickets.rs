@@ -710,7 +710,6 @@ mod properties {
                 event: book.event().clone(),
                 ticket_columns: book.ticket_columns().clone(),
                 ticket_settings: book.ticket_settings(),
-                drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
                 txns: book.txns().cloned().collect(),
@@ -723,7 +722,7 @@ mod properties {
                 manual_sales: Vec::new(),
                 cancellations: Vec::new(),
                 cost_centres: book.cost_centres().cloned().collect(),
-                drink_products: Vec::new(),
+                plugin_records: Vec::new(),
                 next: book.next_ids(),
             };
             prop_assert_eq!(Book::from_parts(parts), Ok(book));
@@ -1382,7 +1381,6 @@ mod conflict_properties {
                 event: book.event().clone(),
                 ticket_columns: book.ticket_columns().clone(),
                 ticket_settings: book.ticket_settings(),
-                drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
                 txns: book.txns().cloned().collect(),
@@ -1395,7 +1393,7 @@ mod conflict_properties {
                 manual_sales: Vec::new(),
                 cancellations: book.cancellations().cloned().collect(),
                 cost_centres: book.cost_centres().cloned().collect(),
-                drink_products: Vec::new(),
+                plugin_records: Vec::new(),
                 next: book.next_ids(),
             };
             prop_assert_eq!(Book::from_parts(parts), Ok(book));

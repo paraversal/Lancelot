@@ -187,13 +187,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
             Book::set_category_cost_centre,
         ),
 
-        "drink_product_add" => one(s, a, "draft", Book::add_drink_product),
-
-        "drink_product_update" => two(s, a, ("id", "draft"), Book::update_drink_product),
-
-        "drink_product_delete" => one(s, a, "id", Book::delete_drink_product),
-
-        "drink_settings_set" => one(s, a, "settings", Book::set_drink_settings),
+        "plugin_records_apply" => two(s, a, ("plugin", "changes"), Book::apply_plugin_changes),
 
         "tier_add" => one(s, a, "draft", Book::add_tier),
 

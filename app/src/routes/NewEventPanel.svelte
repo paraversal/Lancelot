@@ -82,8 +82,7 @@
 				{counted(template.summary.categories, 'category', 'categories')} ·
 				{counted(template.summary.persons, 'person', 'people')} ·
 				{counted(template.summary.budgetLines, 'budget line', 'budget lines')} ·
-				{counted(template.summary.tiers, 'tier', 'tiers')} ·
-				{counted(template.summary.drinkProducts, 'product', 'products')}
+				{counted(template.summary.tiers, 'tier', 'tiers')}
 			</span>
 		{:else}
 			<div><Button size="sm" onclick={chooseTemplate}>Choose event</Button></div>

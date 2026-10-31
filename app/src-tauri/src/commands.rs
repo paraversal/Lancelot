@@ -6,10 +6,9 @@ use std::sync::Mutex;
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
-    CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
-    ImportDeletion, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person,
-    ReconciliationId, Resolution, TemplateSummary, TicketColumns, TicketShare, TierDraft, TierId,
-    TxnDraft, TxnId,
+    CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
+    ManualSaleDraft, ManualSaleId, Parsed, Person, PluginChange, ReconciliationId, Resolution,
+    TemplateSummary, TicketColumns, TicketShare, TierDraft, TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -381,36 +380,14 @@ pub async fn category_set_cost_centre(
 }
 
 #[tauri::command]
-pub async fn drink_product_add(
+pub async fn plugin_records_apply(
     state: State<'_, AppState>,
-    draft: DrinkProductDraft,
+    plugin: String,
+    changes: Vec<PluginChange>,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.add_drink_product(draft)))
-}
-
-#[tauri::command]
-pub async fn drink_product_update(
-    state: State<'_, AppState>,
-    id: DrinkProductId,
-    draft: DrinkProductDraft,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.update_drink_product(id, draft)))
-}
-
-#[tauri::command]
-pub async fn drink_product_delete(
-    state: State<'_, AppState>,
-    id: DrinkProductId,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.delete_drink_product(id)))
-}
-
-#[tauri::command]
-pub async fn drink_settings_set(
-    state: State<'_, AppState>,
-    settings: DrinkSettings,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.set_drink_settings(settings)))
+    with(&state, |s| {
+        s.change(|b| b.apply_plugin_changes(plugin, changes))
+    })
 }
 
 #[tauri::command]

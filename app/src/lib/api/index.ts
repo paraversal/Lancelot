@@ -20,10 +20,7 @@ import type { Cents } from './generated/Cents';
 import type { CopyChoice } from './generated/CopyChoice';
 import type { CopySummary } from './generated/CopySummary';
 import type { TemplateSummary } from './generated/TemplateSummary';
-import type { DrinkProductDraft } from './generated/DrinkProductDraft';
 import type { ReconciliationId } from './generated/ReconciliationId';
-import type { DrinkProductId } from './generated/DrinkProductId';
-import type { DrinkSettings } from './generated/DrinkSettings';
 import type { CancellationDraft } from './generated/CancellationDraft';
 import type { CancellationEdit } from './generated/CancellationEdit';
 import type { CancellationId } from './generated/CancellationId';
@@ -36,6 +33,7 @@ import type { ImportPreview } from './generated/ImportPreview';
 import type { ManualSaleDraft } from './generated/ManualSaleDraft';
 import type { ManualSaleId } from './generated/ManualSaleId';
 import type { OpenEvent } from './generated/OpenEvent';
+import type { PluginChange } from './generated/PluginChange';
 import type { Parsed } from './generated/Parsed';
 import type { Person } from './generated/Person';
 import type { ParsedDate } from './generated/ParsedDate';
@@ -176,17 +174,14 @@ export const api = {
 	addCostCentre: (name: string) => call<OpenEvent>('cost_centre_add', { name }),
 	renameCostCentre: (id: CostCentreId, name: string) =>
 		call<OpenEvent>('cost_centre_rename', { id, name }),
-	/** What was tagged stays, without a tag. Not for Drinks. */
+	/** What was tagged stays, without a tag. */
 	deleteCostCentre: (id: CostCentreId) => call<OpenEvent>('cost_centre_delete', { id }),
 	/** What a new line of the category starts with. */
 	setCategoryCostCentre: (category: AccountId, costCentre: CostCentreId | null) =>
 		call<OpenEvent>('category_set_cost_centre', { category, costCentre }),
-	addDrinkProduct: (draft: DrinkProductDraft) => call<OpenEvent>('drink_product_add', { draft }),
-	updateDrinkProduct: (id: DrinkProductId, draft: DrinkProductDraft) =>
-		call<OpenEvent>('drink_product_update', { id, draft }),
-	deleteDrinkProduct: (id: DrinkProductId) => call<OpenEvent>('drink_product_delete', { id }),
-	setDrinkSettings: (settings: DrinkSettings) =>
-		call<OpenEvent>('drink_settings_set', { settings }),
+	/** One plugin's changes, applied together (technical design §10). */
+	applyPluginRecords: (plugin: string, changes: PluginChange[]) =>
+		call<OpenEvent>('plugin_records_apply', { plugin, changes }),
 
 	addTier: (draft: TierDraft) => call<OpenEvent>('tier_add', { draft }),
 	updateTier: (id: TierId, draft: TierDraft) => call<OpenEvent>('tier_update', { id, draft }),

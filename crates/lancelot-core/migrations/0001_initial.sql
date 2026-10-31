@@ -1,5 +1,5 @@
 -- Lancelot event file, schema version 1. See docs/technical-design.md §3.
--- Frozen: a change is a new migration, never an edit here (tests/sample_file.rs).
+-- Not frozen until the first real event is entered (docs/technical-design.md §3.2).
 
 CREATE TABLE meta (                    -- event_uuid, created_at, created_by, next_*_id
   key   TEXT PRIMARY KEY,
@@ -37,11 +37,7 @@ CREATE TABLE event (                   -- exactly one row
   ticket_order_column TEXT NOT NULL DEFAULT 'Order ID',
   ticket_date_column  TEXT,
   tickets_enabled     INTEGER NOT NULL DEFAULT 1 CHECK (tickets_enabled IN (0,1)),
-  ticket_account_id   INTEGER REFERENCES account(id),     -- where the sheet's money arrives
-  drink_supplier      TEXT,                               -- R-DRK-5
-  price_per_strich    INTEGER CHECK (price_per_strich >= 0),  -- R-DRK-6
-  drink_cost_centre_id INTEGER REFERENCES cost_centre(id),
-  pfand_category_id   INTEGER REFERENCES account(id)      -- R-DRK-2
+  ticket_account_id   INTEGER REFERENCES account(id)      -- where the sheet's money arrives
 ) STRICT;
 
 CREATE TABLE person (                  -- 1:1 extension of an account of kind 'person'
@@ -79,12 +75,13 @@ CREATE TABLE budget_line (             -- R-BUD-1; planning data only (R-BUD-5)
   CHECK ((amount IS NULL) = (quantity IS NOT NULL) AND (quantity IS NULL) = (unit_price IS NULL))
 ) STRICT;
 
-CREATE TABLE drink_product (           -- R-DRK-5; the kept units and the cost are derived
-  id         INTEGER PRIMARY KEY,
-  name       TEXT NOT NULL,
-  taken      INTEGER NOT NULL CHECK (taken >= 0),
-  returned   INTEGER NOT NULL CHECK (returned >= 0 AND returned <= taken),
-  unit_price INTEGER NOT NULL CHECK (unit_price >= 0)
+CREATE TABLE plugin_record (           -- technical design §10; the core never reads the value's meaning
+  id     INTEGER PRIMARY KEY,
+  plugin TEXT NOT NULL,
+  key    TEXT NOT NULL,
+  scope  TEXT NOT NULL CHECK (scope IN ('setup','records')),  -- a template copies only setup
+  value  TEXT NOT NULL CHECK (json_valid(value)),
+  UNIQUE (plugin, key)
 ) STRICT;
 
 CREATE TABLE ticket_tier (             -- R-TKT-1, R-TKT-10
@@ -188,8 +185,8 @@ CREATE TABLE change_log (              -- R-TX-6
   at         TEXT NOT NULL,            -- RFC 3339 UTC
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line',
                                        -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation',
-                                       -- 'cost_centre','drink_product','reconciliation',
-                                       -- 'ticket_columns','ticket_settings','drink_settings'
+                                       -- 'cost_centre','plugin_record','reconciliation',
+                                       -- 'ticket_columns','ticket_settings'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

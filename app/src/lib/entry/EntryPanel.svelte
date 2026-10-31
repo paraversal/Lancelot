@@ -12,6 +12,7 @@
 	import { goto } from '$app/navigation';
 	import { ApiError, api, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
+	import type { EntryProposal } from '../plugins/api';
 	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
 	import type { CostCentreId } from '#lib/api/generated/CostCentreId.ts';
@@ -48,7 +49,7 @@
 	let {
 		txn,
 		settle = null,
-		invoice = false,
+		proposal = null,
 		pending = $bindable([]),
 		previewing,
 		onpreview,
@@ -60,8 +61,8 @@
 		txn: TxnView | null;
 		/** For a new entry: start as a settle with this person, filled in from their balance. */
 		settle?: AccountId | null;
-		/** For a new entry: start as the supplier's invoice, filled in from the drink records. */
-		invoice?: boolean;
+		/** For a new entry: start as what a plugin proposes (technical design §10). */
+		proposal?: EntryProposal | null;
 		/** Files to attach on save (paths), e.g. dropped onto the window. */
 		pending?: string[];
 		previewing: number | null;
@@ -195,17 +196,12 @@
 		generation++;
 	}
 
-	// The supplier's invoice: the kept drinks at their price, in the drinks cost centre's first
-	// expense category that is not Pfand. Pfand is added as a line if there is any (R-DRK-2).
-	function fillInvoice() {
-		const { costCentre: centre, pfand } = snapshot.drinkSettings;
-		const category = snapshot.accounts.find(
-			(a) => a.kind === 'expense' && a.costCentre === centre && a.id !== pfand
-		);
-		counterparty = snapshot.drinkSettings.supplier;
+	// A plugin's proposal: an expense paid from the default account, for the treasurer to check.
+	function fillProposal(p: EntryProposal) {
+		counterparty = p.counterparty;
 		party = snapshot.event.defaultReimbursementAccount;
-		amount = snapshot.drinks.cost || null;
-		if (category) lines = [{ account: category.id, amount: null, costCentre: centre }];
+		amount = p.amount;
+		if (p.lines.length) lines = p.lines.map((l) => ({ ...l, amount: null }));
 	}
 
 	// --- adding people and categories on the spot ------------------------------------
@@ -338,7 +334,7 @@
 			kind = 'settle';
 			pickPerson(settle);
 		}
-		if (!txn && invoice) fillInvoice();
+		if (!txn && proposal) fillProposal(proposal);
 	});
 </script>
 

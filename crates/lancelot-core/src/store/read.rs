@@ -7,15 +7,15 @@ use rusqlite::{Connection, OptionalExtension};
 use super::StoreError;
 use super::codec::{text_date, text_enum, text_timestamp};
 use crate::book::{BookParts, NextIds};
-use crate::drinks::{DrinkProduct, DrinkProductDraft, DrinkSettings};
 use crate::iban::validate_iban;
 use crate::model::{
     Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineDraft, BudgetLineId,
-    CancellationId, ClosingCount, CostCentre, CostCentreId, DrinkProductId, Estimate, Event,
-    EventDetails, ImportId, Line, ManualSaleId, Origin, Person, Reconciliation, ReconciliationId,
+    CancellationId, ClosingCount, CostCentre, CostCentreId, Estimate, Event, EventDetails,
+    ImportId, Line, ManualSaleId, Origin, Person, PluginRecordId, Reconciliation, ReconciliationId,
     TierId, Txn, TxnId,
 };
 use crate::money::Cents;
+use crate::plugin::PluginRecord;
 use crate::tickets::{
     Cancellation, ManualSale, ManualSaleDraft, OrderCount, RefundTerms, TicketColumns,
     TicketImport, TicketSettings, Tier, TierDraft,
@@ -165,8 +165,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let event = conn.query_row(
         "SELECT name, starts_on, ends_on, location, notes, closed_at, default_reimbursement_account_id, closing_overrides,
                 ticket_tier_column, ticket_order_column, ticket_date_column,
-                tickets_enabled, ticket_account_id,
-                drink_supplier, price_per_strich, drink_cost_centre_id, pfand_category_id
+                tickets_enabled, ticket_account_id
          FROM event WHERE id = 1",
         [],
         |r| {
@@ -188,10 +187,6 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                     enabled: r.get(11)?,
                     account: r.get::<_, Option<i64>>(12)?.map(AccountId),
                 },
-                r.get::<_, Option<String>>(13)?,
-                r.get::<_, Option<i64>>(14)?,
-                r.get::<_, Option<i64>>(15)?,
-                r.get::<_, Option<i64>>(16)?,
             ))
         },
     )?;
@@ -206,10 +201,6 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         overrides,
         columns,
         ticket_settings,
-        supplier,
-        price_per_strich,
-        drink_centre,
-        pfand,
     ) = event;
     let event = Event {
         details: EventDetails {
@@ -222,12 +213,6 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         closed_at: closed_at.as_deref().map(text_timestamp).transpose()?,
         default_reimbursement_account: AccountId(default_account),
         closing_overrides: serde_json::from_str(&overrides)?,
-    };
-    let drink_settings = DrinkSettings {
-        supplier,
-        price_per_strich: price_per_strich.map(cents).transpose()?,
-        cost_centre: drink_centre.map(CostCentreId),
-        pfand: pfand.map(AccountId),
     };
 
     let mut stmt = conn.prepare(
@@ -365,7 +350,6 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     Ok(BookParts {
         ticket_settings,
         ticket_columns: columns,
-        drink_settings,
         event,
         accounts: accounts(conn)?.into_values().collect(),
         persons,
@@ -379,7 +363,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         manual_sales,
         cancellations,
         cost_centres: cost_centres(conn)?,
-        drink_products: drink_products(conn)?,
+        plugin_records: plugin_records(conn)?,
         next: NextIds {
             account: next_id(conn, "next_account_id")?,
             txn: next_id(conn, "next_txn_id")?,
@@ -390,7 +374,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             manual_sale: next_id(conn, "next_manual_sale_id")?,
             cancellation: next_id(conn, "next_cancellation_id")?,
             cost_centre: next_id(conn, "next_cost_centre_id")?,
-            drink_product: next_id(conn, "next_drink_product_id")?,
+            plugin_record: next_id(conn, "next_plugin_record_id")?,
             reconciliation: next_id(conn, "next_reconciliation_id")?,
         },
     })
@@ -434,29 +418,27 @@ fn reconciliations(conn: &Connection) -> Result<Vec<Reconciliation>, StoreError>
     Ok(out)
 }
 
-fn drink_products(conn: &Connection) -> Result<Vec<DrinkProduct>, StoreError> {
-    let mut stmt = conn
-        .prepare("SELECT id, name, taken, returned, unit_price FROM drink_product ORDER BY id")?;
+fn plugin_records(conn: &Connection) -> Result<Vec<PluginRecord>, StoreError> {
+    let mut stmt =
+        conn.prepare("SELECT id, plugin, key, scope, value FROM plugin_record ORDER BY id")?;
     let rows = stmt.query_map([], |r| {
         Ok((
             r.get::<_, i64>(0)?,
             r.get::<_, String>(1)?,
-            r.get::<_, i64>(2)?,
-            r.get::<_, i64>(3)?,
-            r.get::<_, i64>(4)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
         ))
     })?;
     let mut out = Vec::new();
     for row in rows {
-        let (id, name, taken, returned, unit_price) = row?;
-        out.push(DrinkProduct {
-            id: DrinkProductId(id),
-            draft: DrinkProductDraft {
-                name,
-                taken: count(taken)?,
-                returned: count(returned)?,
-                unit_price: cents(unit_price)?,
-            },
+        let (id, plugin, key, scope, value) = row?;
+        out.push(PluginRecord {
+            id: PluginRecordId(id),
+            plugin,
+            key,
+            scope: text_enum(&scope)?,
+            value: serde_json::from_str(&value)?,
         });
     }
     Ok(out)

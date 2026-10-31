@@ -11,6 +11,7 @@ use crate::error::DomainError;
 use crate::model::{
     Account, AccountId, BudgetLine, BudgetLineId, CostCentreId, Event, EventDetails,
 };
+use crate::plugin::PluginScope;
 
 /// What to copy into an open event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
@@ -43,12 +44,11 @@ pub struct TemplateSummary {
     pub persons: u32,
     pub budget_lines: u32,
     pub tiers: u32,
-    pub drink_products: u32,
 }
 
 impl Book {
     /// A new event with the source's setup and none of its money (R-EVT-3): accounts, categories,
-    /// cost centres, persons, budget lines, tiers, sheet columns and the drink price list. The
+    /// cost centres, persons, budget lines, tiers, sheet columns and plugins' setup records. The
     /// source's own ids carry over, which is safe because ids only mean something within a file.
     pub fn from_template(source: &Book, details: EventDetails) -> Result<Book, DomainError> {
         let details = clean_details(details)?;
@@ -69,10 +69,8 @@ impl Book {
         for line in book.budget_lines.values_mut() {
             line.draft.complete = false;
         }
-        for product in book.drink_products.values_mut() {
-            product.draft.taken = 0;
-            product.draft.returned = 0;
-        }
+        book.plugin_records
+            .retain(|_, r| r.scope == PluginScope::Setup);
         book.sync_tickets()?;
         book.recompute()?;
         Ok(book)
@@ -91,7 +89,6 @@ impl Book {
             persons: count(self.persons.len()),
             budget_lines: count(self.budget_lines.len()),
             tiers: count(self.tiers.len()),
-            drink_products: count(self.drink_products.len()),
         }
     }
 
@@ -157,23 +154,16 @@ impl Book {
         }
     }
 
-    /// The category with the same role or the same drinks setting, else with the same name, else a
-    /// new one.
+    /// The category with the same role, else with the same name, else a new one.
     fn matching_category(
         &mut self,
         source: &Book,
         account: &Account,
         summary: &mut CopySummary,
     ) -> AccountId {
-        let pfand = self
-            .drink_settings
-            .pfand
-            .filter(|_| source.drink_settings.pfand == Some(account.id))
-            .and_then(|id| self.accounts.get(&id));
         let found = account
             .role
             .and_then(|role| self.account_by_role(role))
-            .or(pfand)
             .or_else(|| self.account_by_name(account.kind, &account.name))
             .map(|a| a.id);
         if let Some(id) = found {
@@ -192,7 +182,7 @@ impl Book {
         id
     }
 
-    /// The drinks' for the drinks', else the cost centre with the same name, else a new one.
+    /// The cost centre with the same name, else a new one.
     fn matching_centre(
         &mut self,
         source: &Book,
@@ -200,16 +190,11 @@ impl Book {
         summary: &mut CopySummary,
     ) -> Option<CostCentreId> {
         let centre = source.cost_centres.get(&id)?;
-        let drinks = self
-            .drink_settings
-            .cost_centre
-            .filter(|_| source.drink_settings.cost_centre == Some(id));
-        let found = drinks.or_else(|| {
-            self.cost_centres
-                .values()
-                .find(|c| c.name.eq_ignore_ascii_case(&centre.name))
-                .map(|c| c.id)
-        });
+        let found = self
+            .cost_centres
+            .values()
+            .find(|c| c.name.eq_ignore_ascii_case(&centre.name))
+            .map(|c| c.id);
         Some(found.unwrap_or_else(|| {
             summary.cost_centres_added += 1;
             self.insert_cost_centre(&centre.name)

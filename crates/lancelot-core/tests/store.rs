@@ -923,16 +923,8 @@ fn the_settings_on_the_event_row_are_saved_and_logged() {
         order: "Bestellung".into(),
         sale_date: None,
     };
-    let settings = DrinkSettings {
-        supplier: Some("Getränke Meyer".into()),
-        price_per_strich: Some(eur("1,50")),
-        ..store.book().drink_settings().clone()
-    };
     store
         .change(|book| book.set_ticket_columns(columns.clone()))
-        .unwrap();
-    store
-        .change(|book| book.set_drink_settings(settings.clone()))
         .unwrap();
     let log = store.change_log(10).unwrap();
     let last = |entity: &str| log.iter().find(|e| e.entity == entity).unwrap();
@@ -941,14 +933,11 @@ fn the_settings_on_the_event_row_are_saved_and_logged() {
         last("ticket_columns").after.as_ref().unwrap()["tier"],
         "Kategorie"
     );
-    assert_eq!(last("drink_settings").op, "update");
-    assert!(last("drink_settings").before.is_some());
     drop(store);
 
     let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
     assert!(report.is_clean(), "{report:?}");
     assert_eq!(reopened.book().ticket_columns(), &columns);
-    assert_eq!(reopened.book().drink_settings(), &settings);
 }
 
 #[test]
@@ -1009,7 +998,7 @@ fn every_kind_of_transfer_and_setting_survives_reopening() {
     );
     store.change(|b| b.set_net_movement(cash, true)).unwrap();
     store.change(|b| b.set_ticket_account(Some(cash))).unwrap();
-    let centre = store.book().drink_settings().cost_centre.unwrap();
+    let centre = store.change(|b| b.add_cost_centre("Gone")).unwrap();
     store.change(|b| b.delete_cost_centre(centre)).unwrap();
     store.change(|b| b.set_tickets_enabled(false)).unwrap();
     let book = store.book().clone();

@@ -8,7 +8,6 @@ use ts_rs::TS;
 
 use crate::book::Book;
 use crate::budget::Budget;
-use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
 use crate::entry::{Entry, entry_of, flow_of, txn_amount};
 use crate::ledger::{
     CashStatus, MoneyLocation, PersonEntry, PersonSummary, PersonTotals, ReconciliationStatus,
@@ -19,6 +18,7 @@ use crate::model::{
 };
 use crate::money::Cents;
 use crate::payout::Payouts;
+use crate::plugin::PluginRecord;
 use crate::sales::Profitability;
 use crate::tickets::{TicketColumns, TicketSettings, Tickets};
 
@@ -31,8 +31,6 @@ pub struct EventSnapshot {
     pub ticket_columns: TicketColumns,
     /// Whether the event sells tickets, and where the sheet's money arrives.
     pub ticket_settings: TicketSettings,
-    /// The commission supplier, the price per Strich, and the drinks' cost centre and Pfand category.
-    pub drink_settings: DrinkSettings,
     /// All accounts and categories, in creation order, each with its displayed balance.
     pub accounts: Vec<AccountView>,
     pub persons: Vec<PersonView>,
@@ -59,10 +57,8 @@ pub struct EventSnapshot {
     pub profitability: Option<Profitability>,
     /// In creation order (R-CC-2).
     pub cost_centres: Vec<CostCentre>,
-    /// The commission records, in creation order (R-DRK-5).
-    pub drink_products: Vec<DrinkProduct>,
-    /// The figures of the records and the invoice check.
-    pub drinks: Drinks,
+    /// What plugins keep in the file, in creation order (technical design §10).
+    pub plugin_records: Vec<PluginRecord>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -151,7 +147,6 @@ impl EventSnapshot {
             event: book.event().clone(),
             ticket_columns: book.ticket_columns().clone(),
             ticket_settings: book.ticket_settings(),
-            drink_settings: book.drink_settings().clone(),
             accounts,
             persons,
             person_totals: ledger.person_totals(),
@@ -172,8 +167,7 @@ impl EventSnapshot {
             tickets: book.tickets().clone(),
             profitability: book.profitability(),
             cost_centres: book.cost_centres().cloned().collect(),
-            drink_products: book.drink_products().cloned().collect(),
-            drinks: book.drinks().clone(),
+            plugin_records: book.plugin_records().cloned().collect(),
         }
     }
 }

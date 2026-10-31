@@ -5,15 +5,13 @@ import type { BudgetLine } from "./BudgetLine";
 import type { CashStatus } from "./CashStatus";
 import type { ClosingCount } from "./ClosingCount";
 import type { CostCentre } from "./CostCentre";
-import type { DrinkProduct } from "./DrinkProduct";
-import type { DrinkSettings } from "./DrinkSettings";
-import type { Drinks } from "./Drinks";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
 import type { OpenItem } from "./OpenItem";
 import type { Payouts } from "./Payouts";
 import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
+import type { PluginRecord } from "./PluginRecord";
 import type { Profitability } from "./Profitability";
 import type { ReconciliationStatus } from "./ReconciliationStatus";
 import type { TicketColumns } from "./TicketColumns";
@@ -31,10 +29,6 @@ ticketColumns: TicketColumns,
  * Whether the event sells tickets, and where the sheet's money arrives.
  */
 ticketSettings: TicketSettings, 
-/**
- * The commission supplier, the price per Strich, and the drinks' cost centre and Pfand category.
- */
-drinkSettings: DrinkSettings, 
 /**
  * All accounts and categories, in creation order, each with its displayed balance.
  */
@@ -73,10 +67,6 @@ profitability: Profitability | null,
  */
 costCentres: Array<CostCentre>, 
 /**
- * The commission records, in creation order (R-DRK-5).
+ * What plugins keep in the file, in creation order (technical design §10).
  */
-drinkProducts: Array<DrinkProduct>, 
-/**
- * The figures of the records and the invoice check.
- */
-drinks: Drinks, };
+pluginRecords: Array<PluginRecord>, };

@@ -104,7 +104,7 @@ Check against Bob from requirements §4.1:
 
 ### 3.2 Schema
 
-The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). The format is frozen: this file is never edited again, and every change is a new migration, added to `MIGRATIONS` with `SCHEMA_VERSION` raised. Files from development builds before the freeze don't open. [`fixtures/events/sample-v1.lancelot`](../fixtures/events/sample-v1.lancelot) proves it: a frozen file with rows in every table, kept byte for byte. [`tests/sample_file.rs`](../crates/lancelot-core/tests/sample_file.rs) opens a copy with its figures written out, keeps working on it, and fails if a new file's schema differs from the migrated sample's. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). The format is **not frozen** until the first real event is entered: until then this file is edited directly, the sample is regenerated, and files from earlier development builds don't open. From that first real event on, it is never edited again, and every change is a new migration, added to `MIGRATIONS` with `SCHEMA_VERSION` raised. [`fixtures/events/sample-v1.lancelot`](../fixtures/events/sample-v1.lancelot) proves it: a frozen file with rows in every table, kept byte for byte. [`tests/sample_file.rs`](../crates/lancelot-core/tests/sample_file.rs) opens a copy with its figures written out, keeps working on it, and fails if a new file's schema differs from the migrated sample's. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
 Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents. Ids are never reused, so the change log stays unambiguous.
 
@@ -267,3 +267,25 @@ Event settings (name, dates, default reimbursement account) live inside the even
 ## 9. Open for later milestones
 
 - **Code signing** (after v0.1.0): it needs an Apple Developer account.
+
+## 10. Plugins
+
+A plugin adds records, screens and proposals for one kind of group's workflow. Today plugins are **built in**: Svelte code in `app/src/lib/plugins/<id>/`, listed in `registry.ts` and shipped with the app. Nothing loads third-party code yet. The boundary is the one a sandboxed loader would need later, so adding that loader should not change a plugin much.
+
+**Rules**
+
+1. **The file works without plugins.** An event opens and settles correctly with any plugin missing, and its records are kept untouched. So a plugin's data never takes part in a balance, a result or a closing check.
+2. **No code in event files.** A file holds a plugin's data, never its code, so opening a shared event can't run anything.
+3. **Money moves only through entries.** A plugin can propose an entry, which opens the normal form, and the treasurer saves it through `save_txn`.
+4. **Plugins only use `PluginContext`.** A plugin imports `#lib/plugins/api.ts`, shared components and formatting, never the session or the command API. A test enforces this.
+5. **The core doesn't interpret records.** It checks the shape and enforces closing, and stores the value as JSON. A plugin validates its own values and tests its own figures, the exception to "every figure comes from the core", allowed because these figures never affect the ledger.
+
+**Storage.** `plugin_record` has one row per plugin and key. `Book::apply_plugin_changes` applies one plugin's changes together, so they go through `Store::change` like any command: change log, read-back and backups included. The `scope` says what a template does: `setup` is copied, `records` is not. Templates keep ids, so a `setup` value may refer to accounts and cost centres. `copy_from` doesn't copy plugin data.
+
+**Slots.** `Plugin` in `api.ts` can provide `CentreSection`, shown on a cost centre's page when `attachedTo(ctx, centre)` holds, and `SettingsSection`, shown under its entry in Settings → Plugins.
+
+**Showing what is a plugin.** The app draws `PluginFrame`, a card, around a plugin's content, with its name and a "Plugin" tag, so a plugin can't leave it out. Its own panels sit outside the frame.
+
+**Switching off.** Settings has a switch per plugin and per event, on by default. Off hides the plugin's slots and keeps its records. It is stored as the app's own record, `host:off`, in the plugin's namespace, with scope `setup` so a template copies the choice. Plugins don't see it.
+
+**Not yet:** a loader and sandbox, network access and credentials, and a report slot. Each waits for a plugin that needs it.
