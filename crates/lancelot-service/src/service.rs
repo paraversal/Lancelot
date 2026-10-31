@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use lancelot_core::{
     AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
     DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
-    MAX_ATTACHMENT_SIZE, Parsed, Report, Store, StoreError, StoreOptions, TemplateSummary,
-    TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
-    parse_amount, parse_date, read_book, ticket_share,
+    MAX_ATTACHMENT_SIZE, Parsed, Report, Sheet, Store, StoreError, StoreOptions, TemplateSummary,
+    TicketBatch, TicketColumns, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
+    format_date, list_backups, parse_amount, parse_date, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -381,31 +381,23 @@ impl Service {
     }
 
     /// Reads a ticket sheet from disk and shows what importing it would change (R-TKT-5).
-    pub fn preview_tickets(&self, path: &Path, date: time::Date) -> Result<ImportPreview> {
+    pub fn preview_tickets(&self, batch: &TicketBatch, date: time::Date) -> Result<ImportPreview> {
         let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
-        let (name, data) = read_sheet_file(path)?;
-        Ok(open.store.preview_ticket_import(&name, &data, date)?)
+        Ok(open.store.book().preview_import(batch, date))
     }
 
-    /// Imports a ticket sheet as the snapshot of `date`. `sha256` is the file the preview
-    /// showed: a file changed since is not imported unseen.
-    pub fn import_tickets(
-        &mut self,
-        path: &Path,
-        date: time::Date,
-        sha256: &str,
-    ) -> Result<OpenEvent> {
-        let (name, data) = read_sheet_file(path)?;
+    /// Imports a batch of tickets as the snapshot of `date`.
+    pub fn import_tickets(&mut self, batch: &TicketBatch, date: time::Date) -> Result<OpenEvent> {
         self.on_store(|s| {
-            if s.preview_ticket_import(&name, &data, date)?.sha256 != sha256 {
-                return Err(ApiError::new(
-                    "file_changed",
-                    "the file changed since it was read; read it again",
-                ));
-            }
-            s.import_tickets(&name, &data, date)?;
+            s.import_tickets(batch, date)?;
             Ok(())
         })
+    }
+
+    /// Reads a ticket sheet's columns (R-TKT-3). Changes nothing: the file isn't kept (R-TKT-17).
+    pub fn read_ticket_sheet(&self, path: &Path, columns: &TicketColumns) -> Result<Sheet> {
+        let (name, data) = read_sheet_file(path)?;
+        Ok(lancelot_core::read_sheet(&name, &data, columns)?)
     }
 
     /// What deleting an import would change; changes nothing.
@@ -537,8 +529,7 @@ mod tests {
     use super::*;
     use lancelot_core::{
         AccountKind, AssetType, CancellationDraft, CancellationEdit, CancellationSource,
-        ManualSaleDraft, NumberFormat, OpenItem, Person, RefundTerms, Resolution, TicketColumns,
-        TierDraft,
+        ManualSaleDraft, NumberFormat, OpenItem, Person, RefundTerms, Resolution, TierDraft,
     };
     use tempfile::TempDir;
 
@@ -1031,22 +1022,21 @@ mod tests {
         // Regular is not a tier yet: the preview names it and the import is refused.
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let sheet = fixtures.join("import-1.ods");
-        let preview = s.preview_tickets(&sheet, june(1)).unwrap();
+        let read = s
+            .read_ticket_sheet(&sheet, &TicketColumns::default())
+            .unwrap();
+        let batch = read.batch;
+        let preview = s.preview_tickets(&batch, june(1)).unwrap();
         assert_eq!(preview.unknown[0].name, "Regular");
-        let err = s
-            .import_tickets(&sheet, june(1), &preview.sha256)
-            .unwrap_err();
+        let err = s.import_tickets(&batch, june(1)).unwrap_err();
         assert_eq!(err.code, "unknown_tiers");
 
         let open = s.change(|b| b.add_tier(tier("Regular", 3_200))).unwrap();
         let regular = open.snapshot.tickets.tiers[1].tier.id;
         s.change(|b| b.add_tier(tier("Supporter", 4_500))).unwrap();
-        let preview = s.preview_tickets(&sheet, june(1)).unwrap();
+        let preview = s.preview_tickets(&batch, june(1)).unwrap();
         assert!(preview.unknown.is_empty());
-        // A file that is not the one previewed is not imported.
-        let err = s.import_tickets(&sheet, june(1), "0000").unwrap_err();
-        assert_eq!(err.code, "file_changed");
-        let open = s.import_tickets(&sheet, june(1), &preview.sha256).unwrap();
+        let open = s.import_tickets(&batch, june(1)).unwrap();
         let tickets = &open.snapshot.tickets;
         assert_eq!(tickets.imports.len(), 1);
         assert_eq!(tickets.total.sheet, preview.tickets);
@@ -1085,17 +1075,11 @@ mod tests {
         let open = s.change(|b| b.delete_manual_sale(id)).unwrap();
         assert!(open.snapshot.tickets.manual_sales.is_empty());
 
-        let open = s
-            .change(|b| {
-                b.set_ticket_columns(TicketColumns {
-                    tier: "Kategorie".into(),
-                    order: "Order ID".into(),
-                    sale_date: None,
-                })
-            })
-            .unwrap();
-        assert_eq!(open.snapshot.ticket_columns.tier, "Kategorie");
-        assert!(s.preview_tickets(&sheet, june(9)).is_err());
+        let renamed = TicketColumns {
+            tier: "Kategorie".into(),
+            order: "Order ID".into(),
+        };
+        assert!(s.read_ticket_sheet(&sheet, &renamed).is_err());
     }
 
     #[test]
@@ -1119,8 +1103,10 @@ mod tests {
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let import = |s: &mut Service, name: &str, day| {
             let path = fixtures.join(name);
-            let sha = s.preview_tickets(&path, june(day)).unwrap().sha256;
-            s.import_tickets(&path, june(day), &sha).unwrap()
+            let read = s
+                .read_ticket_sheet(&path, &TicketColumns::default())
+                .unwrap();
+            s.import_tickets(&read.batch, june(day)).unwrap()
         };
         import(&mut s, "import-1.ods", 1);
         let terms = RefundTerms {

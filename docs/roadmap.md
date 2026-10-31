@@ -342,6 +342,7 @@ The remaining schema changes of the refactoring landed here, as one batch.
 - [x] The schema is unfrozen until the first real event is entered, so `0001_initial.sql` is edited directly and the sample regenerated. The sample's money figures stay as they were written out.
 - [x] `plugin_record` and `Book::apply_plugin_changes`: records in the event file, with change log and read-back, copied by templates by scope. The core no longer knows about drinks (technical design §10).
 - [x] `lib/plugins`: `PluginContext`, the host, the registry, and sections on cost centre pages and in Settings. A test keeps plugins behind the context.
+- [x] Ticket sheet reading in `lib/plugins/ticket-sheet`. The core takes a `TicketBatch` from any source and keeps tiers, conflicts and income; the column names became the plugin's record.
 - [x] Drinks in `lib/plugins/drinks`, on any cost centre, with donation prices, left-over and logged counts, expected against collected, and an invoice proposed through the normal form. A new event starts without drinks.
 
 ### After the next event

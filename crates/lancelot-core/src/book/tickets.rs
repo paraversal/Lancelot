@@ -12,11 +12,10 @@ use crate::model::{
 };
 use crate::money::BP_FULL;
 use crate::sales::Profitability;
-use crate::sheet::Sheet;
 use crate::tickets::{
     self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportDeletion,
-    ImportPreview, ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketColumns,
-    TicketImport, TicketSettings, Tickets, Tier, TierDraft, clean_tier, default_payer, most_ever,
+    ImportPreview, ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketBatch, TicketImport,
+    TicketSettings, Tickets, Tier, TierDraft, clean_tier, default_payer, most_ever,
 };
 
 /// The name of the income category of tickets.
@@ -186,56 +185,18 @@ impl Book {
         })
     }
 
-    /// Sets the columns the ticket sheet is read from (R-TKT-3).
-    pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<(), DomainError> {
-        self.change(|book| {
-            let name = |text: &str, field: &str| {
-                let text = text.trim();
-                if text.is_empty() {
-                    return Err(DomainError::EmptyName {
-                        field: field.into(),
-                    });
-                }
-                Ok(text.to_owned())
-            };
-            let tier = name(&columns.tier, "tier")?;
-            let order = name(&columns.order, "order")?;
-            let sale_date = clean(columns.sale_date);
-            let same = |a: &str, b: &str| a.eq_ignore_ascii_case(b);
-            if same(&tier, &order) {
-                return Err(DomainError::DuplicateName {
-                    field: "order".into(),
-                });
-            }
-            if sale_date
-                .as_deref()
-                .is_some_and(|d| same(d, &tier) || same(d, &order))
-            {
-                return Err(DomainError::DuplicateName {
-                    field: "saleDate".into(),
-                });
-            }
-            book.ticket_columns = TicketColumns {
-                tier,
-                order,
-                sale_date,
-            };
-            Ok(())
-        })
-    }
-
     // --- imports -------------------------------------------------------------------------
 
-    /// What importing `sheet` dated `date` would change, compared with the import before that
+    /// What importing `batch` dated `date` would change, compared with the import before that
     /// date (R-TKT-5). Dated before the latest import, it does not become the current sheet.
-    pub fn preview_import(&self, sheet: &Sheet, date: Date) -> ImportPreview {
+    pub fn preview_import(&self, batch: &TicketBatch, date: Date) -> ImportPreview {
         let imports = tickets::by_date(&self.imports);
         let previous = imports.iter().rev().find(|i| i.date <= date).copied();
         let current = imports.last().is_none_or(|i| i.date <= date);
-        let mut preview = tickets::preview(sheet, &self.tiers, previous, current);
+        let mut preview = tickets::preview(batch, &self.tiers, previous, current);
         let mut after = self.clone();
         if after
-            .import_tickets(sheet, date, OffsetDateTime::UNIX_EPOCH)
+            .import_tickets(batch, date, OffsetDateTime::UNIX_EPOCH)
             .is_ok()
         {
             preview.receipts_lost = self.receipts_lost_in(&after);
@@ -283,13 +244,13 @@ impl Book {
         })
     }
 
-    /// Imports a ticket sheet as a snapshot dated `date`, the current one unless an import is
+    /// Imports a batch of tickets as a snapshot dated `date`, the current one unless an import is
     /// dated later (R-TKT-5, R-TKT-8).
     /// Tier names that match no tier block it (R-TKT-4). The ticket income is regenerated
     /// from it (R-TKT-6).
     pub fn import_tickets(
         &mut self,
-        sheet: &Sheet,
+        batch: &TicketBatch,
         date: Date,
         at: OffsetDateTime,
     ) -> Result<ImportId, DomainError> {
@@ -297,7 +258,19 @@ impl Book {
             if book.ticket_settings.account.is_none() {
                 return Err(DomainError::NoTicketAccount);
             }
-            let orders = tickets::orders(sheet, &book.tiers);
+            // A batch comes from a plugin, so nothing about its shape is taken for granted.
+            let source = batch.source.trim();
+            if source.is_empty() {
+                return Err(DomainError::EmptyName {
+                    field: "source".into(),
+                });
+            }
+            if batch.tickets.iter().any(|t| t.order.trim().is_empty()) {
+                return Err(DomainError::EmptyName {
+                    field: "order".into(),
+                });
+            }
+            let orders = tickets::orders(batch, &book.tiers);
             if !orders.unknown.is_empty() {
                 return Err(DomainError::UnknownTiers {
                     names: orders.unknown.into_iter().map(|u| u.name).collect(),
@@ -309,8 +282,8 @@ impl Book {
                 id,
                 TicketImport {
                     id,
-                    filename: sheet.filename.trim().to_owned(),
-                    sha256: sheet.sha256.clone(),
+                    filename: source.to_owned(),
+                    sha256: batch.sha256.clone(),
                     imported_at: at,
                     date,
                     orders: orders.orders,

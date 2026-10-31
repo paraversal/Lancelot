@@ -4,4 +4,8 @@ import type { Problem } from "./Problem";
 /**
  * A row that was not read as a ticket.
  */
-export type RowProblem = { row: number, problem: Problem, };
+export type RowProblem = { 
+/**
+ * The row number as the spreadsheet shows it, starting at 1 with the header.
+ */
+row: number, problem: Problem, };

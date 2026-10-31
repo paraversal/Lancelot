@@ -48,7 +48,7 @@ pub struct TemplateSummary {
 
 impl Book {
     /// A new event with the source's setup and none of its money (R-EVT-3): accounts, categories,
-    /// cost centres, persons, budget lines, tiers, sheet columns and plugins' setup records. The
+    /// cost centres, persons, budget lines, tiers and plugins' setup records. The
     /// source's own ids carry over, which is safe because ids only mean something within a file.
     pub fn from_template(source: &Book, details: EventDetails) -> Result<Book, DomainError> {
         let details = clean_details(details)?;

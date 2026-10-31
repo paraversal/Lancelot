@@ -144,7 +144,7 @@ SQLite can neither check an aggregate in a CHECK constraint nor defer a trigger 
 3. reads the file back inside that transaction and compares it with the copy, including the generated entries as stored, since loading regenerates them;
 4. commits, which also enforces the foreign keys, and only then keeps the copy.
 
-A command therefore lives in `Book`, whatever its size, and a new one needs a Tauri command, an API wrapper and a line in the dev bridge. `Store` has its own methods only where a command needs the clock or bytes from outside the book: closing, importing a sheet and attaching files. `Service::change` wraps `Store::change` and returns the new state; `Service::add` also returns a new account's id.
+A command therefore lives in `Book`, whatever its size, and a new one needs a Tauri command, an API wrapper and a line in the dev bridge. `Store` has its own methods only where a command needs the clock or bytes from outside the book: closing, importing tickets and attaching files. `Service::change` wraps `Store::change` and returns the new state; `Service::add` also returns a new account's id.
 
 Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Foreign keys are deferred during the write, so each table is handled in one place and in any order. Only checkpoints keep an order of their own, because a checkpoint can take the date another one just left. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
 
@@ -277,13 +277,15 @@ A plugin adds records, screens and proposals for one kind of group's workflow. T
 
 1. **The file works without plugins.** An event opens and settles correctly with any plugin missing, and its records are kept untouched. So a plugin's data never takes part in a balance, a result or a closing check.
 2. **No code in event files.** A file holds a plugin's data, never its code, so opening a shared event can't run anything.
-3. **Money moves only through entries.** A plugin can propose an entry, which opens the normal form, and the treasurer saves it through `save_txn`.
+3. **Money moves only through what the treasurer confirms.** A plugin can propose an entry, which opens the normal form and saves through `save_txn`, or a `TicketBatch`, which opens the import's review and saves through `tickets_import`. Either way the core does the rest, and generated income stays the core's.
 4. **Plugins only use `PluginContext`.** A plugin imports `#lib/plugins/api.ts`, shared components and formatting, never the session or the command API. A test enforces this.
 5. **The core doesn't interpret records.** It checks the shape and enforces closing, and stores the value as JSON. A plugin validates its own values and tests its own figures, the exception to "every figure comes from the core", allowed because these figures never affect the ledger.
 
 **Storage.** `plugin_record` has one row per plugin and key. `Book::apply_plugin_changes` applies one plugin's changes together, so they go through `Store::change` like any command: change log, read-back and backups included. The `scope` says what a template does: `setup` is copied, `records` is not. Templates keep ids, so a `setup` value may refer to accounts and cost centres. `copy_from` doesn't copy plugin data.
 
-**Slots.** `Plugin` in `api.ts` can provide `CentreSection`, shown on a cost centre's page when `attachedTo(ctx, centre)` holds, and `SettingsSection`, shown under its entry in Settings → Plugins.
+**Slots.** `Plugin` in `api.ts` can provide `CentreSection`, shown on a cost centre's page when `attachedTo(ctx, centre)` holds; `TicketSection`, shown on the Tickets page while the event is open; and `SettingsSection`, shown under its entry in Settings → Plugins.
+
+**Ticket sources.** The core owns tiers, imports, conflicts, cancellations, manual sales and the income they generate, and doesn't know where tickets come from. It takes a `TicketBatch`: a source name, a hash and one tier and order per ticket, so personal data can't reach it (R-TKT-17). Reading is the plugin's. `ticket-sheet` chooses the file, keeps its column names as a `setup` record and asks the host to read it through `readTicketSheet`, since parsing a spreadsheet is native code. With the plugin off, imports already made keep counting and manual sales still work.
 
 **Showing what is a plugin.** The app draws `PluginFrame`, a card, around a plugin's content, with its name and a "Plugin" tag, so a plugin can't leave it out. Its own panels sit outside the frame.
 

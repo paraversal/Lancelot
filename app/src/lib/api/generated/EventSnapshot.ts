@@ -14,17 +14,12 @@ import type { PersonView } from "./PersonView";
 import type { PluginRecord } from "./PluginRecord";
 import type { Profitability } from "./Profitability";
 import type { ReconciliationStatus } from "./ReconciliationStatus";
-import type { TicketColumns } from "./TicketColumns";
 import type { TicketSettings } from "./TicketSettings";
 import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
 
 export type EventSnapshot = { event: Event, 
-/**
- * The columns read from the ticket sheet (R-TKT-3).
- */
-ticketColumns: TicketColumns, 
 /**
  * Whether the event sells tickets, and where the sheet's money arrives.
  */

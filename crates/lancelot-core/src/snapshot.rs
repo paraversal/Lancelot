@@ -20,15 +20,13 @@ use crate::money::Cents;
 use crate::payout::Payouts;
 use crate::plugin::PluginRecord;
 use crate::sales::Profitability;
-use crate::tickets::{TicketColumns, TicketSettings, Tickets};
+use crate::tickets::{TicketSettings, Tickets};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]
 pub struct EventSnapshot {
     pub event: Event,
-    /// The columns read from the ticket sheet (R-TKT-3).
-    pub ticket_columns: TicketColumns,
     /// Whether the event sells tickets, and where the sheet's money arrives.
     pub ticket_settings: TicketSettings,
     /// All accounts and categories, in creation order, each with its displayed balance.
@@ -145,7 +143,6 @@ impl EventSnapshot {
 
         EventSnapshot {
             event: book.event().clone(),
-            ticket_columns: book.ticket_columns().clone(),
             ticket_settings: book.ticket_settings(),
             accounts,
             persons,

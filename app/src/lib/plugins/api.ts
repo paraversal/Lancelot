@@ -9,9 +9,29 @@ import type { CostCentreFigures } from '../api/generated/CostCentreFigures';
 import type { NumberFormat } from '../api/generated/NumberFormat';
 import type { PluginChange } from '../api/generated/PluginChange';
 import type { PluginRecord } from '../api/generated/PluginRecord';
+import type { Sheet } from '../api/generated/Sheet';
+import type { TicketBatch } from '../api/generated/TicketBatch';
+import type { TicketColumns } from '../api/generated/TicketColumns';
 import type { TxnView } from '../api/generated/TxnView';
 
-export type { AccountView, CostCentre, CostCentreFigures, PluginChange, PluginRecord, TxnView };
+export type {
+	AccountView,
+	CostCentre,
+	CostCentreFigures,
+	PluginChange,
+	PluginRecord,
+	Sheet,
+	TicketBatch,
+	TicketColumns,
+	TxnView
+};
+
+export type FileDropHandlers = {
+	/** A file is being dragged over the window; its name when known, otherwise empty. */
+	over: (names: string[]) => void;
+	leave: () => void;
+	drop: (paths: string[]) => void;
+};
 
 /** A new expense for the treasurer to check and save in the normal form. */
 export type EntryProposal = {
@@ -41,11 +61,25 @@ export interface PluginContext {
 	setCategoryCentre(category: number, costCentre: number): Promise<void>;
 	/** Opens the normal entry form with this filled in; nothing is saved until the treasurer does. */
 	proposeEntry(proposal: EntryProposal): void;
+	/** Asks the treasurer for a file; null when cancelled. */
+	chooseFile(name: string, extensions: string[]): Promise<string | null>;
+	/** Listens for files dragged onto the window; returns a function that stops. */
+	onFileDrop(handlers: FileDropHandlers): () => void;
+	/** Reads only these columns of a spreadsheet, and hashes the file. */
+	readTicketSheet(path: string, columns: TicketColumns): Promise<Sheet>;
 }
 
 export type CentreSectionProps = {
 	ctx: PluginContext;
 	centre: CostCentre;
+	/** Shows a right-hand panel beside the page, or removes it. */
+	setPanel: (panel: Snippet | null) => void;
+};
+
+export type TicketSectionProps = {
+	ctx: PluginContext;
+	/** Opens the import's review with these tickets; nothing is saved until the treasurer does. */
+	proposeImport: (batch: TicketBatch) => void;
 	/** Shows a right-hand panel beside the page, or removes it. */
 	setPanel: (panel: Snippet | null) => void;
 };
@@ -58,8 +92,10 @@ export interface Plugin {
 	name: string;
 	/** One sentence for Settings: what it adds to the app. */
 	description: string;
-	/** Whether the section shows on this cost centre's page. */
-	attachedTo(ctx: PluginContext, centre: number): boolean;
+	/** Whether `CentreSection` shows on this cost centre's page. */
+	attachedTo?(ctx: PluginContext, centre: number): boolean;
 	CentreSection?: Component<CentreSectionProps>;
+	/** On the Tickets page: a way for tickets to come in. */
+	TicketSection?: Component<TicketSectionProps>;
 	SettingsSection?: Component<SettingsSectionProps>;
 }

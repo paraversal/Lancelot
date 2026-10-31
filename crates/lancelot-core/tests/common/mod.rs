@@ -15,6 +15,13 @@ pub fn eur(text: &str) -> Cents {
 }
 
 /// A day in June 2026, the month of the example event.
+/// A ticket sheet's tickets, read with the usual columns.
+pub fn batch(name: &str, data: &[u8]) -> TicketBatch {
+    read_sheet(name, data, &TicketColumns::default())
+        .unwrap()
+        .batch
+}
+
 pub fn june(day: u8) -> Date {
     Date::from_calendar_date(2026, Month::June, day).unwrap()
 }

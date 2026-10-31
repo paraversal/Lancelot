@@ -16,7 +16,7 @@ use tempfile::TempDir;
 
 const SAMPLE: &str = "sample-v1.lancelot";
 /// A regenerated sample would hide a schema edited in place, so its bytes are pinned too.
-const SAMPLE_SHA256: &str = "c0891e3580090fa9a432965444a2857b1d97d5105ca1a2228b7de0fbb73bd537";
+const SAMPLE_SHA256: &str = "5d26c96256eecb354d6e1e281f4cb5eef0e6de7b00b93c21fc68c7aa214d41f2";
 
 fn sample_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -144,7 +144,9 @@ fn write_the_sample() {
                 .join(file),
         )
         .unwrap();
-        store.import_tickets(file, &data, june(day)).unwrap();
+        store
+            .import_tickets(&batch(file, &data), june(day))
+            .unwrap();
     }
     store
         .change(|b| {
@@ -329,7 +331,7 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let iban = book.person(anna).unwrap().iban.as_ref().unwrap();
     assert_eq!(iban.as_str(), "DE89370400440532013000");
 
-    assert_eq!(store.change_log(10_000).unwrap().len(), 104);
+    assert_eq!(store.change_log(10_000).unwrap().len(), 103);
 
     assert_eq!(book.attachments().count(), 11);
     let receipts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/receipts");

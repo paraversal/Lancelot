@@ -30,8 +30,7 @@ use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Report};
 use crate::model::{AttachmentId, BlockerOverride, EventDetails, ImportId, TxnId};
-use crate::sheet::read_sheet;
-use crate::tickets::ImportPreview;
+use crate::tickets::TicketBatch;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
 /// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`. Released
@@ -385,28 +384,14 @@ impl Store {
 
     // --- commands ------------------------------------------------------------------------
 
-    /// Reads a ticket sheet with the event's columns and shows what importing it would change.
-    pub fn preview_ticket_import(
-        &self,
-        filename: &str,
-        data: &[u8],
-        date: Date,
-    ) -> Result<ImportPreview, StoreError> {
-        let sheet = read_sheet(filename, data, self.book.ticket_columns())?;
-        Ok(self.book.preview_import(&sheet, date))
-    }
-
-    /// Imports a ticket sheet as the snapshot of `date`. Only the configured columns are kept,
-    /// never the file (R-TKT-17).
+    /// Imports a batch of tickets as the snapshot of `date`.
     pub fn import_tickets(
         &mut self,
-        filename: &str,
-        data: &[u8],
+        batch: &TicketBatch,
         date: Date,
     ) -> Result<ImportId, StoreError> {
-        let sheet = read_sheet(filename, data, self.book.ticket_columns())?;
         let now = (self.options.clock)();
-        self.change(|b| b.import_tickets(&sheet, date, now))
+        self.change(|b| b.import_tickets(batch, date, now))
     }
 
     /// Closes the event (R-SET-7). Closing and reopening are in the change log.

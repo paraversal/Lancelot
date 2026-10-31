@@ -24,9 +24,7 @@ use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
 use crate::plugin::PluginRecord;
 use crate::sales::Profitability;
-use crate::tickets::{
-    Cancellation, ManualSale, TicketColumns, TicketImport, TicketSettings, Tickets, Tier,
-};
+use crate::tickets::{Cancellation, ManualSale, TicketImport, TicketSettings, Tickets, Tier};
 
 mod cost_centres;
 mod plugins;
@@ -49,7 +47,6 @@ const OPENING_DESCRIPTION: &str = "Opening count";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Book {
     event: Event,
-    ticket_columns: TicketColumns,
     ticket_settings: TicketSettings,
     accounts: BTreeMap<AccountId, Account>,
     persons: BTreeMap<AccountId, Person>,
@@ -94,7 +91,6 @@ pub struct NextIds {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BookParts {
     pub event: Event,
-    pub ticket_columns: TicketColumns,
     pub ticket_settings: TicketSettings,
     pub accounts: Vec<Account>,
     pub persons: Vec<(AccountId, Person)>,
@@ -140,7 +136,6 @@ impl Book {
                 default_reimbursement_account: AccountId(1),
                 closing_overrides: Vec::new(),
             },
-            ticket_columns: TicketColumns::default(),
             ticket_settings: TicketSettings {
                 enabled: true,
                 account: None,
@@ -353,7 +348,6 @@ impl Book {
 
         let book = Book {
             event: parts.event,
-            ticket_columns: parts.ticket_columns,
             ticket_settings,
             accounts,
             persons,
@@ -425,11 +419,6 @@ impl Book {
         let mut items = self.ledger.open_items();
         items.extend(self.tickets.open_item());
         items
-    }
-
-    /// The columns read from the ticket sheet (R-TKT-3).
-    pub fn ticket_columns(&self) -> &TicketColumns {
-        &self.ticket_columns
     }
 
     pub fn event(&self) -> &Event {

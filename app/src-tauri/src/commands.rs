@@ -8,7 +8,8 @@ use lancelot_core::{
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
     CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
     ManualSaleDraft, ManualSaleId, Parsed, Person, PluginChange, ReconciliationId, Resolution,
-    TemplateSummary, TicketColumns, TicketShare, TierDraft, TierId, TxnDraft, TxnId,
+    Sheet, TemplateSummary, TicketBatch, TicketColumns, TicketShare, TierDraft, TierId, TxnDraft,
+    TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -423,32 +424,32 @@ pub async fn ticket_account_set(
 }
 
 #[tauri::command]
-pub async fn ticket_columns_set(
+pub async fn ticket_sheet_read(
     state: State<'_, AppState>,
+    path: PathBuf,
     columns: TicketColumns,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.set_ticket_columns(columns)))
+) -> Result<Sheet> {
+    with(&state, |s| s.read_ticket_sheet(&path, &columns))
 }
 
 #[tauri::command]
 pub async fn tickets_preview(
     state: State<'_, AppState>,
-    path: PathBuf,
+    batch: TicketBatch,
     date: String,
 ) -> Result<ImportPreview> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.preview_tickets(&path, date))
+    with(&state, |s| s.preview_tickets(&batch, date))
 }
 
 #[tauri::command]
 pub async fn tickets_import(
     state: State<'_, AppState>,
-    path: PathBuf,
+    batch: TicketBatch,
     date: String,
-    sha256: String,
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.import_tickets(&path, date, &sha256))
+    with(&state, |s| s.import_tickets(&batch, date))
 }
 
 #[tauri::command]

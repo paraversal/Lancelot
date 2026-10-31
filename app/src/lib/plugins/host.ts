@@ -1,6 +1,8 @@
 // The app's side of the plugin boundary: `PluginContext`, built on the session and the commands.
 import { goto } from '$app/navigation';
+import { chooseFile } from '../api/dialogs';
 import { api } from '../api/index';
+import { onFileDrop } from '../dragdrop';
 import { session } from '../state/session.svelte';
 import type { EntryProposal, PluginContext } from './api';
 
@@ -71,6 +73,9 @@ export function pluginContext(id: string): PluginContext {
 		proposeEntry(next) {
 			proposal = next;
 			goto('/event/ledger?proposal');
-		}
+		},
+		chooseFile,
+		onFileDrop,
+		readTicketSheet: (path, columns) => api.readTicketSheet(path, columns)
 	};
 }

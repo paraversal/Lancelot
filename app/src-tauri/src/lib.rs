@@ -151,7 +151,7 @@ pub fn run() {
             commands::tier_add,
             commands::tier_update,
             commands::tier_delete,
-            commands::ticket_columns_set,
+            commands::ticket_sheet_read,
             commands::tickets_set_enabled,
             commands::ticket_account_set,
             commands::tickets_preview,

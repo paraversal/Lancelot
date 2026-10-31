@@ -918,26 +918,21 @@ fn a_foreign_key_left_dangling_stops_the_commit() {
 fn the_settings_on_the_event_row_are_saved_and_logged() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
-    let columns = TicketColumns {
-        tier: "Kategorie".into(),
-        order: "Bestellung".into(),
-        sale_date: None,
-    };
     store
-        .change(|book| book.set_ticket_columns(columns.clone()))
+        .change(|book| book.set_tickets_enabled(false))
         .unwrap();
     let log = store.change_log(10).unwrap();
     let last = |entity: &str| log.iter().find(|e| e.entity == entity).unwrap();
-    assert_eq!(last("ticket_columns").op, "update");
+    assert_eq!(last("ticket_settings").op, "update");
     assert_eq!(
-        last("ticket_columns").after.as_ref().unwrap()["tier"],
-        "Kategorie"
+        last("ticket_settings").after.as_ref().unwrap()["enabled"],
+        false
     );
     drop(store);
 
     let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
     assert!(report.is_clean(), "{report:?}");
-    assert_eq!(reopened.book().ticket_columns(), &columns);
+    assert!(!reopened.book().ticket_settings().enabled);
 }
 
 #[test]
@@ -960,7 +955,7 @@ fn deleting_an_import_is_logged_once() {
     }
     let sheet = include_bytes!("../../../fixtures/tickets/import-1.ods");
     let import = store
-        .import_tickets("import-1.ods", sheet, june(1))
+        .import_tickets(&batch("import-1.ods", sheet), june(1))
         .unwrap();
     store.change(|b| b.delete_import(import)).unwrap();
     let log = store.change_log(100).unwrap();

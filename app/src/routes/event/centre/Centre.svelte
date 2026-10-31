@@ -78,7 +78,7 @@
 		</div>
 
 		{#each sections as { plugin, ctx, Section } (plugin.id)}
-			{#if pluginEnabled(plugin.id) && plugin.attachedTo(ctx, centre.id)}
+			{#if pluginEnabled(plugin.id) && plugin.attachedTo?.(ctx, centre.id)}
 				<PluginFrame name={plugin.name}>
 					<Section {ctx} {centre} {setPanel} />
 				</PluginFrame>

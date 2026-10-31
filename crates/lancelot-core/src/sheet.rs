@@ -8,36 +8,44 @@
 use std::io::Cursor;
 
 use calamine::{Data, Reader, open_workbook_auto_from_rs};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
 use crate::error::DomainError;
-use crate::tickets::TicketColumns;
+use crate::tickets::{BatchTicket, TicketBatch};
 
-/// The configured columns of a sheet, nothing else.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sheet {
-    pub filename: String,
-    /// SHA-256 of the file, lower-case hex (R-TKT-5).
-    pub sha256: String,
-    pub rows: Vec<SheetRow>,
-    pub problems: Vec<RowProblem>,
-}
-
-/// One ticket.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SheetRow {
-    /// The row number as the spreadsheet shows it, starting at 1 with the header.
-    pub row: u32,
+/// The sheet's column names (R-TKT-3). Matched ignoring case.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct TicketColumns {
     pub tier: String,
     pub order: String,
+}
+
+impl Default for TicketColumns {
+    fn default() -> TicketColumns {
+        TicketColumns {
+            tier: "Ticket".into(),
+            order: "Order ID".into(),
+        }
+    }
+}
+
+/// The configured columns of a sheet, nothing else.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct Sheet {
+    /// The tickets. The hash is the file's.
+    pub batch: TicketBatch,
+    pub problems: Vec<RowProblem>,
 }
 
 /// A row that was not read as a ticket.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct RowProblem {
+    /// The row number as the spreadsheet shows it, starting at 1 with the header.
     pub row: u32,
     pub problem: Problem,
 }
@@ -66,11 +74,13 @@ pub fn read_sheet(
     } else {
         spreadsheet_cells(data)?
     };
-    let (rows, problems) = pick_columns(cells, columns)?;
+    let (tickets, problems) = pick_columns(cells, columns)?;
     Ok(Sheet {
-        filename: filename.to_owned(),
-        sha256: hex(&Sha256::digest(data)),
-        rows,
+        batch: TicketBatch {
+            source: filename.to_owned(),
+            sha256: hex(&Sha256::digest(data)),
+            tickets,
+        },
         problems,
     })
 }
@@ -145,7 +155,7 @@ fn csv_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
 fn pick_columns(
     cells: Vec<(u32, Vec<Cell>)>,
     columns: &TicketColumns,
-) -> Result<(Vec<SheetRow>, Vec<RowProblem>), DomainError> {
+) -> Result<(Vec<BatchTicket>, Vec<RowProblem>), DomainError> {
     let empty = |cells: &[Cell]| cells.iter().all(|c| c.as_ref().is_ok_and(|c| c.is_empty()));
     let mut cells = cells.into_iter().filter(|(_, c)| !empty(c));
     let Some((_, header)) = cells.next() else {
@@ -176,7 +186,7 @@ fn pick_columns(
             (Ok(tier), _) if tier.is_empty() => Some(Problem::NoTier),
             (_, Ok(order)) if order.is_empty() => Some(Problem::NoOrder),
             (Ok(tier), Ok(order)) => {
-                rows.push(SheetRow { row, tier, order });
+                rows.push(BatchTicket { tier, order });
                 None
             }
         };
@@ -207,9 +217,8 @@ mod tests {
     fn reads_only_the_configured_columns() {
         let sheet = read("Name;Ticket;E-Mail;Order ID\nAnna;Regular;a@x.example;4711\n").unwrap();
         assert_eq!(
-            sheet.rows,
-            [SheetRow {
-                row: 2,
+            sheet.batch.tickets,
+            [BatchTicket {
                 tier: "Regular".into(),
                 order: "4711".into()
             }]
@@ -220,14 +229,14 @@ mod tests {
     #[test]
     fn finds_columns_ignoring_case_and_order_and_sniffs_the_delimiter() {
         let sheet = read("order id,TICKET\n 17 , Early Bird \n").unwrap();
-        assert_eq!(sheet.rows[0].tier, "Early Bird");
-        assert_eq!(sheet.rows[0].order, "17");
+        assert_eq!(sheet.batch.tickets[0].tier, "Early Bird");
+        assert_eq!(sheet.batch.tickets[0].order, "17");
     }
 
     #[test]
     fn lists_rows_it_cannot_read_and_skips_blank_ones() {
         let sheet = read("Ticket;Order ID;Name\nRegular;;Anna\n;12;Bob\n;;\n;;Carla\n").unwrap();
-        assert!(sheet.rows.is_empty());
+        assert!(sheet.batch.tickets.is_empty());
         assert_eq!(
             sheet.problems,
             [
@@ -260,17 +269,20 @@ mod tests {
     #[test]
     fn hashes_the_file() {
         let sheet = read("Ticket;Order ID\n").unwrap();
-        assert_eq!(sheet.sha256.len(), 64);
-        assert_ne!(sheet.sha256, read("Ticket;Order ID\n\n").unwrap().sha256);
+        assert_eq!(sheet.batch.sha256.len(), 64);
+        assert_ne!(
+            sheet.batch.sha256,
+            read("Ticket;Order ID\n\n").unwrap().batch.sha256
+        );
     }
 
     #[test]
     fn reads_latin_1_and_a_byte_order_mark() {
         let latin1 = b"Ticket;Order ID\nErm\xe4\xdfigt;1\n";
         let sheet = read_sheet("t.csv", latin1, &columns()).unwrap();
-        assert_eq!(sheet.rows[0].tier, "Ermäßigt");
+        assert_eq!(sheet.batch.tickets[0].tier, "Ermäßigt");
         let bom = read("\u{feff}Ticket;Order ID\nRegular;1\n").unwrap();
-        assert_eq!(bom.rows.len(), 1);
+        assert_eq!(bom.batch.tickets.len(), 1);
     }
 
     #[test]

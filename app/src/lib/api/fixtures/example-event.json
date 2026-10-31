@@ -9,11 +9,6 @@
     "defaultReimbursementAccount": 1,
     "closingOverrides": []
   },
-  "ticketColumns": {
-    "tier": "Ticket",
-    "order": "Order ID",
-    "saleDate": null
-  },
   "ticketSettings": {
     "enabled": true,
     "account": 1

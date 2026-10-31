@@ -205,7 +205,6 @@ fn a_file_with_two_records_for_one_key_does_not_load() {
     next.plugin_record = twin.id.0 + 1;
     let parts = BookParts {
         event: book.event().clone(),
-        ticket_columns: book.ticket_columns().clone(),
         ticket_settings: book.ticket_settings(),
         accounts: book.accounts().cloned().collect(),
         persons: Vec::new(),

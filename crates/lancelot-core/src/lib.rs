@@ -51,17 +51,17 @@ pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
 pub use plugin::{PluginChange, PluginRecord, PluginScope};
 pub use sales::{Profitability, SalesPoint, TierBreakEven, TierSales};
-pub use sheet::{Problem, RowProblem, Sheet, SheetRow, read_sheet};
+pub use sheet::{Problem, RowProblem, Sheet, TicketColumns, read_sheet};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
     BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,
     list_backups, read_book,
 };
 pub use tickets::{
-    Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
-    ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict,
-    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketSettings,
-    TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
+    BatchTicket, Cancellation, CancellationDraft, CancellationEdit, CancellationSource,
+    CancellationView, ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft,
+    OrderConflict, RefundTerms, RemovedTickets, Resolution, TicketBatch, TicketImport,
+    TicketSettings, TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

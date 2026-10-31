@@ -17,8 +17,8 @@ use crate::model::{
 use crate::money::Cents;
 use crate::plugin::PluginRecord;
 use crate::tickets::{
-    Cancellation, ManualSale, ManualSaleDraft, OrderCount, RefundTerms, TicketColumns,
-    TicketImport, TicketSettings, Tier, TierDraft,
+    Cancellation, ManualSale, ManualSaleDraft, OrderCount, RefundTerms, TicketImport,
+    TicketSettings, Tier, TierDraft,
 };
 
 pub(crate) fn cents(value: i64) -> Result<Cents, StoreError> {
@@ -164,7 +164,6 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
 pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let event = conn.query_row(
         "SELECT name, starts_on, ends_on, location, notes, closed_at, default_reimbursement_account_id, closing_overrides,
-                ticket_tier_column, ticket_order_column, ticket_date_column,
                 tickets_enabled, ticket_account_id
          FROM event WHERE id = 1",
         [],
@@ -178,14 +177,9 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                 r.get::<_, Option<String>>(5)?,
                 r.get::<_, i64>(6)?,
                 r.get::<_, String>(7)?,
-                TicketColumns {
-                    tier: r.get(8)?,
-                    order: r.get(9)?,
-                    sale_date: r.get(10)?,
-                },
                 TicketSettings {
-                    enabled: r.get(11)?,
-                    account: r.get::<_, Option<i64>>(12)?.map(AccountId),
+                    enabled: r.get(8)?,
+                    account: r.get::<_, Option<i64>>(9)?.map(AccountId),
                 },
             ))
         },
@@ -199,7 +193,6 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         closed_at,
         default_account,
         overrides,
-        columns,
         ticket_settings,
     ) = event;
     let event = Event {
@@ -349,7 +342,6 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
 
     Ok(BookParts {
         ticket_settings,
-        ticket_columns: columns,
         event,
         accounts: accounts(conn)?.into_values().collect(),
         persons,

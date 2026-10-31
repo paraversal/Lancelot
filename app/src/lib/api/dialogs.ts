@@ -49,17 +49,14 @@ export async function chooseReceipts(): Promise<string[]> {
 	return Array.isArray(picked) ? picked : picked ? [picked] : [];
 }
 
-/** The formats a ticket sheet is read from (R-TKT-3). */
-export const SHEET_EXTENSIONS = ['ods', 'xlsx', 'csv'];
-
-/** Asks for a ticket sheet to import. `null` when cancelled. */
-export async function chooseTicketSheet(): Promise<string | null> {
+/** Asks for a file for a plugin, which is only ever a ticket sheet so far. `null` when cancelled. */
+export async function chooseFile(name: string, extensions: string[]): Promise<string | null> {
 	if (!isTauri()) return (await import('./dev')).dialogs.sheet();
 	const { open } = await import('@tauri-apps/plugin-dialog');
 	const path = await open({
 		multiple: false,
 		directory: false,
-		filters: [{ name: 'Ticket sheet', extensions: SHEET_EXTENSIONS }]
+		filters: [{ name, extensions }]
 	});
 	return typeof path === 'string' ? path : null;
 }

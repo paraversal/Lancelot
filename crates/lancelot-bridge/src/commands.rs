@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use lancelot_core::{Book, DomainError, Person};
+use lancelot_core::{Book, DomainError, Person, TicketBatch, TicketColumns};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -195,16 +195,15 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
 
         "tier_delete" => one(s, a, "id", Book::delete_tier),
 
-        "ticket_columns_set" => one(s, a, "columns", Book::set_ticket_columns),
         "tickets_set_enabled" => one(s, a, "enabled", Book::set_tickets_enabled),
         "ticket_account_set" => one(s, a, "account", Book::set_ticket_account),
 
-        "tickets_preview" => json(s.preview_tickets(&arg::<PathBuf>(a, "path")?, date(a)?)),
-        "tickets_import" => json(s.import_tickets(
+        "ticket_sheet_read" => json(s.read_ticket_sheet(
             &arg::<PathBuf>(a, "path")?,
-            date(a)?,
-            &arg::<String>(a, "sha256")?,
+            &arg::<TicketColumns>(a, "columns")?,
         )),
+        "tickets_preview" => json(s.preview_tickets(&arg::<TicketBatch>(a, "batch")?, date(a)?)),
+        "tickets_import" => json(s.import_tickets(&arg::<TicketBatch>(a, "batch")?, date(a)?)),
         "import_set_date" => {
             let id = arg(a, "id")?;
             let date = date(a)?;

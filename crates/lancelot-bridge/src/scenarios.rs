@@ -2,7 +2,10 @@
 
 use std::path::Path;
 
-use lancelot_core::{BlockerOverride, EventDetails, Store, StoreError, StoreOptions, TierDraft};
+use lancelot_core::{
+    BlockerOverride, EventDetails, Store, StoreError, StoreOptions, TicketColumns, TierDraft,
+    read_sheet,
+};
 use lancelot_service::Service;
 use lancelot_service::api::ApiError;
 use rusqlite::Connection;
@@ -68,8 +71,10 @@ fn conflict(store: &mut Store) -> Result<(), ApiError> {
         let date = date!(2026 - 06 - 01)
             .replace_day(day)
             .map_err(|e| ApiError::new("scenario", e.to_string()))?;
+        let sheet = read_sheet(file, &data, &TicketColumns::default())
+            .map_err(|e| ApiError::new("scenario", e.to_string()))?;
         store
-            .import_tickets(file, &data, date)
+            .import_tickets(&sheet.batch, date)
             .map_err(store_error)?;
     }
     Ok(())

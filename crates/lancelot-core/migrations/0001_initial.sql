@@ -33,11 +33,8 @@ CREATE TABLE event (                   -- exactly one row
   closed_at   TEXT,                    -- RFC 3339 UTC; set while the event is closed
   default_reimbursement_account_id INTEGER NOT NULL REFERENCES account(id),
   closing_overrides TEXT NOT NULL DEFAULT '[]',  -- JSON
-  ticket_tier_column  TEXT NOT NULL DEFAULT 'Ticket',     -- R-TKT-3
-  ticket_order_column TEXT NOT NULL DEFAULT 'Order ID',
-  ticket_date_column  TEXT,
   tickets_enabled     INTEGER NOT NULL DEFAULT 1 CHECK (tickets_enabled IN (0,1)),
-  ticket_account_id   INTEGER REFERENCES account(id)      -- where the sheet's money arrives
+  ticket_account_id   INTEGER REFERENCES account(id)      -- where imported tickets' money arrives
 ) STRICT;
 
 CREATE TABLE person (                  -- 1:1 extension of an account of kind 'person'
@@ -186,7 +183,7 @@ CREATE TABLE change_log (              -- R-TX-6
   entity     TEXT NOT NULL,            -- 'event','account','person','txn','attachment','closing_count','budget_line',
                                        -- 'ticket_tier','ticket_import','ticket_manual_sale','ticket_cancellation',
                                        -- 'cost_centre','plugin_record','reconciliation',
-                                       -- 'ticket_columns','ticket_settings'
+                                       -- 'ticket_settings'
   entity_id  INTEGER NOT NULL,
   op         TEXT NOT NULL CHECK (op IN ('create','update','delete','close','reopen')),
   before     TEXT,                     -- JSON

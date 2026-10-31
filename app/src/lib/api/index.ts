@@ -41,6 +41,8 @@ import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
 import type { Resolution } from './generated/Resolution';
 import type { SavedTxn } from './generated/SavedTxn';
+import type { Sheet } from './generated/Sheet';
+import type { TicketBatch } from './generated/TicketBatch';
 import type { TicketColumns } from './generated/TicketColumns';
 import type { TicketShare } from './generated/TicketShare';
 import type { TierDraft } from './generated/TierDraft';
@@ -187,17 +189,18 @@ export const api = {
 	updateTier: (id: TierId, draft: TierDraft) => call<OpenEvent>('tier_update', { id, draft }),
 	/** Only a tier that no import and no manual sale uses. */
 	deleteTier: (id: TierId) => call<OpenEvent>('tier_delete', { id }),
-	setTicketColumns: (columns: TicketColumns) => call<OpenEvent>('ticket_columns_set', { columns }),
 	/** Off is refused while there are tiers. */
 	setTicketsEnabled: (enabled: boolean) => call<OpenEvent>('tickets_set_enabled', { enabled }),
 	setTicketAccount: (account: AccountId | null) =>
 		call<OpenEvent>('ticket_account_set', { account }),
 	/** Reads a ticket sheet (path) with the event's columns; changes nothing. */
-	previewTickets: (path: string, date: string) =>
-		call<ImportPreview>('tickets_preview', { path, date }),
-	/** Imports the sheet the preview read: `sha256` is the preview's, so a changed file fails. */
-	importTickets: (path: string, date: string, sha256: string) =>
-		call<OpenEvent>('tickets_import', { path, date, sha256 }),
+	previewTickets: (batch: TicketBatch, date: string) =>
+		call<ImportPreview>('tickets_preview', { batch, date }),
+	importTickets: (batch: TicketBatch, date: string) =>
+		call<OpenEvent>('tickets_import', { batch, date }),
+	/** Reads the columns of a ticket sheet; changes nothing. */
+	readTicketSheet: (path: string, columns: TicketColumns) =>
+		call<Sheet>('ticket_sheet_read', { path, columns }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
 	/** What deleting an import would change; changes nothing. */
 	previewDeleteImport: (id: ImportId) => call<ImportDeletion>('import_delete_preview', { id }),

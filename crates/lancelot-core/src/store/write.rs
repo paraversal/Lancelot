@@ -234,25 +234,20 @@ pub(crate) fn persist<'a>(
 
     // The event row, which also holds the ticket settings.
     let event = after.event();
-    let row = |b: &'a Book| (b.event(), b.ticket_columns(), b.ticket_settings());
+    let row = |b: &'a Book| (b.event(), b.ticket_settings());
     if before.map(row) != Some(row(after)) {
         let d = &event.details;
-        let columns = after.ticket_columns();
         let tickets = after.ticket_settings();
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
                                 default_reimbursement_account_id, closing_overrides,
-                                ticket_tier_column, ticket_order_column, ticket_date_column,
                                 tickets_enabled, ticket_account_id)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
                location = excluded.location, notes = excluded.notes, closed_at = excluded.closed_at,
                default_reimbursement_account_id = excluded.default_reimbursement_account_id,
                closing_overrides = excluded.closing_overrides,
-               ticket_tier_column = excluded.ticket_tier_column,
-               ticket_order_column = excluded.ticket_order_column,
-               ticket_date_column = excluded.ticket_date_column,
                tickets_enabled = excluded.tickets_enabled,
                ticket_account_id = excluded.ticket_account_id",
             params![
@@ -264,9 +259,6 @@ pub(crate) fn persist<'a>(
                 event.closed_at.map(timestamp_text).transpose()?,
                 event.default_reimbursement_account.0,
                 serde_json::to_string(&event.closing_overrides)?,
-                columns.tier,
-                columns.order,
-                columns.sale_date,
                 tickets.enabled,
                 tickets.account.map(|a| a.0),
             ],
@@ -281,12 +273,6 @@ pub(crate) fn persist<'a>(
             Some(b) if b != event => log.write("event", 1, &Change::Update(b, event))?,
             Some(_) => {}
         }
-        setting(
-            log,
-            "ticket_columns",
-            before.map(Book::ticket_columns),
-            columns,
-        )?;
         setting(
             log,
             "ticket_settings",
