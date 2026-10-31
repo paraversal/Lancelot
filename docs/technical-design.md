@@ -104,7 +104,7 @@ Check against Bob from requirements §4.1:
 
 ### 3.2 Schema
 
-The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). Until the format freeze (Stage 6 of the refactoring on the roadmap) it is edited in place: files from earlier development builds stop opening. After that, every change is a new migration. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). The format is frozen: this file is never edited again, and every change is a new migration, added to `MIGRATIONS` with `SCHEMA_VERSION` raised. Files from development builds before the freeze don't open. [`fixtures/events/sample-v1.lancelot`](../fixtures/events/sample-v1.lancelot) proves it: a frozen file with rows in every table, kept byte for byte. [`tests/sample_file.rs`](../crates/lancelot-core/tests/sample_file.rs) opens a copy with its figures written out, keeps working on it, and fails if a new file's schema differs from the migrated sample's. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
 Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents. Ids are never reused, so the change log stays unambiguous.
 

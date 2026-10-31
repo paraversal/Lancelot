@@ -1,4 +1,5 @@
 -- Lancelot event file, schema version 1. See docs/technical-design.md §3.
+-- Frozen: a change is a new migration, never an edit here (tests/sample_file.rs).
 
 CREATE TABLE meta (                    -- event_uuid, created_at, created_by, next_*_id
   key   TEXT PRIMARY KEY,

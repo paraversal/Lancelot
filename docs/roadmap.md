@@ -23,7 +23,7 @@ crates/lancelot-service/   commands on the open event, settings, API types (no T
 crates/lancelot-bridge/    development only: the commands over local HTTP for a plain browser
 app/src-tauri/             Tauri 2 shell: commands, dialogs, drag-and-drop
 docs/                      requirements, roadmap, design, technical design
-fixtures/                  ticket sheets (.ods), receipts, format cases; sample events and Strichliste CSVs later
+fixtures/                  ticket sheets (.ods), receipts, format cases; the frozen sample event; Strichliste CSVs later
 ```
 
 ---
@@ -274,7 +274,7 @@ Built in three steps, each in its own pull request.
 
 ## Refactoring
 
-From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm) of 2026-10-30, made at commit `071e403`; F-numbers refer to its findings. The stages run in order and have no deadline. No real event file exists yet, so `0001_initial.sql` is edited in place until Stage 6 freezes the format. Balancing, integer cents and derived balances (R-COR-1 to R-COR-6) are never traded for flexibility.
+From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm) of 2026-10-30, made at commit `071e403`; F-numbers refer to its findings. The stages run in order and have no deadline. `0001_initial.sql` was edited in place until Stage 6 froze the format. Balancing, integer cents and derived balances (R-COR-1 to R-COR-6) are never traded for flexibility.
 
 ### Stage 0 · Docs
 
@@ -335,7 +335,7 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 ### Stage 6 · Freeze the format
 
-- [ ] Check in a sample `.lancelot` file with tickets, imports, a cancellation, a checkpoint, drinks and an attachment, with a test that it keeps opening (F14). From here on every schema change is a migration, and the file proves it.
+- [x] `fixtures/events/sample-v1.lancelot` is checked in, with tickets, imports, cancellations, checkpoints, drinks, attachments and a closed event: rows in every table and every transaction kind. A test keeps it opening with its figures written out (F14). From here on every schema change is a migration, and a test fails if `0001_initial.sql` is edited.
 
 ### After the next event
 
@@ -364,4 +364,4 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 ## Next step
 
-Work through the [refactoring stages](#refactoring), starting with Stage 6. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
+The [refactoring stages](#refactoring) are done, apart from the decision that waits for the next event. Run that event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).

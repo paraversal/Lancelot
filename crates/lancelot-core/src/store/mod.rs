@@ -34,7 +34,8 @@ use crate::sheet::read_sheet;
 use crate::tickets::ImportPreview;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
-/// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`.
+/// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`. Released
+/// ones are never edited (`tests/sample_file.rs`).
 const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_initial.sql")];
 
 #[derive(Debug, Error)]
