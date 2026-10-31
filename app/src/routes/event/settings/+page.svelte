@@ -24,6 +24,7 @@
 	import Lock from '#lib/motion/Lock.svelte';
 	import { level, reduced } from '#lib/motion/mode.svelte.ts';
 	import { pluginContext, pluginEnabled, setPluginEnabled } from '#lib/plugins/host.ts';
+	import DataSourceForm from '#lib/plugins/DataSourceForm.svelte';
 	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
 	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -469,8 +470,13 @@
 									On
 								</label>
 							{/snippet}
-							{#if on && plugin.SettingsSection}
-								<plugin.SettingsSection ctx={pluginContext(plugin.id)} />
+							{#if on && (plugin.SettingsSection || plugin.dataSource)}
+								{#if plugin.SettingsSection}
+									<plugin.SettingsSection ctx={pluginContext(plugin.id)} />
+								{/if}
+								{#if plugin.dataSource}
+									<DataSourceForm id={plugin.id} spec={plugin.dataSource} />
+								{/if}
 							{/if}
 						</PluginFrame>
 					{/each}

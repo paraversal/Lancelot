@@ -5,9 +5,11 @@
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
 	import { formatAmount } from '../../format';
-	import type { CentreSectionProps } from '../api';
+	import type { CentreSectionProps, Pulled } from '../api';
 	import { computeFigures, EXPLAINERS } from './figures';
 	import ProductPanel from './ProductPanel.svelte';
+	import { PULL_FIELDS } from './pull';
+	import PullPanel from './PullPanel.svelte';
 	import { allProducts, centreSettings, countsOf } from './records';
 	import SupplierPanel from './SupplierPanel.svelte';
 
@@ -30,12 +32,35 @@
 	let adding = $state(false);
 	/** The supplier panel, and whether saving it goes on to the invoice. */
 	let supplierPanel = $state<'settings' | 'invoice' | null>(null);
+	/** What a pull read, waiting to be looked over. */
+	let pulled = $state<Pulled | null>(null);
+	let pulling = $state(false);
+	let pullError = $state<string | null>(null);
 	const open = $derived(products.find((p) => p.product.id === selected) ?? null);
 
-	function show(next: { product?: number; add?: boolean; supplier?: 'settings' | 'invoice' }) {
+	function show(next: {
+		product?: number;
+		add?: boolean;
+		supplier?: 'settings' | 'invoice';
+		pull?: Pulled;
+	}) {
 		selected = next.product ?? null;
 		adding = next.add ?? false;
 		supplierPanel = next.supplier ?? null;
+		pulled = next.pull ?? null;
+	}
+
+	async function pull() {
+		pulling = true;
+		pullError = null;
+		try {
+			show({ pull: await ctx.pull(PULL_FIELDS) });
+		} catch (e) {
+			if (!(e instanceof Error)) throw e;
+			pullError = e.message;
+		} finally {
+			pulling = false;
+		}
 	}
 
 	function bookInvoice(supplier: string) {
@@ -65,7 +90,9 @@
 	}
 
 	// Only whether there is a panel: it stays mounted while the snapshot changes behind it.
-	const hasPanel = $derived(adding || selected !== null || supplierPanel !== null);
+	const hasPanel = $derived(
+		adding || selected !== null || supplierPanel !== null || pulled !== null
+	);
 	$effect(() => {
 		setPanel(hasPanel ? panel : null);
 	});
@@ -75,7 +102,9 @@
 <svelte:window onkeydown={keydown} />
 
 {#snippet panel()}
-	{#if adding}
+	{#if pulled}
+		<PullPanel {ctx} centre={centre.id} {pulled} onclose={() => show({})} />
+	{:else if adding}
 		<ProductPanel {ctx} centre={centre.id} product={null} onclose={() => show({})} />
 	{:else if open}
 		{#key open.product.id}
@@ -113,6 +142,9 @@
 				<span>{formatAmount(figures.costPerDrink, format)} per drink</span>
 			{/if}
 			{#if !ctx.closed}
+				{#if ctx.dataSource}
+					<Button size="sm" disabled={pulling} onclick={pull}>Pull logged</Button>
+				{/if}
 				<Button size="sm" onclick={invoice}>Book invoice</Button>
 				<Button size="sm" icon="plus" shortcut="N" onclick={() => show({ add: true })}>
 					Product
@@ -120,6 +152,8 @@
 			{/if}
 		</span>
 	</div>
+
+	{#if pullError}<p class="form-error">{pullError}</p>{/if}
 
 	{#if figures.rows.length}
 		<div class="rows" role="table" aria-label="Stock and sales">

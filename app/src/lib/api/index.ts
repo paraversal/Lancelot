@@ -41,6 +41,9 @@ import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
 import type { Resolution } from './generated/Resolution';
 import type { SavedTxn } from './generated/SavedTxn';
+import type { DataSource } from './generated/DataSource';
+import type { DataSourceView } from './generated/DataSourceView';
+import type { Pulled } from './generated/Pulled';
 import type { Sheet } from './generated/Sheet';
 import type { TicketBatch } from './generated/TicketBatch';
 import type { TicketColumns } from './generated/TicketColumns';
@@ -49,6 +52,8 @@ import type { TierDraft } from './generated/TierDraft';
 import type { TierId } from './generated/TierId';
 import type { TxnDraft } from './generated/TxnDraft';
 import type { TxnId } from './generated/TxnId';
+
+export type DataSources = { [id: string]: DataSourceView | undefined };
 
 /** A failed command. `code` is stable; `message` is for people. */
 export class ApiError extends Error {
@@ -198,6 +203,17 @@ export const api = {
 		call<ImportPreview>('tickets_preview', { batch, date }),
 	importTickets: (batch: TicketBatch, date: string) =>
 		call<OpenEvent>('tickets_import', { batch, date }),
+	/** The data sources saved on this computer, by plugin. */
+	dataSources: () => call<DataSources>('data_sources_get'),
+	/** Saves a plugin's data source; null removes it and its token. */
+	setDataSource: (id: string, source: DataSource | null) =>
+		call<DataSources>('data_source_set', { id, source }),
+	/** The token is never handed back; null removes it. */
+	setDataSourceToken: (id: string, token: string | null) =>
+		call<DataSources>('data_source_set_token', { id, token }),
+	/** Asks the provider for these fields; changes nothing. */
+	pullDataSource: (id: string, fields: string[]) =>
+		call<Pulled>('data_source_pull', { id, fields }),
 	/** Reads the columns of a ticket sheet; changes nothing. */
 	readTicketSheet: (path: string, columns: TicketColumns) =>
 		call<Sheet>('ticket_sheet_read', { path, columns }),

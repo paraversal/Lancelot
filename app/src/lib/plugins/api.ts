@@ -9,6 +9,7 @@ import type { CostCentreFigures } from '../api/generated/CostCentreFigures';
 import type { NumberFormat } from '../api/generated/NumberFormat';
 import type { PluginChange } from '../api/generated/PluginChange';
 import type { PluginRecord } from '../api/generated/PluginRecord';
+import type { Pulled } from '../api/generated/Pulled';
 import type { Sheet } from '../api/generated/Sheet';
 import type { TicketBatch } from '../api/generated/TicketBatch';
 import type { TicketColumns } from '../api/generated/TicketColumns';
@@ -20,6 +21,7 @@ export type {
 	CostCentreFigures,
 	PluginChange,
 	PluginRecord,
+	Pulled,
 	Sheet,
 	TicketBatch,
 	TicketColumns,
@@ -67,6 +69,10 @@ export interface PluginContext {
 	onFileDrop(handlers: FileDropHandlers): () => void;
 	/** Reads only these columns of a spreadsheet, and hashes the file. */
 	readTicketSheet(path: string, columns: TicketColumns): Promise<Sheet>;
+	/** What this plugin's data source is called; null until it is set up in Settings. */
+	readonly dataSource: string | null;
+	/** Asks the data source for these fields. Nothing else in its answer reaches the plugin. */
+	pull(fields: string[]): Promise<Pulled>;
 }
 
 export type CentreSectionProps = {
@@ -86,6 +92,13 @@ export type TicketSectionProps = {
 
 export type SettingsSectionProps = { ctx: PluginContext };
 
+/** What a plugin wants from a provider. The app draws the form for it in Settings. */
+export type DataSourceSpec = {
+	/** The usual name of the provider's list. */
+	list: string;
+	fields: { key: string; label: string; usually: string }[];
+};
+
 export interface Plugin {
 	/** Stored with its records: never changes. Lower-case letters, digits and hyphens. */
 	id: string;
@@ -98,4 +111,6 @@ export interface Plugin {
 	/** On the Tickets page: a way for tickets to come in. */
 	TicketSection?: Component<TicketSectionProps>;
 	SettingsSection?: Component<SettingsSectionProps>;
+	/** Offers a data source. `TicketSection` then waits until it is set up. */
+	dataSource?: DataSourceSpec;
 }

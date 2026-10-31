@@ -5,6 +5,7 @@ import { api } from '../api/index';
 import { onFileDrop } from '../dragdrop';
 import { session } from '../state/session.svelte';
 import type { EntryProposal, PluginContext } from './api';
+import { dataSources } from './sources.svelte';
 
 /** The app's own record in a plugin's namespace: present when the plugin is switched off. */
 const OFF_KEY = 'host:off';
@@ -76,6 +77,10 @@ export function pluginContext(id: string): PluginContext {
 		},
 		chooseFile,
 		onFileDrop,
-		readTicketSheet: (path, columns) => api.readTicketSheet(path, columns)
+		readTicketSheet: (path, columns) => api.readTicketSheet(path, columns),
+		get dataSource() {
+			return dataSources.of(id)?.source.label ?? null;
+		},
+		pull: (fields) => api.pullDataSource(id, fields)
 	};
 }

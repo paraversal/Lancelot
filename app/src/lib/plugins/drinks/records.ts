@@ -16,6 +16,8 @@ export type Product = {
 	cost: number;
 	/** What people are asked to give per unit, in cents. A paper list's Strich is a product too. */
 	donation: number | null;
+	/** Other names a data source uses for it. */
+	aliases?: string[];
 };
 
 export type Counts = {
@@ -65,7 +67,8 @@ function readProduct(r: PluginRecord): Product | null {
 		centre: v.centre,
 		name: v.name,
 		cost: v.cost,
-		donation: v.donation as number | null
+		donation: v.donation as number | null,
+		...(Array.isArray(v.aliases) ? { aliases: v.aliases.filter((a) => typeof a === 'string') } : {})
 	};
 }
 

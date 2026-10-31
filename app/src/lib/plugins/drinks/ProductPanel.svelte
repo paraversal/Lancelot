@@ -98,7 +98,7 @@
 		const id = product?.id ?? nextProductId(ctx.records);
 		try {
 			await ctx.apply([
-				setProduct({ id, centre, name: name.trim(), cost: cost ?? 0, donation }),
+				setProduct({ ...product, id, centre, name: name.trim(), cost: cost ?? 0, donation }),
 				setCounts(id, { ...counts, taken: t, returned: r, leftOver: left, manual })
 			]);
 			onclose();

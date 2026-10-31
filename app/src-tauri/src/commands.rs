@@ -1,5 +1,6 @@
 //! The Tauri commands: thin wrappers that lock the service and delegate.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -18,7 +19,7 @@ use lancelot_service::api::{
     Added, ApiError, AppInfo, BackupInfo, CheckedIban, CountInput, OpenEvent, ParsedDate,
     RecentEvent, SavedTxn,
 };
-use lancelot_service::{AppSettings, Service};
+use lancelot_service::{AppSettings, DataSource, DataSourceView, Pulled, Service};
 
 pub struct AppState(pub Mutex<Service>);
 
@@ -421,6 +422,44 @@ pub async fn ticket_account_set(
     account: Option<AccountId>,
 ) -> Result<OpenEvent> {
     with(&state, |s| s.change(|b| b.set_ticket_account(account)))
+}
+
+#[tauri::command]
+pub async fn data_sources_get(
+    state: State<'_, AppState>,
+) -> Result<BTreeMap<String, DataSourceView>> {
+    with(&state, |s| Ok(s.data_sources()))
+}
+
+#[tauri::command]
+pub async fn data_source_set(
+    state: State<'_, AppState>,
+    id: String,
+    source: Option<DataSource>,
+) -> Result<BTreeMap<String, DataSourceView>> {
+    with(&state, |s| s.set_data_source(&id, source))
+}
+
+#[tauri::command]
+pub async fn data_source_set_token(
+    state: State<'_, AppState>,
+    id: String,
+    token: Option<String>,
+) -> Result<BTreeMap<String, DataSourceView>> {
+    with(&state, |s| s.set_data_source_token(&id, token.as_deref()))
+}
+
+/// The network is slow, so the service isn't locked meanwhile and the app keeps working.
+#[tauri::command]
+pub async fn data_source_pull(
+    state: State<'_, AppState>,
+    id: String,
+    fields: Vec<String>,
+) -> Result<Pulled> {
+    let request = with(&state, |s| s.pull_request(&id))?;
+    tauri::async_runtime::spawn_blocking(move || request.run(&fields))
+        .await
+        .map_err(|e| ApiError::new("internal", e.to_string()))?
 }
 
 #[tauri::command]

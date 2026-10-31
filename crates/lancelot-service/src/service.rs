@@ -3,6 +3,7 @@
 //! One window holds at most one open event. Opening or creating another closes the current
 //! one first, which releases its lock.
 
+use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
@@ -21,10 +22,13 @@ use crate::api::{
     SavedTxn,
 };
 use crate::settings::{AppSettings, RecentEntry, SettingsFile};
+use crate::sources::{self, DataSource, DataSourceView, MemoryTokens, PullRequest, TokenStore};
 
 pub struct Service {
     data_dir: PathBuf,
     file: SettingsFile,
+    sources: BTreeMap<String, DataSource>,
+    tokens: Box<dyn TokenStore>,
     open: Option<Opened>,
 }
 
@@ -55,6 +59,13 @@ fn now() -> String {
         .unwrap_or_default()
 }
 
+fn token_error(reason: String) -> ApiError {
+    ApiError::new(
+        "token_store",
+        format!("the keychain could not be used: {reason}"),
+    )
+}
+
 /// A ticket sheet's name and bytes. Sheets are small; anything the size of an attachment
 /// limit is not one.
 fn read_sheet_file(path: &Path) -> Result<(String, Vec<u8>)> {
@@ -72,12 +83,20 @@ fn read_sheet_file(path: &Path) -> Result<(String, Vec<u8>)> {
 }
 
 impl Service {
-    /// `data_dir` holds `settings.json` and the `backups` folder.
+    /// `data_dir` holds `settings.json`, `data-sources.json` and the `backups` folder. Tokens last
+    /// as long as the process.
     pub fn new(data_dir: PathBuf) -> Service {
+        Service::with_tokens(data_dir, Box::new(MemoryTokens::default()))
+    }
+
+    pub fn with_tokens(data_dir: PathBuf, tokens: Box<dyn TokenStore>) -> Service {
         let file = SettingsFile::load(&data_dir.join("settings.json"));
+        let sources = sources::load(&data_dir.join("data-sources.json"));
         Service {
             data_dir,
             file,
+            sources,
+            tokens,
             open: None,
         }
     }
@@ -391,6 +410,69 @@ impl Service {
         self.on_store(|s| {
             s.import_tickets(batch, date)?;
             Ok(())
+        })
+    }
+
+    /// The data sources saved on this computer, by the plugin that uses them.
+    pub fn data_sources(&self) -> BTreeMap<String, DataSourceView> {
+        self.sources
+            .iter()
+            .map(|(id, source)| {
+                let has_token = matches!(self.tokens.get(id), Ok(Some(_)));
+                let view = DataSourceView {
+                    source: source.clone(),
+                    has_token,
+                };
+                (id.clone(), view)
+            })
+            .collect()
+    }
+
+    /// Saves a plugin's data source, or removes it along with its token.
+    pub fn set_data_source(
+        &mut self,
+        id: &str,
+        source: Option<DataSource>,
+    ) -> Result<BTreeMap<String, DataSourceView>> {
+        let mut next = self.sources.clone();
+        match source {
+            Some(source) => {
+                next.insert(id.to_owned(), sources::clean(source)?);
+            }
+            None => {
+                next.remove(id);
+            }
+        }
+        sources::save(&self.data_dir.join("data-sources.json"), &next)?;
+        if !next.contains_key(id) {
+            self.tokens.delete(id).map_err(token_error)?;
+        }
+        self.sources = next;
+        Ok(self.data_sources())
+    }
+
+    /// Sets or removes a data source's token. It is never handed back.
+    pub fn set_data_source_token(
+        &mut self,
+        id: &str,
+        token: Option<&str>,
+    ) -> Result<BTreeMap<String, DataSourceView>> {
+        match token.map(str::trim).filter(|t| !t.is_empty()) {
+            Some(token) => self.tokens.set(id, token).map_err(token_error)?,
+            None => self.tokens.delete(id).map_err(token_error)?,
+        }
+        Ok(self.data_sources())
+    }
+
+    /// What pulling from a plugin's data source takes. Run it outside any lock on the service.
+    pub fn pull_request(&self, id: &str) -> Result<PullRequest> {
+        let source = self
+            .sources
+            .get(id)
+            .ok_or_else(|| ApiError::new("no_data_source", "this data source is not set up"))?;
+        Ok(PullRequest {
+            source: source.clone(),
+            token: self.tokens.get(id).map_err(token_error)?,
         })
     }
 

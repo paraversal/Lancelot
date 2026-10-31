@@ -7,12 +7,14 @@
 	import { api } from '#lib/api/index.ts';
 	import IntegrityBanner from '#lib/components/IntegrityBanner.svelte';
 	import Sidebar from '#lib/components/Sidebar.svelte';
+	import { dataSources } from '#lib/plugins/sources.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
 
 	onMount(async () => {
+		dataSources.load();
 		if (session.event) return;
 		// After a reload the backend may still have the event open.
 		const current = await api.currentEvent();

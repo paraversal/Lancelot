@@ -342,6 +342,7 @@ The remaining schema changes of the refactoring landed here, as one batch.
 - [x] The schema is unfrozen until the first real event is entered, so `0001_initial.sql` is edited directly and the sample regenerated. The sample's money figures stay as they were written out.
 - [x] `plugin_record` and `Book::apply_plugin_changes`: records in the event file, with change log and read-back, copied by templates by scope. The core no longer knows about drinks (technical design §10).
 - [x] `lib/plugins`: `PluginContext`, the host, the registry, and sections on cost centre pages and in Settings. A test keeps plugins behind the context.
+- [x] Data sources: a form in Settings, details on this computer, the token in the keychain and the request in Rust. Drinks and the Ticket API plugin pull from them.
 - [x] Ticket sheet reading in `lib/plugins/ticket-sheet`. The core takes a `TicketBatch` from any source and keeps tiers, conflicts and income; the column names became the plugin's record.
 - [x] Drinks in `lib/plugins/drinks`, on any cost centre, with donation prices, left-over and logged counts, expected against collected, and an invoice proposed through the normal form. A new event starts without drinks.
 
@@ -353,7 +354,7 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 ## Phase 3
 
-- **M11 · Drink sales import.** Fill the logged counts in the drinks plugin from a file, then from an API, with a preview, name matching and a mapping that keeps only per-product totals (R-DRK-6). It needs a sample of the drinks app's export.
+- **M11 · Drink sales import.** The pull from a data source is done, with a preview, name matching and only per-product totals (R-DRK-6). Importing from a file is left, and needs a sample of the drinks app's export.
 - **M12 · SEPA.** Export the payout list as pain.001 XML (R-PER-6).
 - **M13 · Polished reports.** A typeset settlement PDF that follows the design system.
 - **M14 · Receipt OCR** (optional): pre-fill amount, date and counterparty from an attached receipt. It must run locally.

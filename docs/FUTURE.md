@@ -4,21 +4,18 @@ Longer-term ideas and larger changes that are not planned yet. Nothing here is c
 
 ## Ticket sources other than a sheet
 
-Today tickets come from a sheet (`.ods`, `.xlsx` or `.csv`) with one row per ticket. Other groups may sell through a platform with an API, or have only totals. The refactoring made tickets optional and removed the fixed Verein account, so no group is stuck with this workflow. Other sources can then follow without a redesign.
+Today tickets come from a sheet or a data source, each a plugin. Other groups may have only totals. The refactoring made tickets optional and removed the fixed Verein account, so no group is stuck with this workflow. Other sources can then follow without a redesign.
 
-**The seam already exists.** `Book::preview_import` and `Book::import_tickets` take a `Sheet`, which is a label, a hash and rows of tier and order ID. Everything after that (conflicts, generated income, statistics) knows nothing about files. A new source only has to build a `Sheet`.
+**The seam already exists.** `Book::preview_import` and `Book::import_tickets` take a `TicketBatch`, which is a label, a hash and one tier and order ID per ticket. Everything after that (conflicts, generated income, statistics) knows nothing about files. A new source only has to build a `TicketBatch`.
 
 | Source | What it would take |
 |---|---|
-| API pull | One function that fetches the orders and builds a `Sheet`. A pull is an import dated today, so repeated pulls work as re-imports do, including conflicts. `filename` and `sha256` become a source label and a hash of the content. The credentials belong in the app settings, not in the event file, which gets copied around. The source hands over only tier and order ID, so names and addresses stay out of the file (R-TKT-17). |
-| Rows with no order ID | `sheet.rs` requires the column. Conflicts are matched by (order ID, tier), so without it a removal cannot be traced to an order. Making it optional means turning conflict detection off for that event. |
+| Rows with no order ID | The core requires one. Conflicts are matched by (order ID, tier), so without it a removal cannot be traced to an order. Making it optional means turning conflict detection off for that event. |
 | Totals per tier only | No orders at all, so no conflicts. Either manual sales cover it already, or a small form sets a count per tier. |
-
-**Do not build yet:** a provider trait or a source setting. With one source there is nothing to abstract, and the second one will show what the abstraction needs.
 
 ## Third-party plugins
 
-Plugins are built in today (technical design §10). When another group wants its own, a loader follows: JavaScript in a sandboxed iframe, with a manifest of permissions, the context over messages, network access through the Rust layer and credentials in the OS keychain. The first step is testing that an iframe can't reach Tauri's commands. The Drinks plugin should then need little change.
+Plugins are built in today (technical design §10). When another group wants its own, a loader follows: JavaScript in a sandboxed iframe, with a manifest of permissions, the context over messages, and network access through the data sources. The first step is testing that an iframe can't reach Tauri's commands. The Drinks plugin should then need little change.
 
 ## Motion trial
 

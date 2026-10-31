@@ -198,6 +198,17 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "tickets_set_enabled" => one(s, a, "enabled", Book::set_tickets_enabled),
         "ticket_account_set" => one(s, a, "account", Book::set_ticket_account),
 
+        "data_sources_get" => json(Ok(s.data_sources())),
+        "data_source_set" => json(s.set_data_source(&arg::<String>(a, "id")?, arg(a, "source")?)),
+        "data_source_set_token" => json(s.set_data_source_token(
+            &arg::<String>(a, "id")?,
+            arg::<Option<String>>(a, "token")?.as_deref(),
+        )),
+        "data_source_pull" => json(s.pull_request(&arg::<String>(a, "id")?)?.run(&arg::<
+            Vec<String>,
+        >(
+            a, "fields"
+        )?)),
         "ticket_sheet_read" => json(s.read_ticket_sheet(
             &arg::<PathBuf>(a, "path")?,
             &arg::<TicketColumns>(a, "columns")?,

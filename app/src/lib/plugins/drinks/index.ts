@@ -11,5 +11,12 @@ export const drinks: Plugin = {
 		'Goods taken on commission: what the supplier bills, what is left over, and what people logged and paid.',
 	attachedTo: (ctx, centre) => centreSettings(ctx.records, centre) !== null,
 	CentreSection: Section,
-	SettingsSection: Settings
+	SettingsSection: Settings,
+	dataSource: {
+		list: 'drinks',
+		fields: [
+			{ key: 'name', label: 'Name', usually: 'name' },
+			{ key: 'quantity', label: 'Quantity', usually: 'qty' }
+		]
+	}
 };
