@@ -234,6 +234,7 @@ The settings are stored as JSON in `<app data>/settings.json`, written atomicall
 | -------------- | --------------------------------------------------------------------------- |
 | `numberFormat` | from the OS locale: `de` for languages with a decimal comma, `en` otherwise |
 | `backupCount`  | 20 (1–100)                                                                  |
+| `appearance`   | `system`, otherwise `light` or `dark`                                       |
 | `recent`       | path, name and last opened time of the last 10 events                       |
 
 Event settings (name, dates, default reimbursement account) live inside the event file.

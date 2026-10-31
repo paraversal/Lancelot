@@ -7,4 +7,4 @@ pub mod service;
 pub mod settings;
 
 pub use service::Service;
-pub use settings::AppSettings;
+pub use settings::{AppSettings, Appearance};

@@ -6,6 +6,7 @@
 	import { api, errorMessage } from '#lib/api/index.ts';
 	import { chooseEventFile, chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
 	import type { CopySummary } from '#lib/api/generated/CopySummary.ts';
+	import type { Appearance } from '#lib/api/generated/Appearance.ts';
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
 	import type { BackupInfo } from '#lib/api/generated/BackupInfo.ts';
 	import type { EventDetails } from '#lib/api/generated/EventDetails.ts';
@@ -68,6 +69,12 @@
 		run(async () => {
 			if (!session.settings) return;
 			session.settings = await api.setSettings({ ...session.settings, reducedMotion });
+		});
+
+	const setAppearance = (appearance: Appearance) =>
+		run(async () => {
+			if (!session.settings) return;
+			session.settings = await api.setSettings({ ...session.settings, appearance });
 		});
 
 	const setFormat = (numberFormat: NumberFormat) =>
@@ -491,6 +498,19 @@
 			{/if}
 			<section>
 				<h2>Display</h2>
+				<div class="labelled">
+					<span class="form-label">Appearance</span>
+					<Segmented
+						label="Appearance"
+						value={session.settings?.appearance ?? 'system'}
+						onchange={setAppearance}
+						options={[
+							{ value: 'system', label: 'System' },
+							{ value: 'light', label: 'Light' },
+							{ value: 'dark', label: 'Dark' }
+						]}
+					/>
+				</div>
 				<div class="labelled">
 					<span class="form-label">Numbers and dates</span>
 					<Segmented

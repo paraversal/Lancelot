@@ -32,6 +32,7 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 
 ## Layout
 
+- Light or dark: Settings → Display, following the system by default. The dark values are in `app/src/lib/styles/theme.css`, not in `UI.fig`. Print and the report's sheet stay light.
 - Window 1280 × 800. Sidebar 220 px with event name and dates, navigation (counts on the right, a badge in `attention` when something needs doing), and the file name at the bottom, which opens Settings.
 - Content padding 40. Spacing scale 4 · 8 · 12 · 16 · 24 · 32 · 40 · 48. Radius 4 / 6 / 8, plus pills for filter chips.
 - A list or table on the left. Editing and detail happen in a **right-hand panel** (380 px) separated by a rule. There are no modals for routine work.
