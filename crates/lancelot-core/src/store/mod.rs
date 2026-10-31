@@ -2,7 +2,7 @@
 //!
 //! A [`Store`] holds the open file and the [`Book`]. Each command is applied to a copy of the
 //! book first; the difference is then written in one SQL transaction together with its change
-//! log entries and checked; only after the commit does the copy become the book. A failed
+//! log entries and read back; only after the commit does the copy become the book. A failed
 //! command leaves both the file and the book as they were. See `docs/technical-design.md` §6.
 
 mod backup;
@@ -25,26 +25,17 @@ use ts_rs::TS;
 
 pub use backup::{BackupPolicy, list as list_backups, taken_at as backup_time};
 
-use crate::book::{Book, CopyChoice, CopySummary, Saved};
-use crate::drinks::{DrinkProductDraft, DrinkSettings};
+use crate::book::{Book, Saved};
 use crate::entry::TxnDraft;
 use crate::error::DomainError;
-use crate::integrity::{self, Depth, Report};
-use crate::ledger::BlockerOverride;
-use crate::model::{
-    AccountId, AccountKind, AssetType, AttachmentId, BudgetLineDraft, BudgetLineId, CostCentreId,
-    DrinkProductId, EventDetails, Person, ReconciliationId, TxnId,
-};
-use crate::model::{CancellationId, ImportId, ManualSaleId, TierId};
-use crate::money::Cents;
+use crate::integrity::{self, Report};
+use crate::model::{AttachmentId, BlockerOverride, EventDetails, ImportId, TxnId};
 use crate::sheet::read_sheet;
-use crate::tickets::{
-    CancellationDraft, CancellationEdit, ImportPreview, ManualSaleDraft, Resolution, TicketColumns,
-    TierDraft,
-};
+use crate::tickets::ImportPreview;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
-/// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`.
+/// Migrations, in order. Migration `n` (1-based) brings a file to schema version `n`. Released
+/// ones are never edited (`tests/sample_file.rs`).
 const MIGRATIONS: &[&str] = &[include_str!("../../migrations/0001_initial.sql")];
 
 #[derive(Debug, Error)]
@@ -67,6 +58,8 @@ pub enum StoreError {
     IntegrityFailed(Report),
     #[error("the event file is damaged: {0}")]
     Corrupt(String),
+    #[error("this event file is intact, but what it holds does not fit together")]
+    Inconsistent(Report),
     #[error(transparent)]
     Sqlite(#[from] rusqlite::Error),
     #[error(transparent)]
@@ -91,6 +84,7 @@ impl StoreError {
             StoreError::Damaged(_) => "damaged",
             StoreError::IntegrityFailed(_) => "integrity_failed",
             StoreError::Corrupt(_) => "corrupt",
+            StoreError::Inconsistent(_) => "inconsistent",
             StoreError::Sqlite(_) => "sqlite",
             StoreError::Json(_) => "json",
             StoreError::Io(_) => "io",
@@ -263,17 +257,31 @@ impl Store {
             migrate(&mut conn, version)?;
         }
 
-        let report = integrity::check(&conn, Depth::Full)?;
-        let book = match read::parts(&conn)
-            .map_err(|e| e.to_string())
-            .and_then(|p| Book::from_parts(p).map_err(|e| e.to_string()))
-        {
-            Ok(book) => book,
-            Err(_) if report.has_errors() => return Err(StoreError::Damaged(report)),
-            Err(reason) => return Err(StoreError::corrupt(reason)),
+        let (mut report, loaded) = integrity::inspect(&conn)?;
+        let (stored, book) = match loaded {
+            Ok(loaded) => loaded,
+            Err(reason) => return Err(unloadable(report, reason)),
         };
         if version == SCHEMA_VERSION {
             backup(&conn)?;
+        }
+        // The tickets are the source of truth: bring the generated entries in line with them, with
+        // the backup above taken first. A changed wording is not worth a word; changed money is.
+        let (changed, moved) = book.regenerated(&stored);
+        if changed {
+            let tx = conn.transaction()?;
+            write::persist(&tx, Some(&stored), &book, &BTreeMap::new(), now)?;
+            read_back(&tx, &book)?;
+            tx.commit()?;
+        }
+        if moved > 0 {
+            report.warning(
+                "ticket_income_regenerated",
+                format!(
+                    "{moved} ticket {} did not match the tickets and were recalculated",
+                    if moved == 1 { "entry" } else { "entries" }
+                ),
+            );
         }
         let store = Store {
             conn,
@@ -348,7 +356,7 @@ impl Store {
 
     /// The full integrity check, including attachment hashes.
     pub fn check_integrity(&self) -> Result<Report, StoreError> {
-        integrity::check(&self.conn, Depth::Full)
+        integrity::check(&self.conn)
     }
 
     /// The last backup failure after a change, if any. A failed backup never fails the change
@@ -377,132 +385,6 @@ impl Store {
 
     // --- commands ------------------------------------------------------------------------
 
-    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.save_txn(draft, id))
-    }
-
-    pub fn delete_txn(&mut self, id: TxnId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_txn(id).map(|_| ()))
-    }
-
-    pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<AccountId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_account(kind, name))
-    }
-
-    pub fn add_asset(
-        &mut self,
-        name: &str,
-        asset_type: AssetType,
-    ) -> Result<AccountId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_asset(name, asset_type))
-    }
-
-    pub fn set_asset_type(
-        &mut self,
-        id: AccountId,
-        asset_type: AssetType,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.set_asset_type(id, asset_type))
-    }
-
-    pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.rename_account(id, name))
-    }
-
-    pub fn add_person(&mut self, name: &str, person: Person) -> Result<AccountId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_person(name, person))
-    }
-
-    pub fn update_person(
-        &mut self,
-        id: AccountId,
-        name: &str,
-        person: Person,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_person(id, name, person))
-    }
-
-    pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<BudgetLineId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_budget_line(draft))
-    }
-
-    pub fn update_budget_line(
-        &mut self,
-        id: BudgetLineId,
-        draft: BudgetLineDraft,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_budget_line(id, draft))
-    }
-
-    pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_budget_line(id).map(|_| ()))
-    }
-
-    // --- cost centres and Drinks (requirements §5.8) ---
-
-    pub fn add_cost_centre(&mut self, name: &str) -> Result<CostCentreId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_cost_centre(name))
-    }
-
-    pub fn rename_cost_centre(&mut self, id: CostCentreId, name: &str) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.rename_cost_centre(id, name))
-    }
-
-    pub fn delete_cost_centre(&mut self, id: CostCentreId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_cost_centre(id).map(|_| ()))
-    }
-
-    pub fn set_category_cost_centre(
-        &mut self,
-        category: AccountId,
-        cost_centre: Option<CostCentreId>,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.set_category_cost_centre(category, cost_centre)
-        })
-    }
-
-    pub fn add_drink_product(
-        &mut self,
-        draft: DrinkProductDraft,
-    ) -> Result<DrinkProductId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_drink_product(draft))
-    }
-
-    pub fn update_drink_product(
-        &mut self,
-        id: DrinkProductId,
-        draft: DrinkProductDraft,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_drink_product(id, draft))
-    }
-
-    pub fn delete_drink_product(&mut self, id: DrinkProductId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_drink_product(id).map(|_| ()))
-    }
-
-    pub fn set_drink_settings(&mut self, settings: DrinkSettings) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.set_drink_settings(settings))
-    }
-
-    // --- tickets (requirements §5.6) ---
-
-    pub fn add_tier(&mut self, draft: TierDraft) -> Result<TierId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_tier(draft))
-    }
-
-    pub fn update_tier(&mut self, id: TierId, draft: TierDraft) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_tier(id, draft))
-    }
-
-    pub fn delete_tier(&mut self, id: TierId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_tier(id).map(|_| ()))
-    }
-
-    pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.set_ticket_columns(columns))
-    }
-
     /// Reads a ticket sheet with the event's columns and shows what importing it would change.
     pub fn preview_ticket_import(
         &self,
@@ -510,7 +392,7 @@ impl Store {
         data: &[u8],
         date: Date,
     ) -> Result<ImportPreview, StoreError> {
-        let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
+        let sheet = read_sheet(filename, data, self.book.ticket_columns())?;
         Ok(self.book.preview_import(&sheet, date))
     }
 
@@ -522,114 +404,15 @@ impl Store {
         data: &[u8],
         date: Date,
     ) -> Result<ImportId, StoreError> {
-        let sheet = read_sheet(filename, data, &self.book.event().ticket_columns)?;
+        let sheet = read_sheet(filename, data, self.book.ticket_columns())?;
         let now = (self.options.clock)();
-        self.apply(&BTreeMap::new(), |b| b.import_tickets(&sheet, date, now))
-    }
-
-    pub fn set_import_date(&mut self, id: ImportId, date: Date) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.set_import_date(id, date))
-    }
-
-    pub fn add_manual_sale(&mut self, draft: ManualSaleDraft) -> Result<ManualSaleId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_manual_sale(draft))
-    }
-
-    pub fn update_manual_sale(
-        &mut self,
-        id: ManualSaleId,
-        draft: ManualSaleDraft,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_manual_sale(id, draft))
-    }
-
-    pub fn delete_manual_sale(&mut self, id: ManualSaleId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_manual_sale(id).map(|_| ()))
-    }
-
-    pub fn add_cancellation(
-        &mut self,
-        draft: CancellationDraft,
-    ) -> Result<CancellationId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.add_cancellation(draft))
-    }
-
-    pub fn update_cancellation(
-        &mut self,
-        id: CancellationId,
-        edit: CancellationEdit,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_cancellation(id, edit))
-    }
-
-    pub fn delete_cancellation(&mut self, id: CancellationId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.delete_cancellation(id).map(|_| ()))
-    }
-
-    pub fn resolve_conflict(
-        &mut self,
-        order: &str,
-        tier: TierId,
-        resolution: Resolution,
-    ) -> Result<CancellationId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.resolve_conflict(order, tier, resolution)
-        })
-    }
-
-    pub fn update_event(&mut self, details: EventDetails) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.update_event(details))
-    }
-
-    pub fn set_default_reimbursement_account(&mut self, id: AccountId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.set_default_reimbursement_account(id)
-        })
-    }
-
-    /// Records every reimbursement on the payout list that has an IBAN, from `account` on
-    /// `date`, in one SQL transaction (R-PER-5). Returns how many were recorded.
-    pub fn mark_payouts_paid(
-        &mut self,
-        account: AccountId,
-        date: Date,
-    ) -> Result<usize, StoreError> {
-        let list = crate::payout::payouts(&self.book).map_err(DomainError::from)?;
-        self.apply(&BTreeMap::new(), |b| {
-            let mut n = 0;
-            for p in list.payouts.iter().filter(|p| p.iban.is_some()) {
-                let draft = TxnDraft {
-                    date,
-                    description: "Reimbursement".into(),
-                    counterparty: None,
-                    notes: Some(p.reference.clone()),
-                    entry: crate::entry::Entry::Settle {
-                        person: p.person,
-                        account,
-                        amount: p.amount,
-                        direction: crate::entry::SettleDirection::Reimburse,
-                    },
-                    total: None,
-                };
-                b.save_txn(&draft, None)?;
-                n += 1;
-            }
-            Ok(n)
-        })
+        self.change(|b| b.import_tickets(&sheet, date, now))
     }
 
     /// Closes the event (R-SET-7). Closing and reopening are in the change log.
     pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<(), StoreError> {
         let now = (self.options.clock)();
-        self.apply(&BTreeMap::new(), |b| b.close(overrides, now))
-    }
-
-    /// Reopens a closed event (R-EVT-2).
-    pub fn reopen(&mut self) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.reopen();
-            Ok(())
-        })
+        self.change(|b| b.close(overrides, now))
     }
 
     /// Stores a file inside the event file (R-ATT-1, R-ATT-2).
@@ -685,106 +468,16 @@ impl Store {
         })
     }
 
-    pub fn remove_attachment(&mut self, id: AttachmentId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.remove_attachment(id).map(|_| ()))
-    }
-
-    pub fn set_closing_count(
+    /// Applies a command to a copy of the book, writes the difference and reads it back in one
+    /// SQL transaction, and keeps the copy only after the commit.
+    pub fn change<T>(
         &mut self,
-        account: AccountId,
-        date: Date,
-        amount: Cents,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.set_closing_count(account, date, amount)
-        })
+        command: impl FnOnce(&mut Book) -> Result<T, DomainError>,
+    ) -> Result<T, StoreError> {
+        self.apply(&BTreeMap::new(), command)
     }
 
-    pub fn clear_closing_count(&mut self, account: AccountId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.clear_closing_count(account))
-    }
-
-    /// Replaces both counts of an asset account in one change, as the count panel saves them.
-    /// `None` removes a count.
-    pub fn set_counts(
-        &mut self,
-        account: AccountId,
-        opening: Option<(Date, Cents)>,
-        closing: Option<(Date, Cents)>,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            if b.account(account).map(|a| a.kind) != Some(AccountKind::Asset) {
-                return Err(DomainError::WrongAccountKind {
-                    field: "account".into(),
-                });
-            }
-            match opening {
-                Some((date, amount)) if amount.is_positive() => {
-                    b.set_opening_count(account, date, amount)?;
-                }
-                _ => b.clear_opening_count(account)?,
-            }
-            match closing {
-                Some((date, amount)) => b.set_closing_count(account, date, amount),
-                None => b.clear_closing_count(account),
-            }
-        })
-    }
-
-    /// Copies persons and budget lines from another event (R-ISO-4).
-    pub fn copy_from(
-        &mut self,
-        source: &Book,
-        choice: CopyChoice,
-    ) -> Result<CopySummary, StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.copy_from(source, choice))
-    }
-
-    pub fn add_reconciliation(
-        &mut self,
-        account: AccountId,
-        date: Date,
-        amount: Cents,
-    ) -> Result<ReconciliationId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.add_reconciliation(account, date, amount)
-        })
-    }
-
-    pub fn update_reconciliation(
-        &mut self,
-        id: ReconciliationId,
-        date: Date,
-        amount: Cents,
-    ) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.update_reconciliation(id, date, amount)
-        })
-    }
-
-    pub fn delete_reconciliation(&mut self, id: ReconciliationId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.delete_reconciliation(id).map(|_| ())
-        })
-    }
-
-    pub fn set_opening_count(
-        &mut self,
-        account: AccountId,
-        date: Date,
-        amount: Cents,
-    ) -> Result<TxnId, StoreError> {
-        self.apply(&BTreeMap::new(), |b| {
-            b.set_opening_count(account, date, amount)
-        })
-    }
-
-    pub fn clear_opening_count(&mut self, account: AccountId) -> Result<(), StoreError> {
-        self.apply(&BTreeMap::new(), |b| b.clear_opening_count(account))
-    }
-
-    /// Applies a command to a copy of the book, writes the difference and checks it in one SQL
-    /// transaction, and keeps the copy only after the commit.
+    /// [`Store::change`] for a command that adds attachments, with their bytes by new id.
     fn apply<T>(
         &mut self,
         blobs: &BTreeMap<AttachmentId, &[u8]>,
@@ -798,10 +491,7 @@ impl Store {
         let now = (self.options.clock)();
         let tx = self.conn.transaction()?;
         write::persist(&tx, Some(&self.book), &next, blobs, now)?;
-        let report = integrity::check(&tx, Depth::Quick)?;
-        if report.has_errors() {
-            return Err(StoreError::IntegrityFailed(report));
-        }
+        read_back(&tx, &next)?;
         tx.commit()?;
         self.book = next;
         self.backup_after_change(now);
@@ -870,14 +560,36 @@ pub fn read_book(path: &Path) -> Result<Book, StoreError> {
         .and_then(|p| Book::from_parts(p).map_err(|e| e.to_string()))
     {
         Ok(book) => Ok(book),
-        Err(reason) => {
-            let report = integrity::check(&conn, Depth::Quick)?;
-            Err(if report.has_errors() {
-                StoreError::Damaged(report)
-            } else {
-                StoreError::corrupt(reason)
-            })
-        }
+        Err(reason) => Err(unloadable(integrity::check(&conn)?, reason)),
+    }
+}
+
+/// Confirms that the file now holds exactly `book`, before the write is committed. The generated
+/// entries are compared as stored too, since loading regenerates them. Foreign keys are enforced
+/// by the commit itself.
+fn read_back(conn: &Connection, book: &Book) -> Result<(), StoreError> {
+    let failed = |detail: String| {
+        let mut report = Report::default();
+        report.error("round_trip", detail);
+        StoreError::IntegrityFailed(report)
+    };
+    let (stored, loaded) = read::parts(conn)
+        .and_then(|p| Book::load(p).map_err(StoreError::from))
+        .map_err(|e| failed(format!("the file does not load after this change: {e}")))?;
+    if loaded != *book || loaded.regenerated(&stored).0 {
+        return Err(failed("the file does not hold what was written".into()));
+    }
+    Ok(())
+}
+
+/// Why a file does not load: physical damage, or an intact file whose contents fail the rules.
+fn unloadable(report: Report, reason: String) -> StoreError {
+    if report.is_damaged() {
+        StoreError::Damaged(report)
+    } else if report.has_errors() {
+        StoreError::Inconsistent(report)
+    } else {
+        StoreError::corrupt(reason)
     }
 }
 

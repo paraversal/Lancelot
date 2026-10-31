@@ -1,0 +1,26 @@
+[package]
+name = "lancelot-bridge"
+description = "Development only: the real Lancelot commands over local HTTP, for a plain browser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+lancelot-core.workspace = true
+lancelot-service.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+tiny_http = "0.12"
+
+[dev-dependencies]
+# For a test build of lancelot-core/tests/common, which src/lib.rs includes.
+proptest = "1"
+tempfile.workspace = true
+
+[lints]
+workspace = true

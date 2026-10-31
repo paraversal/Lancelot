@@ -2,7 +2,7 @@
 	// Payouts: the payout list for the Verein's treasurer (R-PER-4) and the repayment list
 	// (R-PER-7). PDF prints a clean layout (saved from the print dialog), CSV follows the
 	// number format, "Mark as paid" records the reimbursements, "Repaid" one repayment.
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import { chooseCsvPath } from '#lib/api/dialogs.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -38,13 +38,14 @@
 				.filter((a) => a?.kind === 'expense' || a?.kind === 'income')
 				.map((a) => a!.name)
 				.join(', ');
-			const asset = (txn?.lines ?? [])
-				.map((l) => snapshot.accounts.find((a) => a.id === l.account))
-				.find((a) => a?.kind === 'asset')?.name;
+			const entry = txn?.entry;
 			const title =
-				txn?.kind === 'settle'
-					? `${e.effect < 0 ? 'Reimbursed' : 'Paid back'} · ${asset ?? ''}`
-					: txn?.description || txn?.counterparty || categories || (asset ? `Into ${asset}` : '');
+				entry?.type === 'settle'
+					? `${entry.direction === 'reimburse' ? 'Reimbursed' : 'Paid back'} · ${accountName(entry.account)}`
+					: txn?.description ||
+						txn?.counterparty ||
+						categories ||
+						(entry?.type === 'transfer' ? `Into ${accountName(entry.to)}` : '');
 			return { ...e, date: txn?.date ?? '', title };
 		});
 	}
@@ -55,7 +56,7 @@
 			const target = await chooseCsvPath(`${snapshot.event.name} payouts.csv`);
 			if (target) await api.exportPayoutsCsv(target);
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 </script>
@@ -136,7 +137,7 @@
 				With advances and payments
 			</label>
 		{/if}
-		{#if error}<p class="error">{error}</p>{/if}
+		{#if error}<p class="form-error">{error}</p>{/if}
 	</section>
 
 	{#if panel === 'mark'}
@@ -341,10 +342,6 @@
 		white-space: nowrap;
 	}
 
-	.grow {
-		flex: 1;
-	}
-
 	.amount {
 		width: 100px;
 		flex: none;
@@ -376,12 +373,6 @@
 
 	.toggle input {
 		accent-color: var(--color-ink);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 
 	/* The printed page: ink on white in the app's type, rules instead of boxes. The page

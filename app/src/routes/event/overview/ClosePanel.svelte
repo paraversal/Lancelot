@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Closing the event (R-SET-7): every open item is either fixed or accepted with a note.
 	// After closing the event is read-only until it is reopened in Settings (R-EVT-2).
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { untrack } from 'svelte';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Field from '#lib/components/Field.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -23,6 +24,10 @@
 	let notes = $state<Record<string, string>>({});
 	let error = $state<string | null>(null);
 	const key = (i: unknown) => JSON.stringify(i);
+	// After reopening, what was accepted before stands while the item is unchanged.
+	untrack(() => {
+		for (const o of snapshot.event.closingOverrides) notes[key(o.item)] = o.note;
+	});
 	const missing = $derived(items.filter((i) => !notes[key(i)]?.trim()).length);
 
 	let confirmButton = $state<HTMLElement>();
@@ -41,7 +46,7 @@
 			if (origin && level('E1') === 'big') confetti(origin);
 			onclose();
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 </script>
@@ -84,7 +89,7 @@
 				: `${missing} items without a note`}</span
 		>
 	{/if}
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 	{#snippet footer()}
 		<span bind:this={confirmButton}>
 			<Button kind="primary" icon="lock" shortcut="⌘↵" disabled={!!missing} onclick={confirm}
@@ -127,15 +132,5 @@
 		gap: 6px;
 		font-size: 13px;
 		color: var(--color-attention);
-	}
-
-	.grow {
-		flex: 1;
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

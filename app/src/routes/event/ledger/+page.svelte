@@ -341,10 +341,6 @@
 		-webkit-user-select: text;
 	}
 
-	.grow {
-		flex: 1;
-	}
-
 	.rows {
 		display: flex;
 		flex-direction: column;

@@ -1,8 +1,8 @@
 //! The integrity check (R-COR-5). It reads the event file directly, without trusting the
 //! book, and reports every problem it finds.
 //!
-//! [`Depth::Full`] runs on open and on demand. [`Depth::Quick`] runs inside every write and
-//! leaves out SQLite's page check and the attachment hashes, which grow with the file.
+//! It runs on open and on demand. A write is checked by reading back what it wrote: see
+//! `Store::change`.
 
 use std::collections::BTreeMap;
 
@@ -15,12 +15,6 @@ use crate::book::Book;
 use crate::entry::txn_follows_rules;
 use crate::store::StoreError;
 use crate::store::read;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Depth {
-    Quick,
-    Full,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -61,7 +55,20 @@ impl Report {
         self.issues.iter().map(|i| i.code).collect()
     }
 
-    fn error(&mut self, code: &'static str, detail: impl Into<String>) {
+    /// Whether the file itself is harmed, as opposed to its contents failing the rules.
+    pub fn is_damaged(&self) -> bool {
+        const PHYSICAL: [&str; 4] = [
+            "sqlite_integrity",
+            "foreign_key",
+            "unbalanced",
+            "attachment_hash",
+        ];
+        self.issues
+            .iter()
+            .any(|i| i.severity == Severity::Error && PHYSICAL.contains(&i.code))
+    }
+
+    pub(crate) fn error(&mut self, code: &'static str, detail: impl Into<String>) {
         self.issues.push(Issue {
             severity: Severity::Error,
             code,
@@ -69,7 +76,7 @@ impl Report {
         });
     }
 
-    fn warning(&mut self, code: &'static str, detail: impl Into<String>) {
+    pub(crate) fn warning(&mut self, code: &'static str, detail: impl Into<String>) {
         self.issues.push(Issue {
             severity: Severity::Warning,
             code,
@@ -78,17 +85,23 @@ impl Report {
     }
 }
 
-pub fn check(conn: &Connection, depth: Depth) -> Result<Report, StoreError> {
+pub fn check(conn: &Connection) -> Result<Report, StoreError> {
+    Ok(inspect(conn)?.0)
+}
+
+/// The book as stored and as regenerated, or why the file does not load.
+pub(crate) type Loaded = Result<(Book, Book), String>;
+
+/// The check, and what it loaded.
+pub(crate) fn inspect(conn: &Connection) -> Result<(Report, Loaded), StoreError> {
     let mut report = Report::default();
 
-    if depth == Depth::Full {
-        let mut stmt = conn.prepare("PRAGMA integrity_check")?;
-        let rows: Vec<String> = stmt
-            .query_map([], |r| r.get(0))?
-            .collect::<Result<_, _>>()?;
-        for row in rows.into_iter().filter(|r| r != "ok") {
-            report.error("sqlite_integrity", row);
-        }
+    let mut stmt = conn.prepare("PRAGMA integrity_check")?;
+    let rows: Vec<String> = stmt
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    for row in rows.into_iter().filter(|r| r != "ok") {
+        report.error("sqlite_integrity", row);
     }
 
     let mut stmt = conn.prepare("PRAGMA foreign_key_check")?;
@@ -102,11 +115,7 @@ pub fn check(conn: &Connection, depth: Depth) -> Result<Report, StoreError> {
         );
     }
 
-    // R-COR-2: every transaction sealed, with at least two lines summing to zero.
-    let mut stmt = conn.prepare("SELECT id FROM txn WHERE sealed = 0 ORDER BY id")?;
-    for id in stmt.query_map([], |r| r.get::<_, i64>(0))? {
-        report.error("unsealed", format!("transaction {} is not sealed", id?));
-    }
+    // R-COR-2: every transaction has at least two lines summing to zero.
     let mut stmt = conn.prepare(
         "SELECT t.id FROM txn t LEFT JOIN line l ON l.txn_id = t.id
          GROUP BY t.id HAVING COALESCE(SUM(l.amount), 0) <> 0 OR COUNT(l.id) < 2 ORDER BY t.id",
@@ -118,58 +127,56 @@ pub fn check(conn: &Connection, depth: Depth) -> Result<Report, StoreError> {
         );
     }
 
-    // Every transaction has the shape its kind requires (docs/technical-design.md §3.3).
+    // Every transaction follows the rules (docs/technical-design.md §3.3).
     match (read::accounts(conn), read::txns(conn)) {
         (Ok(accounts), Ok(txns)) => {
             for t in txns.iter().filter(|t| !txn_follows_rules(t, &accounts)) {
                 report.error(
                     "malformed_txn",
-                    format!(
-                        "transaction {} does not follow the rules for its kind",
-                        t.id.0
-                    ),
+                    format!("transaction {} does not follow the rules", t.id.0),
                 );
             }
         }
         (Err(e), _) | (_, Err(e)) => report.error("load_failed", e.to_string()),
     }
 
-    if depth == Depth::Full {
-        let mut stmt = conn.prepare("SELECT id, sha256, size, data FROM attachment ORDER BY id")?;
-        let rows = stmt.query_map([], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, i64>(2)?,
-                r.get::<_, Vec<u8>>(3)?,
-            ))
-        })?;
-        for row in rows {
-            let (id, sha256, size, data) = row?;
-            let actual: String = Sha256::digest(&data)
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect();
-            if actual != sha256 || usize::try_from(size).ok() != Some(data.len()) {
-                report.error(
-                    "attachment_hash",
-                    format!("attachment {id} does not match its hash"),
-                );
-            }
+    let mut stmt = conn.prepare("SELECT id, sha256, size, data FROM attachment ORDER BY id")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, i64>(2)?,
+            r.get::<_, Vec<u8>>(3)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, sha256, size, data) = row?;
+        let actual: String = Sha256::digest(&data)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        if actual != sha256 || usize::try_from(size).ok() != Some(data.len()) {
+            report.error(
+                "attachment_hash",
+                format!("attachment {id} does not match its hash"),
+            );
         }
     }
 
     // Finally the domain view: the file must load into a book.
-    match read::parts(conn).and_then(|p| Book::from_parts(p).map_err(StoreError::from)) {
-        Ok(book) => over_settled(&book, &mut report),
-        Err(e) => {
+    let loaded = read::parts(conn)
+        .map_err(|e| e.to_string())
+        .and_then(|p| Book::load(p).map_err(|e| e.to_string()));
+    match &loaded {
+        Ok((_, book)) => over_settled(book, &mut report),
+        Err(reason) => {
             if !report.has_errors() {
-                report.error("load_failed", e.to_string());
+                report.error("load_failed", reason.clone());
             }
         }
     }
 
-    Ok(report)
+    Ok((report, loaded))
 }
 
 /// R-COR-5: reimbursements should not exceed what the person was owed, and repayments not

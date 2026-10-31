@@ -5,7 +5,7 @@ import type { EventSnapshot } from '#lib/api/generated/EventSnapshot.ts';
 // the DEV branch, so production builds leave it out entirely.
 export async function load() {
 	if (import.meta.env.DEV) {
-		const example = await import('#lib/api/mock/example-event.json');
+		const example = await import('#lib/api/fixtures/example-event.json');
 		return { snapshot: example.default as EventSnapshot };
 	}
 	error(404);

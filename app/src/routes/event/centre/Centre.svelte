@@ -1,11 +1,12 @@
 <script lang="ts">
-	// Drinks (R-DRK-1 to R-DRK-6): the result of the Drinks cost centre, the commission records with
-	// the check of the supplier's invoice, and the price per Strich. Every figure comes from the
-	// core. The frame's Strichliste joins with M11.
+	// One cost centre (R-CC-1): its income, costs and result, and the lines tagged with it. The
+	// drinks' also has the commission records with the check of the supplier's invoice and the price
+	// per Strich (R-DRK-1 to R-DRK-6). Every figure comes from the core.
 	import { goto } from '$app/navigation';
+	import type { CostCentre } from '#lib/api/generated/CostCentre.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
-	import { formatAmount } from '#lib/format.ts';
+	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { riseIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
@@ -13,21 +14,35 @@
 	import ProductPanel from './ProductPanel.svelte';
 	import SettingsPanel from './SettingsPanel.svelte';
 
+	let { centre }: { centre: CostCentre } = $props();
+
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
-	const settings = $derived(snapshot.event.drinks);
+	const settings = $derived(snapshot.drinkSettings);
 	const drinks = $derived(snapshot.drinks);
-	const centre = $derived(snapshot.costCentres.find((c) => c.role === 'drinks'));
-	const pnl = $derived(snapshot.budget.costCentres.find((c) => c.costCentre === centre?.id));
+	const isDrinks = $derived(settings.costCentre === centre.id);
+	const pnl = $derived(snapshot.budget.costCentres.find((c) => c.costCentre === centre.id));
 	const result = $derived(pnl?.result.actual ?? 0);
 
-	const costs = $derived(
+	const nameOf = (id: number) => snapshot.accounts.find((a) => a.id === id);
+	const breakdown = (kind: 'income' | 'expense') =>
 		(pnl?.categories ?? []).flatMap((c) => {
-			const account = snapshot.accounts.find((a) => a.id === c.category);
-			return account?.kind === 'expense' && c.actual !== 0
+			const account = nameOf(c.category);
+			return account?.kind === kind && c.actual !== 0
 				? [`${account.name} ${formatAmount(c.actual, format)}`]
 				: [];
-		})
+		});
+	// The tagged lines, newest first, with what each does to the result.
+	const tagged = $derived(
+		[...snapshot.txns].reverse().flatMap((txn) =>
+			txn.lines
+				.filter((l) => l.costCentre === centre.id)
+				.map((line) => ({
+					txn,
+					category: nameOf(line.account)?.name ?? '',
+					effect: -line.amount
+				}))
+		)
 	);
 	const rows = $derived(
 		snapshot.drinkProducts.map((product) => ({
@@ -68,7 +83,7 @@
 	function keydown(e: KeyboardEvent) {
 		const target = e.target instanceof Element ? e.target : null;
 		if (target?.closest('input, textarea, select, aside') || e.metaKey || e.ctrlKey) return;
-		if (e.key === 'n' && !session.closed) {
+		if (e.key === 'n' && isDrinks && !session.closed) {
 			e.preventDefault();
 			add();
 		}
@@ -80,8 +95,8 @@
 <div class="drinks">
 	<section class="main">
 		<header>
-			<h1>Drinks</h1>
-			{#if !session.closed}
+			<h1>{centre.name}</h1>
+			{#if isDrinks && !session.closed}
 				<div class="actions">
 					<Button icon="plus" onclick={invoice}>Supplier invoice</Button>
 					<Button kind="primary" icon="plus" shortcut="N" onclick={add}>Product</Button>
@@ -91,7 +106,7 @@
 
 		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
 			<div class="figure">
-				<span class="label">Drinks result</span>
+				<span class="label">Result</span>
 				<span class="result" class:plus={result > 0} class:minus={result < 0}
 					><MovingAmount value={result} {format} sign="always" level={level('A5')} /></span
 				>
@@ -99,87 +114,114 @@
 			<div class="figure">
 				<span class="label">Cost</span>
 				<span class="total">{formatAmount(pnl?.expense.actual ?? 0, format)}</span>
-				<span class="note">{costs.join(' · ')}&nbsp;</span>
+				<span class="note">{breakdown('expense').join(' · ')}&nbsp;</span>
 			</div>
 			<div class="figure">
-				<span class="label">Donations</span>
+				<span class="label">Income</span>
 				<span class="total">{formatAmount(pnl?.income.actual ?? 0, format)}</span>
-				<span class="note">&nbsp;</span>
+				<span class="note">{breakdown('income').join(' · ')}&nbsp;</span>
 			</div>
 		</div>
 
-		<div class="records">
-			<div class="caption">
-				<button type="button" class="link" onclick={openSettings}>
-					{settings.supplier ? `${settings.supplier} · commission` : 'Commission'}
-				</button>
-				<span class="prices">
-					{#if drinks.costPerDrink !== null}
-						<span>{formatAmount(drinks.costPerDrink, format)} per drink</span>
-					{/if}
-					{#if settings.pricePerStrich !== null}
-						<span>{formatAmount(settings.pricePerStrich, format)} per Strich</span>
-					{/if}
-				</span>
-			</div>
+		{#if isDrinks}
+			<div class="records">
+				<div class="caption">
+					<button type="button" class="link" onclick={openSettings}>
+						{settings.supplier ? `${settings.supplier} · commission` : 'Commission'}
+					</button>
+					<span class="prices">
+						{#if drinks.costPerDrink !== null}
+							<span>{formatAmount(drinks.costPerDrink, format)} per drink</span>
+						{/if}
+						{#if settings.pricePerStrich !== null}
+							<span>{formatAmount(settings.pricePerStrich, format)} per Strich</span>
+						{/if}
+					</span>
+				</div>
 
-			{#if rows.length}
-				<div class="rows" role="table" aria-label="Commission records">
-					<div class="row head" role="row">
-						<span class="name"></span>
-						<span class="count">Taken</span>
-						<span class="count">Returned</span>
-						<span class="count">Kept</span>
-						<span class="unit">Unit</span>
-						<span class="cost">Cost</span>
+				{#if rows.length}
+					<div class="rows" role="table" aria-label="Commission records">
+						<div class="row head" role="row">
+							<span class="name"></span>
+							<span class="count">Taken</span>
+							<span class="count">Returned</span>
+							<span class="count">Kept</span>
+							<span class="unit">Unit</span>
+							<span class="cost">Cost</span>
+						</div>
+						{#each rows as r (r.product.id)}
+							<button
+								type="button"
+								class="row"
+								class:selected={selected === r.product.id}
+								role="row"
+								onclick={() => open(r.product.id)}
+							>
+								<span class="name">{r.product.name}</span>
+								<span class="count">{r.product.taken}</span>
+								<span class="count muted">{r.product.returned}</span>
+								<span class="count strong">{r.figures?.kept}</span>
+								<span class="unit muted">{formatAmount(r.product.unitPrice, format)}</span>
+								<span class="cost">{formatAmount(r.figures?.cost ?? 0, format)}</span>
+							</button>
+						{/each}
+						<div class="row sum" role="row" data-testid="drinks-records">
+							<span class="name"></span>
+							<span class="count"></span>
+							<span class="count"></span>
+							<span class="count">{drinks.kept}</span>
+							<span class="unit"></span>
+							<span class="cost">{formatAmount(drinks.cost, format)}</span>
+						</div>
 					</div>
-					{#each rows as r (r.product.id)}
+				{/if}
+
+				{#if drinks.invoice}
+					{@const check = drinks.invoice}
+					<div class="invoice" data-testid="drinks-invoice">
+						<span class="muted">
+							{check.pfand ? `Invoice incl. Pfand ${formatAmount(check.pfand, format)}` : 'Invoice'}
+						</span>
+						<span class="grow"></span>
+						{#if check.difference === 0}
+							<span class="ok"><Icon name="check" size={14} /></span>
+						{:else}
+							<span class="attention">
+								<Icon name="warn" size={14} />
+								{formatAmount(check.difference, format, 'magnitude')}
+								{check.difference > 0 ? 'more' : 'less'} than the records
+							</span>
+						{/if}
+						<strong>{formatAmount(check.amount, format)}</strong>
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		{#if tagged.length}
+			<div class="records">
+				<div class="caption"><span>Tagged lines</span></div>
+				<div class="rows" role="table" aria-label="Tagged lines">
+					{#each tagged as t, i (`${t.txn.id}-${i}`)}
 						<button
 							type="button"
 							class="row"
-							class:selected={selected === r.product.id}
 							role="row"
-							onclick={() => open(r.product.id)}
+							onclick={() => goto(`/event/ledger?txn=${t.txn.id}`)}
 						>
-							<span class="name">{r.product.name}</span>
-							<span class="count">{r.product.taken}</span>
-							<span class="count muted">{r.product.returned}</span>
-							<span class="count strong">{r.figures?.kept}</span>
-							<span class="unit muted">{formatAmount(r.product.unitPrice, format)}</span>
-							<span class="cost">{formatAmount(r.figures?.cost ?? 0, format)}</span>
+							<span class="day muted">{formatDate(t.txn.date, format)}</span>
+							<span class="name">{t.txn.description || t.txn.counterparty || ''}</span>
+							<span class="category muted">{t.category}</span>
+							<span class="cost" class:plus={t.effect > 0}
+								>{formatAmount(t.effect, format, 'always')}</span
+							>
 						</button>
 					{/each}
-					<div class="row sum" role="row" data-testid="drinks-records">
-						<span class="name"></span>
-						<span class="count"></span>
-						<span class="count"></span>
-						<span class="count">{drinks.kept}</span>
-						<span class="unit"></span>
-						<span class="cost">{formatAmount(drinks.cost, format)}</span>
-					</div>
 				</div>
-			{/if}
-
-			{#if drinks.invoice}
-				{@const check = drinks.invoice}
-				<div class="invoice" data-testid="drinks-invoice">
-					<span class="muted">
-						{check.pfand ? `Invoice incl. Pfand ${formatAmount(check.pfand, format)}` : 'Invoice'}
-					</span>
-					<span class="grow"></span>
-					{#if check.difference === 0}
-						<span class="ok"><Icon name="check" size={14} /></span>
-					{:else}
-						<span class="attention">
-							<Icon name="warn" size={14} />
-							{formatAmount(check.difference, format, 'magnitude')}
-							{check.difference > 0 ? 'more' : 'less'} than the records
-						</span>
-					{/if}
-					<strong>{formatAmount(check.amount, format)}</strong>
-				</div>
-			{/if}
-		</div>
+			</div>
+		{:else}
+			<p class="note">Nothing is tagged with this cost centre yet.</p>
+		{/if}
 	</section>
 
 	{#if adding}
@@ -357,6 +399,19 @@
 		text-align: right;
 	}
 
+	.day {
+		width: 84px;
+		flex: none;
+	}
+
+	.category {
+		width: 140px;
+		flex: none;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	.cost {
 		width: 88px;
 		flex: none;
@@ -377,10 +432,6 @@
 		gap: var(--spacing-2);
 		padding: 0 8px;
 		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.ok {

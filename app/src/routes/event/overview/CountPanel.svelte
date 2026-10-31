@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Counting an asset account (R-ISO-3): what was there at the start and what is there at the
 	// end. The start brings money in as an opening entry; the end is compared with the books.
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import AmountField from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import DateField from '#lib/components/DateField.svelte';
@@ -18,7 +18,12 @@
 	const format = $derived(session.format);
 	const name = $derived(snapshot.accounts.find((a) => a.id === account)?.name ?? '');
 	const status = $derived(snapshot.cash.find((c) => c.account === account) ?? null);
-	const balance = $derived(snapshot.accounts.find((a) => a.id === account)?.balance ?? 0);
+	const details = $derived(snapshot.accounts.find((a) => a.id === account));
+	const balance = $derived(details?.balance ?? 0);
+	// A bank account can end below zero, and a net-movement account holds only the event's movement
+	// (R-ISO-2), so it has no opening count to enter.
+	const bank = $derived(details?.assetType === 'bank');
+	const movement = $derived(details?.netMovement ?? false);
 	const today = new Date().toISOString().slice(0, 10);
 
 	// Read once: the panel edits its own copy until Save.
@@ -32,7 +37,9 @@
 	let error = $state<string | null>(null);
 
 	// The books as they will be with the opening count typed so far.
-	const computed = $derived(balance - (status?.opening?.amount ?? 0) + (opening ?? 0));
+	const computed = $derived(
+		balance - (status?.opening?.amount ?? 0) + (movement ? 0 : (opening ?? 0))
+	);
 	const difference = $derived(closing === null ? null : closing - computed);
 
 	async function save() {
@@ -47,7 +54,7 @@
 			);
 			onclose();
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 </script>
@@ -62,28 +69,28 @@
 />
 
 <Panel title={name} {onclose}>
-	<div class="group">
-		<h3>Opening count</h3>
-		<div class="pair">
-			<DateField
-				label="Date"
-				value={openingDate}
-				{format}
-				oninput={(v) => v && (openingDate = v)}
-				oncommit={(v) => (openingDate = v)}
-			/>
-			<AmountField
-				label="Amount"
-				value={opening}
-				{format}
-				oninput={(v) => (opening = v)}
-				oncommit={(v) => (opening = v)}
-			/>
-		</div>
-	</div>
+	{#if !movement}<div class="group">
+			<h3>Opening count</h3>
+			<div class="form-pair">
+				<DateField
+					label="Date"
+					value={openingDate}
+					{format}
+					oninput={(v) => v && (openingDate = v)}
+					oncommit={(v) => (openingDate = v)}
+				/>
+				<AmountField
+					label="Amount"
+					value={opening}
+					{format}
+					oninput={(v) => (opening = v)}
+					oncommit={(v) => (opening = v)}
+				/>
+			</div>
+		</div>{/if}
 	<div class="group">
 		<h3>Closing count</h3>
-		<div class="pair">
+		<div class="form-pair">
 			<DateField
 				label="Date"
 				value={closingDate}
@@ -92,9 +99,10 @@
 				oncommit={(v) => (closingDate = v)}
 			/>
 			<AmountField
-				label="Amount"
+				label={movement ? 'Net movement' : 'Amount'}
 				value={closing}
 				{format}
+				allowNegative={bank}
 				autofocus
 				oninput={(v) => (closing = v)}
 				oncommit={(v) => (closing = v)}
@@ -117,7 +125,7 @@
 			</div>
 		{/if}
 	</div>
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 	{#snippet footer()}
 		<Button kind="primary" shortcut="⌘↵" onclick={save}>Save</Button>
 		<Button shortcut="esc" onclick={onclose}>Cancel</Button>
@@ -135,12 +143,6 @@
 		margin: 0;
 		font-size: 13px;
 		font-weight: 600;
-	}
-
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
 	}
 
 	.sums {
@@ -172,12 +174,6 @@
 	}
 
 	.minus {
-		color: var(--color-minus);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
 		color: var(--color-minus);
 	}
 </style>

@@ -6,6 +6,7 @@ import type { CashStatus } from "./CashStatus";
 import type { ClosingCount } from "./ClosingCount";
 import type { CostCentre } from "./CostCentre";
 import type { DrinkProduct } from "./DrinkProduct";
+import type { DrinkSettings } from "./DrinkSettings";
 import type { Drinks } from "./Drinks";
 import type { Event } from "./Event";
 import type { MoneyLocation } from "./MoneyLocation";
@@ -15,11 +16,25 @@ import type { PersonTotals } from "./PersonTotals";
 import type { PersonView } from "./PersonView";
 import type { Profitability } from "./Profitability";
 import type { ReconciliationStatus } from "./ReconciliationStatus";
+import type { TicketColumns } from "./TicketColumns";
+import type { TicketSettings } from "./TicketSettings";
 import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
 
 export type EventSnapshot = { event: Event, 
+/**
+ * The columns read from the ticket sheet (R-TKT-3).
+ */
+ticketColumns: TicketColumns, 
+/**
+ * Whether the event sells tickets, and where the sheet's money arrives.
+ */
+ticketSettings: TicketSettings, 
+/**
+ * The commission supplier, the price per Strich, and the drinks' cost centre and Pfand category.
+ */
+drinkSettings: DrinkSettings, 
 /**
  * All accounts and categories, in creation order, each with its displayed balance.
  */
@@ -54,7 +69,7 @@ tickets: Tickets,
  */
 profitability: Profitability | null, 
 /**
- * In creation order; the Drinks cost centre is always there (R-CC-2).
+ * In creation order (R-CC-2).
  */
 costCentres: Array<CostCentre>, 
 /**

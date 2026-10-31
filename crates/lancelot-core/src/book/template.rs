@@ -157,16 +157,23 @@ impl Book {
         }
     }
 
-    /// The category with the same role, else with the same name, else a new one.
+    /// The category with the same role or the same drinks setting, else with the same name, else a
+    /// new one.
     fn matching_category(
         &mut self,
         source: &Book,
         account: &Account,
         summary: &mut CopySummary,
     ) -> AccountId {
+        let pfand = self
+            .drink_settings
+            .pfand
+            .filter(|_| source.drink_settings.pfand == Some(account.id))
+            .and_then(|id| self.accounts.get(&id));
         let found = account
             .role
             .and_then(|role| self.account_by_role(role))
+            .or(pfand)
             .or_else(|| self.account_by_name(account.kind, &account.name))
             .map(|a| a.id);
         if let Some(id) = found {
@@ -175,7 +182,9 @@ impl Book {
         let centre = account
             .cost_centre
             .and_then(|c| self.matching_centre(source, c, summary));
-        let id = self.insert_account(account.kind, &account.name, account.role);
+        // Tickets may be off here: then it is a category like any other.
+        let role = account.role.filter(|_| self.ticket_settings.enabled);
+        let id = self.insert_account(account.kind, &account.name, role);
         if let Some(a) = self.accounts.get_mut(&id) {
             a.cost_centre = centre;
         }
@@ -183,7 +192,7 @@ impl Book {
         id
     }
 
-    /// The cost centre with the same role, else with the same name, else a new one.
+    /// The drinks' for the drinks', else the cost centre with the same name, else a new one.
     fn matching_centre(
         &mut self,
         source: &Book,
@@ -191,17 +200,19 @@ impl Book {
         summary: &mut CopySummary,
     ) -> Option<CostCentreId> {
         let centre = source.cost_centres.get(&id)?;
-        let found = self
-            .cost_centres
-            .values()
-            .find(|c| {
-                (centre.role.is_some() && c.role == centre.role)
-                    || c.name.eq_ignore_ascii_case(&centre.name)
-            })
-            .map(|c| c.id);
+        let drinks = self
+            .drink_settings
+            .cost_centre
+            .filter(|_| source.drink_settings.cost_centre == Some(id));
+        let found = drinks.or_else(|| {
+            self.cost_centres
+                .values()
+                .find(|c| c.name.eq_ignore_ascii_case(&centre.name))
+                .map(|c| c.id)
+        });
         Some(found.unwrap_or_else(|| {
             summary.cost_centres_added += 1;
-            self.insert_cost_centre(&centre.name, centre.role)
+            self.insert_cost_centre(&centre.name)
         }))
     }
 }

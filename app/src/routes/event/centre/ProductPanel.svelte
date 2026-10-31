@@ -75,7 +75,7 @@
 
 <Panel title={product ? product.name : 'New product'} {onclose}>
 	<fieldset disabled={session.closed}>
-		<div class="labelled">
+		<div class="form-field">
 			<TextField
 				label="Product"
 				value={name}
@@ -83,36 +83,36 @@
 				oninput={(v) => (name = v)}
 				oncommit={(v) => (name = v ?? '')}
 			/>
-			{#if fieldError('name')}<span class="error">{fieldError('name')}</span>{/if}
+			{#if fieldError('name')}<span class="form-error">{fieldError('name')}</span>{/if}
 		</div>
-		<div class="pair">
-			<div class="labelled">
+		<div class="form-pair">
+			<div class="form-field">
 				<TextField
 					label="Taken"
 					value={taken}
 					oninput={(v) => (taken = v)}
 					oncommit={(v) => (taken = v ?? '')}
 				/>
-				{#if fieldError('taken')}<span class="error">{fieldError('taken')}</span>{/if}
+				{#if fieldError('taken')}<span class="form-error">{fieldError('taken')}</span>{/if}
 			</div>
-			<div class="labelled">
+			<div class="form-field">
 				<TextField
 					label="Returned"
 					value={returned}
 					oninput={(v) => (returned = v)}
 					oncommit={(v) => (returned = v ?? '')}
 				/>
-				{#if fieldError('returned')}<span class="error">{fieldError('returned')}</span>{/if}
+				{#if fieldError('returned')}<span class="form-error">{fieldError('returned')}</span>{/if}
 			</div>
 		</div>
-		<div class="labelled">
+		<div class="form-field">
 			<AmountField
 				label="Price per unit"
 				value={unitPrice}
 				{format}
 				oninput={(v) => (unitPrice = v)}
 			/>
-			{#if fieldError('unitPrice')}<span class="error">{fieldError('unitPrice')}</span>{/if}
+			{#if fieldError('unitPrice')}<span class="form-error">{fieldError('unitPrice')}</span>{/if}
 			{#if kept !== null && unitPrice !== null}
 				<span class="hint">{kept} kept = {formatAmount(kept * unitPrice, format)}</span>
 			{/if}
@@ -120,14 +120,14 @@
 	</fieldset>
 
 	{#if error && !['name', 'taken', 'returned', 'unitPrice'].includes(error.field ?? '')}
-		<p class="error">{error.message}</p>
+		<p class="form-error">{error.message}</p>
 	{/if}
 
 	{#snippet footer()}
 		{#if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
 		{:else if confirming}
-			<div class="confirm">
+			<div class="form-confirm">
 				<strong>Delete this product?</strong>
 				<span class="grow"></span>
 				<Button size="sm" kind="primary" onclick={remove}>Delete</Button>
@@ -143,29 +143,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
-	.labelled {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		min-width: 0;
-	}
-
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
-	}
-
 	.hint {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
@@ -178,23 +155,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
-	}
-
-	.confirm {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		width: 100%;
-		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 </style>

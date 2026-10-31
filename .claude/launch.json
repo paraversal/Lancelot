@@ -4,8 +4,48 @@
     {
       "name": "ui",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--dir", "app", "dev"],
+      "runtimeArgs": [
+        "--dir",
+        "app",
+        "dev"
+      ],
       "port": 5173
+    },
+    {
+      "name": "bridge",
+      "runtimeExecutable": "cargo",
+      "runtimeArgs": [
+        "run",
+        "-p",
+        "lancelot-bridge"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "bridge-alt",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "LANCELOT_BRIDGE_PORT=5184",
+        "cargo",
+        "run",
+        "-p",
+        "lancelot-bridge"
+      ],
+      "port": 5184
+    },
+    {
+      "name": "ui-alt",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "LANCELOT_BRIDGE_PORT=5184",
+        "pnpm",
+        "--dir",
+        "app",
+        "dev",
+        "--port",
+        "5183"
+      ],
+      "port": 5183
     }
   ]
 }

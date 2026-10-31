@@ -7,18 +7,18 @@ use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
     CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
-    ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId,
-    Resolution, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
+    ImportDeletion, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person,
+    ReconciliationId, Resolution, TemplateSummary, TicketColumns, TicketShare, TierDraft, TierId,
+    TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::api::{
+use lancelot_service::api::{
     Added, ApiError, AppInfo, BackupInfo, CheckedIban, CountInput, OpenEvent, ParsedDate,
     RecentEvent, SavedTxn,
 };
-use crate::service::Service;
-use crate::settings::AppSettings;
+use lancelot_service::{AppSettings, Service};
 
 pub struct AppState(pub Mutex<Service>);
 
@@ -118,7 +118,7 @@ pub async fn event_current(state: State<'_, AppState>) -> Result<Option<OpenEven
 
 #[tauri::command]
 pub async fn event_update(state: State<'_, AppState>, details: EventDetails) -> Result<OpenEvent> {
-    with(&state, |s| s.update_event(details))
+    with(&state, |s| s.change(|b| b.update_event(details)))
 }
 
 #[tauri::command]
@@ -126,7 +126,9 @@ pub async fn event_set_default_reimbursement_account(
     state: State<'_, AppState>,
     account: AccountId,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.set_default_reimbursement_account(account))
+    with(&state, |s| {
+        s.change(|b| b.set_default_reimbursement_account(account))
+    })
 }
 
 #[tauri::command]
@@ -156,6 +158,16 @@ pub async fn amount_parse(
     allow_negative: bool,
 ) -> Result<Parsed> {
     with(&state, |s| s.parse_amount(&input, allow_negative))
+}
+
+#[tauri::command]
+pub async fn ticket_share(
+    state: State<'_, AppState>,
+    price: Cents,
+    bp: u32,
+    count: u32,
+) -> Result<TicketShare> {
+    with(&state, |s| s.ticket_share(price, bp, count))
 }
 
 #[tauri::command]
@@ -205,7 +217,7 @@ pub async fn attachment_export(
 
 #[tauri::command]
 pub async fn txn_delete(state: State<'_, AppState>, id: TxnId) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_txn(id))
+    with(&state, |s| s.change(|b| b.delete_txn(id)))
 }
 
 #[tauri::command]
@@ -214,7 +226,7 @@ pub async fn account_add(
     kind: AccountKind,
     name: String,
 ) -> Result<Added> {
-    with(&state, |s| s.add_account(kind, &name))
+    with(&state, |s| s.add(|b| b.add_account(kind, &name)))
 }
 
 #[tauri::command]
@@ -223,7 +235,18 @@ pub async fn asset_add(
     name: String,
     asset_type: AssetType,
 ) -> Result<Added> {
-    with(&state, |s| s.add_asset(&name, asset_type))
+    with(&state, |s| s.add(|b| b.add_asset(&name, asset_type)))
+}
+
+#[tauri::command]
+pub async fn asset_set_net_movement(
+    state: State<'_, AppState>,
+    id: AccountId,
+    net_movement: bool,
+) -> Result<OpenEvent> {
+    with(&state, |s| {
+        s.change(|b| b.set_net_movement(id, net_movement))
+    })
 }
 
 #[tauri::command]
@@ -232,7 +255,7 @@ pub async fn asset_set_type(
     id: AccountId,
     asset_type: AssetType,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.set_asset_type(id, asset_type))
+    with(&state, |s| s.change(|b| b.set_asset_type(id, asset_type)))
 }
 
 #[tauri::command]
@@ -252,7 +275,10 @@ pub async fn reconciliation_add(
     date: String,
     amount: Cents,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.add_reconciliation(account, &date, amount))
+    let date = lancelot_core::parse_date(&date)?;
+    with(&state, |s| {
+        s.change(|b| b.add_reconciliation(account, date, amount))
+    })
 }
 
 #[tauri::command]
@@ -262,7 +288,10 @@ pub async fn reconciliation_update(
     date: String,
     amount: Cents,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_reconciliation(id, &date, amount))
+    let date = lancelot_core::parse_date(&date)?;
+    with(&state, |s| {
+        s.change(|b| b.update_reconciliation(id, date, amount))
+    })
 }
 
 #[tauri::command]
@@ -270,7 +299,7 @@ pub async fn reconciliation_delete(
     state: State<'_, AppState>,
     id: ReconciliationId,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_reconciliation(id))
+    with(&state, |s| s.change(|b| b.delete_reconciliation(id)))
 }
 
 #[tauri::command]
@@ -279,12 +308,14 @@ pub async fn account_rename(
     id: AccountId,
     name: String,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.rename_account(id, &name))
+    with(&state, |s| s.change(|b| b.rename_account(id, &name)))
 }
 
 #[tauri::command]
 pub async fn person_add(state: State<'_, AppState>, name: String) -> Result<Added> {
-    with(&state, |s| s.add_person(&name))
+    with(&state, |s| {
+        s.add(|b| b.add_person(&name, Person::default()))
+    })
 }
 
 #[tauri::command]
@@ -294,7 +325,7 @@ pub async fn person_update(
     name: String,
     person: Person,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_person(id, &name, person))
+    with(&state, |s| s.change(|b| b.update_person(id, &name, person)))
 }
 
 #[tauri::command]
@@ -302,7 +333,7 @@ pub async fn budget_line_add(
     state: State<'_, AppState>,
     draft: BudgetLineDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.add_budget_line(draft))
+    with(&state, |s| s.change(|b| b.add_budget_line(draft)))
 }
 
 #[tauri::command]
@@ -311,17 +342,17 @@ pub async fn budget_line_update(
     id: BudgetLineId,
     draft: BudgetLineDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_budget_line(id, draft))
+    with(&state, |s| s.change(|b| b.update_budget_line(id, draft)))
 }
 
 #[tauri::command]
 pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_budget_line(id))
+    with(&state, |s| s.change(|b| b.delete_budget_line(id)))
 }
 
 #[tauri::command]
 pub async fn cost_centre_add(state: State<'_, AppState>, name: String) -> Result<OpenEvent> {
-    with(&state, |s| s.add_cost_centre(&name))
+    with(&state, |s| s.change(|b| b.add_cost_centre(&name)))
 }
 
 #[tauri::command]
@@ -330,12 +361,12 @@ pub async fn cost_centre_rename(
     id: CostCentreId,
     name: String,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.rename_cost_centre(id, &name))
+    with(&state, |s| s.change(|b| b.rename_cost_centre(id, &name)))
 }
 
 #[tauri::command]
 pub async fn cost_centre_delete(state: State<'_, AppState>, id: CostCentreId) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_cost_centre(id))
+    with(&state, |s| s.change(|b| b.delete_cost_centre(id)))
 }
 
 #[tauri::command]
@@ -345,7 +376,7 @@ pub async fn category_set_cost_centre(
     cost_centre: Option<CostCentreId>,
 ) -> Result<OpenEvent> {
     with(&state, |s| {
-        s.set_category_cost_centre(category, cost_centre)
+        s.change(|b| b.set_category_cost_centre(category, cost_centre))
     })
 }
 
@@ -354,7 +385,7 @@ pub async fn drink_product_add(
     state: State<'_, AppState>,
     draft: DrinkProductDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.add_drink_product(draft))
+    with(&state, |s| s.change(|b| b.add_drink_product(draft)))
 }
 
 #[tauri::command]
@@ -363,7 +394,7 @@ pub async fn drink_product_update(
     id: DrinkProductId,
     draft: DrinkProductDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_drink_product(id, draft))
+    with(&state, |s| s.change(|b| b.update_drink_product(id, draft)))
 }
 
 #[tauri::command]
@@ -371,7 +402,7 @@ pub async fn drink_product_delete(
     state: State<'_, AppState>,
     id: DrinkProductId,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_drink_product(id))
+    with(&state, |s| s.change(|b| b.delete_drink_product(id)))
 }
 
 #[tauri::command]
@@ -379,12 +410,12 @@ pub async fn drink_settings_set(
     state: State<'_, AppState>,
     settings: DrinkSettings,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.set_drink_settings(settings))
+    with(&state, |s| s.change(|b| b.set_drink_settings(settings)))
 }
 
 #[tauri::command]
 pub async fn tier_add(state: State<'_, AppState>, draft: TierDraft) -> Result<OpenEvent> {
-    with(&state, |s| s.add_tier(draft))
+    with(&state, |s| s.change(|b| b.add_tier(draft)))
 }
 
 #[tauri::command]
@@ -393,12 +424,25 @@ pub async fn tier_update(
     id: TierId,
     draft: TierDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_tier(id, draft))
+    with(&state, |s| s.change(|b| b.update_tier(id, draft)))
 }
 
 #[tauri::command]
 pub async fn tier_delete(state: State<'_, AppState>, id: TierId) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_tier(id))
+    with(&state, |s| s.change(|b| b.delete_tier(id)))
+}
+
+#[tauri::command]
+pub async fn tickets_set_enabled(state: State<'_, AppState>, enabled: bool) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.set_tickets_enabled(enabled)))
+}
+
+#[tauri::command]
+pub async fn ticket_account_set(
+    state: State<'_, AppState>,
+    account: Option<AccountId>,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.set_ticket_account(account)))
 }
 
 #[tauri::command]
@@ -406,7 +450,7 @@ pub async fn ticket_columns_set(
     state: State<'_, AppState>,
     columns: TicketColumns,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.set_ticket_columns(columns))
+    with(&state, |s| s.change(|b| b.set_ticket_columns(columns)))
 }
 
 #[tauri::command]
@@ -437,7 +481,25 @@ pub async fn import_set_date(
     date: String,
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.set_import_date(id, date))
+    with(&state, |s| s.change(|b| b.set_import_date(id, date)))
+}
+
+#[tauri::command]
+pub async fn import_delete_preview(
+    state: State<'_, AppState>,
+    id: ImportId,
+) -> Result<ImportDeletion> {
+    with(&state, |s| s.preview_delete_import(id))
+}
+
+#[tauri::command]
+pub async fn import_delete(state: State<'_, AppState>, id: ImportId) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.delete_import(id)))
+}
+
+#[tauri::command]
+pub async fn account_delete(state: State<'_, AppState>, id: AccountId) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.delete_account(id)))
 }
 
 #[tauri::command]
@@ -445,7 +507,7 @@ pub async fn manual_sale_add(
     state: State<'_, AppState>,
     draft: ManualSaleDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.add_manual_sale(draft))
+    with(&state, |s| s.change(|b| b.add_manual_sale(draft)))
 }
 
 #[tauri::command]
@@ -454,12 +516,12 @@ pub async fn manual_sale_update(
     id: ManualSaleId,
     draft: ManualSaleDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_manual_sale(id, draft))
+    with(&state, |s| s.change(|b| b.update_manual_sale(id, draft)))
 }
 
 #[tauri::command]
 pub async fn manual_sale_delete(state: State<'_, AppState>, id: ManualSaleId) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_manual_sale(id))
+    with(&state, |s| s.change(|b| b.delete_manual_sale(id)))
 }
 
 #[tauri::command]
@@ -467,7 +529,7 @@ pub async fn cancellation_add(
     state: State<'_, AppState>,
     draft: CancellationDraft,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.add_cancellation(draft))
+    with(&state, |s| s.change(|b| b.add_cancellation(draft)))
 }
 
 #[tauri::command]
@@ -476,7 +538,7 @@ pub async fn cancellation_update(
     id: CancellationId,
     edit: CancellationEdit,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.update_cancellation(id, edit))
+    with(&state, |s| s.change(|b| b.update_cancellation(id, edit)))
 }
 
 #[tauri::command]
@@ -484,7 +546,7 @@ pub async fn cancellation_delete(
     state: State<'_, AppState>,
     id: CancellationId,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.delete_cancellation(id))
+    with(&state, |s| s.change(|b| b.delete_cancellation(id)))
 }
 
 #[tauri::command]
@@ -494,7 +556,9 @@ pub async fn conflict_resolve(
     tier: TierId,
     resolution: Resolution,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.resolve_conflict(&order, tier, resolution))
+    with(&state, |s| {
+        s.change(|b| b.resolve_conflict(&order, tier, resolution))
+    })
 }
 
 #[tauri::command]
@@ -517,7 +581,7 @@ pub async fn event_close(
 
 #[tauri::command]
 pub async fn event_reopen(state: State<'_, AppState>) -> Result<OpenEvent> {
-    with(&state, |s| s.reopen_event())
+    with(&state, |s| s.change(|b| b.reopen()))
 }
 
 #[tauri::command]
@@ -532,7 +596,7 @@ pub async fn payouts_mark_paid(
     date: String,
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.mark_payouts_paid(account, date))
+    with(&state, |s| s.change(|b| b.mark_payouts_paid(account, date)))
 }
 
 /// Opens the print dialog for the window, e.g. to save the payout list as PDF.

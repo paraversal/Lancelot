@@ -49,7 +49,11 @@
 	const entries = $derived(rows(snapshot));
 	const open = $derived(snapshot.openItems.map((i) => describe(i, snapshot, format)));
 	const accepted = $derived(
-		event.closingOverrides.map((o) => ({ ...describe(o.item, snapshot, format), note: o.note }))
+		// A reopened event keeps its notes for closing again; nothing is accepted until then.
+		(event.closedAt ? event.closingOverrides : []).map((o) => ({
+			...describe(o.item, snapshot, format),
+			note: o.note
+		}))
 	);
 
 	function countNote(account: number) {
@@ -410,10 +414,6 @@
 		padding: var(--spacing-4) var(--spacing-10);
 		border-bottom: 1px solid var(--color-rule);
 		background: var(--color-paper);
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.toggle {

@@ -18,7 +18,8 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, parseCount, parseFee, refundPerTicket } from '#lib/tickets.ts';
+	import { feeInput, parseCount, parseFee } from '#lib/tickets.ts';
+	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let {
 		id,
@@ -36,11 +37,11 @@
 	const sales = $derived(tickets.manualSales);
 	const current = $derived(tickets.cancellations.find((c) => c.id === id) ?? null);
 	const correction = $derived(!!current && current.terms === null);
-	const verein = $derived(snapshot.accounts.find((a) => a.role === 'verein')?.id ?? 0);
+	const ticketAccount = $derived(snapshot.ticketSettings.account ?? 0);
 	const tierName = (t: TierId) => tiers.find((x) => x.id === t)?.name ?? '';
 	const accountName = (a: AccountId) => snapshot.accounts.find((x) => x.id === a)?.name ?? '';
 	const saleLabel = (s: (typeof sales)[number]) =>
-		`${s.count} × ${tierName(s.tier)} · ${accountName(s.person)}`;
+		`${s.count} × ${tierName(s.tier)} · ${accountName(s.destination)}`;
 	const payers = $derived(
 		snapshot.accounts
 			.filter((a) => a.kind === 'asset' || a.kind === 'person')
@@ -73,26 +74,27 @@
 			tickets.imports.at(-1)?.date ??
 			snapshot.event.startsOn ??
 			new Date().toISOString().slice(0, 10);
-		payer = current?.payer ?? verein;
+		payer = current?.payer ?? ticketAccount;
 		note = current?.note ?? null;
 	});
 
 	const chosenSale = $derived(source === 'sale' ? sales.find((s) => s.id === sale) : undefined);
 	const tierId = $derived(chosenSale?.tier ?? tier);
 	// Whoever received the money, unless another payer is chosen (R-TKT-15).
-	const receiver = $derived(chosenSale?.person ?? verein);
-	// A sale's person pays by default: picking a new sale follows it.
+	const receiver = $derived(chosenSale?.destination ?? ticketAccount);
+	// A sale's destination pays by default: picking a new sale follows it.
 	$effect(() => {
-		if (!current && chosenSale) payer = chosenSale.person;
+		if (!current && chosenSale) payer = chosenSale.destination;
 	});
 
 	const n = $derived(parseCount(count));
 	const bp = $derived(percent.trim() ? parseFee(percent) : null);
-	const refund = $derived(
+	const share = ticketShare(() =>
 		bp !== null && n !== null && !Number.isNaN(n)
-			? refundPerTicket(tiers.find((t) => t.id === tierId)?.price ?? 0, bp) * n
+			? { price: tiers.find((t) => t.id === tierId)?.price ?? 0, bp, count: n }
 			: null
 	);
+	const refund = $derived(share.current?.part ?? null);
 	const fieldError = (field: string) => (error?.field === field ? error.message : null);
 
 	async function save() {
@@ -166,7 +168,7 @@
 			{/if}
 			{#if source === 'order'}
 				<div class="pair">
-					<div class="labelled grow">
+					<div class="form-field grow">
 						<TextField
 							label="Order ID"
 							value={order}
@@ -176,7 +178,7 @@
 						/>
 						{#if fieldError('order')}<span class="error">{fieldError('order')}</span>{/if}
 					</div>
-					<div class="labelled grow">
+					<div class="form-field grow">
 						<Select
 							label="Tier"
 							value={tier}
@@ -200,7 +202,7 @@
 			{#if current?.note}<p class="meta">{current.note}</p>{/if}
 		{:else}
 			<div class="pair">
-				<div class="labelled small">
+				<div class="form-field small">
 					<TextField
 						label="Count"
 						value={count}
@@ -209,7 +211,7 @@
 					/>
 					{#if fieldError('count')}<span class="error">{fieldError('count')}</span>{/if}
 				</div>
-				<div class="labelled small">
+				<div class="form-field small">
 					<TextField
 						label="Refund %"
 						value={percent}
@@ -218,7 +220,7 @@
 					/>
 					{#if fieldError('refundBp')}<span class="error">{fieldError('refundBp')}</span>{/if}
 				</div>
-				<div class="labelled grow">
+				<div class="form-field grow">
 					<DateField
 						label="Date"
 						value={date}
@@ -270,16 +272,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
 	.source {
 		margin: 0;
 		font-weight: 600;
@@ -294,17 +286,6 @@
 	.pair {
 		display: flex;
 		gap: var(--spacing-3);
-	}
-
-	.labelled {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		min-width: 0;
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.small {

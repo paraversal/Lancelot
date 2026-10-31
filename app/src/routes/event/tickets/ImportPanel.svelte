@@ -1,11 +1,12 @@
 <script lang="ts">
 	// Importing the ticket sheet (R-TKT-3 to R-TKT-5): the file and its hash, the columns read,
-	// the day the counts stand for, tier names to map, what changes per tier since the last
+	// the account the money arrives in, the day the counts stand for, tier names to map, what changes per tier since the last
 	// import, and the rows that could not be read. Import stays blocked while a tier name matches
 	// no tier. Without a file, the earlier imports and their dates.
 	import { untrack } from 'svelte';
 	import { chooseTicketSheet } from '#lib/api/dialogs.ts';
 	import { api, ApiError } from '#lib/api/index.ts';
+	import type { ImportDeletion } from '#lib/api/generated/ImportDeletion.ts';
 	import type { ImportPreview } from '#lib/api/generated/ImportPreview.ts';
 	import type { Problem } from '#lib/api/generated/Problem.ts';
 	import type { TicketColumns } from '#lib/api/generated/TicketColumns.ts';
@@ -15,8 +16,9 @@
 	import DateField from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
+	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatDate } from '#lib/format.ts';
+	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -35,7 +37,11 @@
 	const format = $derived(session.format);
 	const tiers = $derived(snapshot.tickets.tiers);
 	const imports = $derived(snapshot.tickets.imports);
-	const columns = $derived(snapshot.event.ticketColumns);
+	const columns = $derived(snapshot.ticketColumns);
+	const ticketAccount = $derived(snapshot.ticketSettings.account);
+	const assets = $derived(
+		snapshot.accounts.filter((a) => a.kind === 'asset').map((a) => ({ value: a.id, label: a.name }))
+	);
 
 	let path = $state<string | null>(null);
 	const today = new Date().toISOString().slice(0, 10);
@@ -89,6 +95,16 @@
 		await read();
 	}
 
+	async function setAccount(account: number) {
+		error = null;
+		try {
+			await session.change(() => api.setTicketAccount(account === 0 ? null : account));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
+	}
+
 	async function mapTo(name: string, id: TierId) {
 		const tier = tiers.find((t) => t.id === id);
 		if (!tier) return;
@@ -112,7 +128,7 @@
 	}
 
 	async function doImport() {
-		if (!path || !preview || preview.unknown.length || !date) return;
+		if (!path || !preview || preview.unknown.length || !date || ticketAccount === null) return;
 		error = null;
 		try {
 			await session.change(() => api.importTickets(path!, date!, preview!.sha256));
@@ -128,6 +144,30 @@
 		const current = imports.find((i) => i.id === id)?.date;
 		if (!value || value === current) return;
 		await session.change(() => api.setImportDate(id, value));
+	}
+
+	let deleting = $state<{ id: number; effect: ImportDeletion } | null>(null);
+
+	async function askDelete(id: number) {
+		error = null;
+		try {
+			deleting = { id, effect: await api.previewDeleteImport(id) };
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
+	}
+
+	async function removeImport() {
+		const id = deleting?.id;
+		if (id === undefined) return;
+		deleting = null;
+		try {
+			await session.change(() => api.deleteImport(id));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
 	}
 
 	const tierName = (id: TierId) => tiers.find((t) => t.id === id)?.name ?? '';
@@ -168,25 +208,35 @@
 			{:else if reading}
 				<span class="meta">Reading…</span>
 			{/if}
-			{#if error?.field === 'file'}<span class="error">{error.message}</span>{/if}
+			{#if error?.field === 'file'}<span class="form-error">{error.message}</span>{/if}
 		</div>
 
 		<fieldset disabled={session.closed}>
 			<div class="labelled">
-				<span class="label">Columns read</span>
+				<span class="form-label">Columns read</span>
 				<div class="columns">
-					{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }, { key: 'saleDate', label: 'sale date' }] as const as c (c.key)}
+					{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }] as const as c (c.key)}
 						<div class="column">
 							<TextField
 								label={c.label}
 								value={columns[c.key] ?? ''}
-								oncommit={(v) => setColumn(c.key, c.key === 'saleDate' ? v : (v ?? ''))}
+								oncommit={(v) => setColumn(c.key, v ?? '')}
 							/>
 						</div>
 					{/each}
 				</div>
-				{#if error?.field?.startsWith('columns.')}<span class="error">{error.message}</span>{/if}
+				{#if error?.field?.startsWith('columns.')}<span class="form-error">{error.message}</span
+					>{/if}
 			</div>
+
+			<Select
+				label="Money arrives in"
+				value={ticketAccount ?? 0}
+				options={ticketAccount === null
+					? [{ value: 0, label: 'Choose an account' }, ...assets]
+					: assets}
+				onchange={setAccount}
+			/>
 
 			<div class="date">
 				<DateField
@@ -269,10 +319,21 @@
 					{/each}
 				</div>
 			{/if}
+
+			{#if preview.receiptsLost.length}
+				<div class="problems">
+					<strong
+						>{preview.receiptsLost.length}
+						{preview.receiptsLost.length === 1 ? 'receipt' : 'receipts'} would be deleted</strong
+					>
+					<span>Attached to ticket income this sheet takes to zero:</span>
+					{#each preview.receiptsLost as name, n (n)}<span>{name}</span>{/each}
+				</div>
+			{/if}
 		{/if}
 
 		{#if error && error.field !== 'file' && !error.field?.startsWith('columns.')}
-			<p class="error">{error.message}</p>
+			<p class="form-error">{error.message}</p>
 		{/if}
 	{:else}
 		<div class="imports">
@@ -292,8 +353,35 @@
 							oncommit={(v) => setDate(i.id, v)}
 						/>
 					</div>
+					{#if !session.closed}
+						<div class="actions">
+							{#if deleting?.id === i.id}
+								<Button size="sm" onclick={() => (deleting = null)}>Keep</Button>
+								<Button size="sm" kind="primary" onclick={removeImport}>Delete</Button>
+							{:else}
+								<Button size="sm" onclick={() => askDelete(i.id)}>Delete</Button>
+							{/if}
+						</div>
+					{/if}
 				</div>
+				{#if deleting?.id === i.id}
+					<div class="problems deleting">
+						<strong>Delete this import?</strong>
+						<span>
+							Sold: {deleting.effect.soldBefore} → {deleting.effect.soldAfter} · Net:
+							{formatAmount(deleting.effect.netBefore, format)} →
+							{formatAmount(deleting.effect.netAfter, format)}
+						</span>
+						<span>
+							Conflicts: {deleting.effect.conflictsBefore} → {deleting.effect.conflictsAfter}
+						</span>
+						{#if deleting.effect.receiptsLost.length}
+							<span>Receipts deleted: {deleting.effect.receiptsLost.join(', ')}</span>
+						{/if}
+					</div>
+				{/if}
 			{/each}
+			{#if error}<p class="form-error">{error.message}</p>{/if}
 			<p class="note">The import with the latest date is the current sheet.</p>
 		</div>
 	{/if}
@@ -305,7 +393,7 @@
 			<Button
 				kind="primary"
 				shortcut="⌘↵"
-				disabled={!preview || !!preview.unknown.length || !date}
+				disabled={!preview || !!preview.unknown.length || !date || ticketAccount === null}
 				onclick={doImport}>Import</Button
 			>
 			{#if preview?.unknown.length}
@@ -321,16 +409,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
 	.file {
 		display: flex;
 		flex-direction: column;
@@ -376,11 +454,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.columns {
@@ -527,6 +600,7 @@
 
 	.import {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: flex-end;
 		justify-content: space-between;
 		gap: var(--spacing-3);
@@ -539,6 +613,18 @@
 		flex-direction: column;
 		gap: 2px;
 		min-width: 0;
+	}
+
+	.actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-2);
+		width: 100%;
+	}
+
+	.deleting {
+		padding: 8px 0 12px;
+		border-bottom: 1px solid var(--color-rule);
 	}
 
 	.when {
@@ -558,11 +644,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

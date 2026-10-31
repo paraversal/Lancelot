@@ -2,7 +2,7 @@
 	// An IBAN, checked by the core as it is typed (R-PER-2): length for the country and the
 	// mod-97 checksum. While the text differs from the grouped form, the hint previews it.
 	import { untrack } from 'svelte';
-	import { api, ApiError } from '../api';
+	import { api, errorMessage } from '../api';
 	import Check from '../motion/Check.svelte';
 	import { level } from '../motion/mode.svelte';
 	import Field from './Field.svelte';
@@ -53,7 +53,7 @@
 		} catch (e) {
 			if (mine !== seq) return;
 			checked = null;
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 

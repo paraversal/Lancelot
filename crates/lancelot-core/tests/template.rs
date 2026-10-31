@@ -44,7 +44,7 @@ fn last_year() -> Book {
         aliases: vec!["Normal".into()],
     };
     book.add_tier(tier).unwrap();
-    let open = book.ledger().open_items();
+    let open = book.open_items();
     let overrides = open
         .into_iter()
         .map(|item| BlockerOverride {
@@ -68,7 +68,7 @@ fn a_template_keeps_the_setup_and_none_of_the_money() {
         book.event().default_reimbursement_account,
         source.event().default_reimbursement_account
     );
-    assert_eq!(book.event().drinks, source.event().drinks);
+    assert_eq!(book.drink_settings(), source.drink_settings());
 
     assert_eq!(book.accounts().count(), source.accounts().count());
     assert_eq!(book.persons().count(), source.persons().count());
@@ -136,7 +136,7 @@ fn a_template_file_reopens_as_the_same_book() {
 fn the_new_event_books_like_any_other() {
     let source = last_year();
     let mut book = Book::from_template(&source, details("Next")).unwrap();
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     let venue = category(&book, AccountKind::Expense, "Venue");
     let saved = save(
         &mut book,
@@ -243,14 +243,20 @@ fn copying_creates_missing_categories_and_cost_centres_and_follows_roles() {
     source
         .add_budget_line(line(stage, "Boards", Some(centre)))
         .unwrap();
-    let pfand = source.account_by_role(Role::Pfand).unwrap().id;
+    let pfand = source
+        .account_by_name(AccountKind::Expense, "Pfand")
+        .unwrap()
+        .id;
     let drinks = source.drinks_cost_centre().unwrap().id;
     source
         .add_budget_line(line(pfand, "Deposit", Some(drinks)))
         .unwrap();
 
     let mut book = new_book();
-    let pfand_here = book.account_by_role(Role::Pfand).unwrap().id;
+    let pfand_here = book
+        .account_by_name(AccountKind::Expense, "Pfand")
+        .unwrap()
+        .id;
     book.rename_account(pfand_here, "Leergut").unwrap();
     let drinks_here = book.drinks_cost_centre().unwrap().id;
     book.rename_cost_centre(drinks_here, "Bar").unwrap();
@@ -340,13 +346,15 @@ fn copied_data_is_written_to_the_file() {
     let path = dir.path().join("new.lancelot");
     let (mut store, _) = Store::create(&path, details("New"), StoreOptions::default()).unwrap();
     store
-        .copy_from(
-            &source,
-            CopyChoice {
-                persons: true,
-                budget: true,
-            },
-        )
+        .change(|book| {
+            book.copy_from(
+                &source,
+                CopyChoice {
+                    persons: true,
+                    budget: true,
+                },
+            )
+        })
         .unwrap();
     let book = store.book().clone();
     drop(store);
@@ -374,4 +382,39 @@ fn a_file_that_is_no_event_is_refused() {
     std::fs::write(&path, "just some text, long enough for a header").unwrap();
     let err = read_book(&path).err().unwrap();
     assert_eq!(err.code(), "not_an_event_file");
+}
+
+#[test]
+fn a_template_keeps_the_ticket_and_drink_settings() {
+    let mut source = new_book();
+    source.set_tickets_enabled(false).unwrap();
+    let centre = source.drinks_cost_centre().unwrap().id;
+    source.delete_cost_centre(centre).unwrap();
+    let book = Book::from_template(&source, source.event().details.clone()).unwrap();
+    assert_eq!(book.ticket_settings(), source.ticket_settings());
+    assert_eq!(book.drink_settings(), source.drink_settings());
+    assert_eq!(book.drinks_cost_centre(), None);
+}
+
+#[test]
+fn a_ticket_category_copied_into_an_event_without_tickets_is_an_ordinary_one() {
+    let mut source = new_book();
+    let tickets = income(&source, "Tickets");
+    source
+        .add_budget_line(line(tickets, "Sales", None))
+        .unwrap();
+
+    let mut book = new_book();
+    book.set_tickets_enabled(false).unwrap();
+    let summary = book
+        .copy_from(
+            &source,
+            CopyChoice {
+                persons: false,
+                budget: true,
+            },
+        )
+        .unwrap();
+    assert_eq!(summary.categories_added, 1);
+    assert_eq!(book.account(income(&book, "Tickets")).unwrap().role, None);
 }

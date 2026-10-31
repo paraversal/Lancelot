@@ -1,0 +1,23 @@
+[package]
+name = "lancelot-service"
+description = "What the Lancelot shells share: one open event, the app settings, the API types"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+lancelot-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sys-locale = "0.3"
+time.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

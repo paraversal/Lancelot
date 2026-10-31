@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { EventSnapshot } from './api/generated/EventSnapshot';
-import example from './api/mock/example-event.json';
+import example from './api/fixtures/example-event.json';
 import { byCategory, byDay, counts, matches, rows } from './ledger';
 
 // The example event from the mockups, exported by the Rust tests.
@@ -32,12 +32,15 @@ describe('a ticket refund', () => {
 		const [verein, refunds] = [1, 99];
 		const txn: EventSnapshot['txns'][number] = {
 			...snapshot.txns[0],
-			kind: 'income',
+			kind: 'refund',
 			description: 'Refund 1 × Regular',
 			origin: { type: 'ticketRefund', cancellation: 1 },
+			who: verein,
+			flow: 'out',
+			needsReceipt: false,
 			lines: [
-				{ account: refunds, amount: 1600, memo: null, budgetLine: null, costCentre: null },
-				{ account: verein, amount: -1600, memo: null, budgetLine: null, costCentre: null }
+				{ account: refunds, amount: 1600, budgetLine: null, costCentre: null },
+				{ account: verein, amount: -1600, budgetLine: null, costCentre: null }
 			]
 		};
 		const [row] = rows({
@@ -51,6 +54,7 @@ describe('a ticket refund', () => {
 		expect(row.flow).toBe('out');
 		expect(row.who).toBe('Verein account');
 		expect(row.categories.map((c) => c.name)).toEqual(['Ticket refunds']);
+		expect(matches(row, 'income', '', 'de')).toBe(true);
 	});
 });
 

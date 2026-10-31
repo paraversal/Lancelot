@@ -3,7 +3,7 @@
 	// damaged file open on the right.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { openEvent, chooseAndOpen } from '#lib/actions.ts';
 	import { api, ApiError } from '#lib/api/index.ts';
 	import type { RecentEvent } from '#lib/api/generated/RecentEvent.ts';
@@ -20,6 +20,7 @@
 	let problems = $state<Record<string, Problem>>({});
 	let selected = $state(0);
 	let damaged = $state<{ path: string; name: string; error: ApiError } | null>(null);
+	let failed = $state<string | null>(null);
 	const creating = $derived(page.url.searchParams.has('new'));
 
 	onMount(async () => {
@@ -31,21 +32,34 @@
 			return;
 		}
 		recent = await api.recentEvents();
-		const asked = page.url.searchParams.get('open');
-		if (asked) open(asked, asked.split('/').pop() ?? asked);
 	});
 
+	// Open asks through the address, also while this screen is already showing. Clearing it lets
+	// the same file be asked for again after it failed.
+	$effect(() => {
+		const asked = page.url.searchParams.get('open');
+		if (asked) untrack(() => openAsked(asked));
+	});
+
+	async function openAsked(path: string) {
+		await goto('/', { replaceState: true });
+		await open(path, path.split('/').pop() ?? path);
+	}
+
 	async function open(path: string, name: string) {
+		failed = null;
+		damaged = null;
 		try {
 			await openEvent(path);
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
-			if (e.code === 'already_open') problems[path] = 'locked';
-			else if (e.code === 'damaged') {
+			recent = await api.recentEvents();
+			const listed = recent.find((r) => r.path === path);
+			if (e.code === 'damaged' || e.code === 'inconsistent') {
 				problems[path] = { damaged: e };
 				damaged = { path, name, error: e };
-			} else problems[path] = 'missing';
-			if (!recent.some((r) => r.path === path)) recent = await api.recentEvents();
+			} else if (e.code === 'already_open' && listed) problems[path] = 'locked';
+			else if (!listed || listed.exists) failed = `${name}: ${e.message}`;
 		}
 	}
 
@@ -87,6 +101,10 @@
 				</div>
 			</header>
 
+			{#if failed}
+				<p class="failed" role="alert"><Icon name="warn" size={14} />{failed}</p>
+			{/if}
+
 			{#if recent.length}
 				<h2>Recent</h2>
 				<ul>
@@ -121,7 +139,11 @@
 							{:else if problem === 'locked'}
 								<span class="state"><Icon name="lock" size={14} />Open in another window</span>
 							{:else if problem}
-								<span class="state"><Icon name="warn" size={14} />Damaged</span>
+								<span class="state"
+									><Icon name="warn" size={14} />{problem.damaged.code === 'damaged'
+										? 'Damaged'
+										: 'Cannot be opened'}</span
+								>
 							{:else}
 								<span class="when">{formatTimestamp(r.lastOpened, session.format)}</span>
 							{/if}
@@ -235,6 +257,16 @@
 	.when {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.failed {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin: 0 0 16px;
+		font-size: var(--type-xs);
+		font-weight: 600;
+		color: var(--color-attention);
 	}
 
 	.state {

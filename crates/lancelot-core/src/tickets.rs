@@ -15,7 +15,9 @@ use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::error::DomainError;
-use crate::model::{AccountId, CancellationId, ImportId, ManualSaleId, Origin, TierId, TxnId};
+use crate::model::{
+    AccountId, CancellationId, ImportId, ManualSaleId, OpenItem, Origin, TierId, TxnId,
+};
 use crate::money::{BP_FULL, Cents, MoneyError, percent_bp, try_sum};
 use crate::sales::{SalesPoint, sales_over_time};
 use crate::sheet::{RowProblem, Sheet};
@@ -39,6 +41,15 @@ impl Default for TicketColumns {
             sale_date: None,
         }
     }
+}
+
+/// Whether the event sells tickets at all, and where the sheet's money arrives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct TicketSettings {
+    pub enabled: bool,
+    /// An asset account. Needed only to import.
+    pub account: Option<AccountId>,
 }
 
 /// A kind of ticket with its price (R-TKT-1).
@@ -65,10 +76,47 @@ pub struct TierDraft {
     pub aliases: Vec<String>,
 }
 
+/// What a number of tickets of a tier come to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TicketMoney {
+    pub gross: Cents,
+    pub fees: Cents,
+    pub net: Cents,
+}
+
+/// A percentage of `count` tickets and what remains of their price: a fee or a refund.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct TicketShare {
+    pub part: Cents,
+    pub rest: Cents,
+}
+
+/// The one rule for a fee or refund (R-COR-6): rounded half-up to the cent on each ticket
+/// (R-TKT-10, R-TKT-15). The forms preview it through a command.
+pub fn ticket_share(price: Cents, bp: u32, count: u32) -> Result<TicketShare, MoneyError> {
+    let count = i64::from(count);
+    let part = percent_bp(price, bp)?.checked_mul(count)?;
+    Ok(TicketShare {
+        part,
+        rest: price.checked_mul(count)?.checked_sub(part)?,
+    })
+}
+
 impl Tier {
-    /// The fee on one ticket, rounded half-up to the cent (R-TKT-10).
-    pub fn fee(&self) -> Result<Cents, MoneyError> {
-        percent_bp(self.draft.price, self.draft.fee_bp)
+    /// The money of `count` tickets. Every figure and generated entry of a ticket comes from here.
+    pub fn money(&self, count: u32) -> Result<TicketMoney, MoneyError> {
+        let share = ticket_share(self.draft.price, self.draft.fee_bp, count)?;
+        Ok(TicketMoney {
+            gross: self.draft.price.checked_mul(i64::from(count))?,
+            fees: share.part,
+            net: share.rest,
+        })
+    }
+
+    /// The refund on `count` tickets.
+    pub fn refund(&self, refund_bp: u32, count: u32) -> Result<Cents, MoneyError> {
+        Ok(ticket_share(self.draft.price, refund_bp, count)?.part)
     }
 
     /// Whether `name` from the sheet means this tier: its name or one of its aliases,
@@ -139,8 +187,8 @@ pub struct ManualSale {
 pub struct ManualSaleDraft {
     pub tier: TierId,
     pub count: u32,
-    /// The person who received the money.
-    pub person: AccountId,
+    /// The account or person who received the money.
+    pub destination: AccountId,
     #[ts(type = "string")]
     pub date: Date,
     pub reference: Option<String>,
@@ -175,8 +223,8 @@ pub struct RefundTerms {
     pub refund_bp: u32,
     #[ts(type = "string")]
     pub date: Date,
-    /// Who pays. `None`: whoever received the money, the Verein account for the sheet and the
-    /// person on a manual sale (R-TKT-15).
+    /// Who pays. `None`: whoever received the money, the ticket account for the sheet and the
+    /// destination of a manual sale (R-TKT-15).
     pub payer: Option<AccountId>,
 }
 
@@ -282,6 +330,23 @@ pub struct ImportPreview {
     pub tiers: Vec<TierChange>,
     /// Orders with fewer tickets of a tier than before (R-TKT-12).
     pub removed: Vec<OrderChange>,
+    /// Receipts on generated income that would go with it, by file name.
+    pub receipts_lost: Vec<String>,
+}
+
+/// What deleting an import would change. It goes back to the sheets that are left.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportDeletion {
+    pub sold_before: u32,
+    pub sold_after: u32,
+    pub net_before: Cents,
+    pub net_after: Cents,
+    pub conflicts_before: u32,
+    pub conflicts_after: u32,
+    /// Receipts on generated income that would go with it, by file name.
+    pub receipts_lost: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -364,6 +429,7 @@ pub(crate) fn preview(
         problems: sheet.problems.clone(),
         tiers: changes.into_values().collect(),
         removed,
+        receipts_lost: Vec::new(),
     }
 }
 
@@ -694,25 +760,31 @@ impl Tickets {
         self.conflicts.iter().map(|c| c.removed.len() as u32).sum()
     }
 
+    /// What the tickets keep open when closing the event (R-TKT-16).
+    pub fn open_item(&self) -> Option<OpenItem> {
+        let count = self.conflict_count();
+        (count > 0).then_some(OpenItem::TicketConflicts { count })
+    }
+
     pub(crate) fn compute(
         tiers: &BTreeMap<TierId, Tier>,
         imports_by_id: &BTreeMap<ImportId, TicketImport>,
         sales: &BTreeMap<ManualSaleId, ManualSale>,
         cancellations: &BTreeMap<CancellationId, Cancellation>,
         generated: &BTreeMap<Origin, TxnId>,
-        verein: Option<AccountId>,
+        ticket_account: Option<AccountId>,
     ) -> Result<Tickets, DomainError> {
         let imports = by_date(imports_by_id);
         let reckoning = reckon(&imports, cancellations, None);
 
         let mut views = Vec::new();
         for c in cancellations.values() {
-            let price = tiers.get(&c.tier).map_or(Cents::ZERO, |t| t.draft.price);
-            let per_ticket = match &c.terms {
-                Some(r) => percent_bp(price, r.refund_bp)?,
-                None => Cents::ZERO,
+            let refund_on = |count| match (tiers.get(&c.tier), &c.terms) {
+                (Some(t), Some(r)) => t.refund(r.refund_bp, count),
+                _ => Ok(Cents::ZERO),
             };
-            let refund = per_ticket.checked_mul(i64::from(c.count))?;
+            let per_ticket = refund_on(1)?;
+            let refund = refund_on(c.count)?;
             views.push(CancellationView {
                 order: c.order.clone(),
                 gone_now: reckoning.gone.get(&c.id).copied().unwrap_or(0),
@@ -721,7 +793,7 @@ impl Tickets {
                 payer: c
                     .terms
                     .as_ref()
-                    .and_then(|r| r.payer.or(default_payer(c, sales, verein))),
+                    .and_then(|r| r.payer.or(default_payer(c, sales, ticket_account))),
                 txn: generated
                     .get(&Origin::TicketRefund { cancellation: c.id })
                     .copied(),
@@ -758,12 +830,13 @@ impl Tickets {
 
         let mut manual_sales = Vec::new();
         for s in sales.values() {
-            let price = tiers
+            let money = tiers
                 .get(&s.draft.tier)
-                .map_or(Cents::ZERO, |t| t.draft.price);
+                .map(|t| t.money(s.draft.count))
+                .transpose()?;
             manual_sales.push(ManualSaleView {
                 sale: s.clone(),
-                gross: price.checked_mul(i64::from(s.draft.count))?,
+                gross: money.map_or(Cents::ZERO, |m| m.gross),
                 txn: generated.get(&Origin::TicketSale { sale: s.id }).copied(),
             });
         }
@@ -806,8 +879,10 @@ pub(crate) fn figures_at(
         let Some(terms) = c.terms.filter(|t| by_then(t.date)) else {
             continue;
         };
-        let price = tiers.get(&c.tier).map_or(Cents::ZERO, |t| t.draft.price);
-        let refund = percent_bp(price, terms.refund_bp)?.checked_mul(i64::from(c.count))?;
+        let refund = match tiers.get(&c.tier) {
+            Some(t) => t.refund(terms.refund_bp, c.count)?,
+            None => Cents::ZERO,
+        };
         let sum = refunds.entry(c.tier).or_default();
         *sum = sum.checked_add(refund)?;
     }
@@ -818,8 +893,9 @@ pub(crate) fn figures_at(
         let cancelled = reckoning.cancelled.get(&t.id).copied().unwrap_or(0);
         let manual = manual.get(&t.id).copied().unwrap_or(0);
         let sold = in_sheet + cancelled + manual;
-        let gross = t.draft.price.checked_mul(i64::from(sold))?;
-        let fees = t.fee()?.checked_mul(i64::from(in_sheet + cancelled))?;
+        // Manual sales pay no fee, so the two come from different counts.
+        let gross = t.money(sold)?.gross;
+        let fees = t.money(in_sheet + cancelled)?.fees;
         let refunds = refunds.get(&t.id).copied().unwrap_or_default();
         figures.push((
             t.id,
@@ -855,15 +931,38 @@ pub(crate) fn figures_at(
     Ok((figures, total))
 }
 
+/// What the sheets had brought in, net of fees, from each import on: oldest first, by the import's
+/// date. Refunds are apart, with their own dates.
+pub(crate) fn sheet_income(
+    tiers: &BTreeMap<TierId, Tier>,
+    imports: &BTreeMap<ImportId, TicketImport>,
+    cancellations: &BTreeMap<CancellationId, Cancellation>,
+) -> Result<Vec<(Date, Cents)>, DomainError> {
+    let imports = by_date(imports);
+    (0..imports.len())
+        .map(|i| {
+            let date = imports[i].date;
+            let (_, total) = figures_at(
+                tiers,
+                &imports[..=i],
+                &BTreeMap::new(),
+                cancellations,
+                Some(date),
+            )?;
+            Ok((date, total.gross.checked_sub(total.fees)?))
+        })
+        .collect()
+}
+
 /// Who pays a refund nobody chose a payer for: whoever received the money (R-TKT-15).
 pub(crate) fn default_payer(
     c: &Cancellation,
     sales: &BTreeMap<ManualSaleId, ManualSale>,
-    verein: Option<AccountId>,
+    ticket_account: Option<AccountId>,
 ) -> Option<AccountId> {
     match c.sale {
-        Some(sale) => sales.get(&sale).map(|s| s.draft.person),
-        None => verein,
+        Some(sale) => sales.get(&sale).map(|s| s.draft.destination),
+        None => ticket_account,
     }
 }
 
@@ -1096,6 +1195,27 @@ mod tests {
         assert_eq!(ok.aliases, ["Erm."]);
         // A tier may keep its own names.
         assert!(clean_tier(draft("Regular", &["Normal"]), Some(TierId(1)), &tiers).is_ok());
+    }
+
+    #[test]
+    fn a_tier_rounds_its_fee_and_refund_on_each_ticket() {
+        let tier = Tier {
+            id: TierId(1),
+            draft: TierDraft {
+                name: "Early Bird".into(),
+                price: Cents::new(2_500).unwrap(),
+                fee_bp: 250,
+                quota: None,
+                aliases: Vec::new(),
+            },
+        };
+        // 0,625 € rounds to 0,63 € on each ticket, not 1,875 € to 1,88 € on the three.
+        let money = tier.money(3).unwrap();
+        assert_eq!(money.gross.get(), 7_500);
+        assert_eq!(money.fees.get(), 189);
+        assert_eq!(money.net.get(), 7_311);
+        assert_eq!(tier.refund(2_502, 3).unwrap().get(), 1_878);
+        assert_eq!(tier.refund(2_502, 1).unwrap().get(), 626);
     }
 
     #[test]

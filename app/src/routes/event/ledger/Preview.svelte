@@ -69,7 +69,7 @@
 			{/if}
 		{/await}
 	</div>
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 </section>
 
 <style>
@@ -101,10 +101,6 @@
 	.size {
 		font-size: 13px;
 		color: var(--color-ink-muted);
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.close {
@@ -145,11 +141,5 @@
 	.other {
 		display: flex;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

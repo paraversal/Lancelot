@@ -54,16 +54,29 @@
 		}
 	}
 
+	// A mistyped person can go, as long as nothing refers to them.
+	let deleting = $state(false);
+
+	async function remove() {
+		error = null;
+		deleting = false;
+		try {
+			await session.change(() => api.deleteAccount(person.account));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
+	}
+
 	// The running balance, newest first, with what each transaction was.
 	const entries = $derived(
 		[...person.entries].reverse().map((e) => {
 			const txn = snapshot.txns.find((t) => t.id === e.txn);
 			let title = txn?.description || txn?.counterparty || '';
-			if (txn?.kind === 'settle') {
-				const account = txn.lines
-					.map((l) => snapshot.accounts.find((a) => a.id === l.account))
-					.find((a) => a?.kind === 'asset');
-				title = `${e.effect < 0 ? 'Reimbursed' : 'Paid back'} · ${account?.name ?? ''}`;
+			if (txn?.entry?.type === 'settle') {
+				const { account, direction } = txn.entry;
+				const name = snapshot.accounts.find((a) => a.id === account)?.name ?? '';
+				title = `${direction === 'reimburse' ? 'Reimbursed' : 'Paid back'} · ${name}`;
 			}
 			return { ...e, title, date: txn?.date ?? '', settle: txn?.kind === 'settle' };
 		})
@@ -103,10 +116,11 @@
 			multiline
 			oncommit={(v) => save(person.name, { notes: v })}
 		/>
-		{#if error}<p class="error">{error.message}</p>{/if}
+		{#if error}<p class="form-error">{error.message}</p>{/if}
 	{:else}
+		{#if error}<p class="form-error">{error.message}</p>{/if}
 		<section>
-			<span class="label">Bank</span>
+			<span class="form-label">Bank</span>
 			{#if iban}
 				<strong class="iban">{iban}</strong>
 				<span class="muted"
@@ -119,17 +133,17 @@
 
 		<section>
 			{#if net > 0}
-				<span class="label">Owed to {first}</span>
+				<span class="form-label">Owed to {first}</span>
 				<span class="figure"
 					><MovingAmount value={Math.abs(net)} {format} level={level('A5')} /></span
 				>
 			{:else if net < 0}
-				<span class="label">{first} owes</span>
+				<span class="form-label">{first} owes</span>
 				<span class="figure attention"
 					><MovingAmount value={Math.abs(net)} {format} level={level('A5')} /></span
 				>
 			{:else}
-				<span class="label">Balance</span>
+				<span class="form-label">Balance</span>
 				<span class="figure settled" in:stampIn={{ level: level('C1') }}>Settled</span>
 			{/if}
 		</section>
@@ -165,6 +179,14 @@
 				{#if net > 0 && fallback}<span class="muted">from {fallback}</span>{/if}
 			{/if}
 			<span class="grow"></span>
+			{#if !person.entries.length}
+				{#if deleting}
+					<Button size="sm" onclick={() => (deleting = false)}>Keep</Button>
+					<Button size="sm" kind="primary" onclick={remove}>Delete</Button>
+				{:else}
+					<Button size="sm" onclick={() => (deleting = true)}>Delete</Button>
+				{/if}
+			{/if}
 			<Button size="sm" onclick={() => (editing = true)}>Edit</Button>
 		{/if}
 	{/snippet}
@@ -188,11 +210,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.muted {
@@ -279,15 +296,5 @@
 		font-size: 13px;
 		color: var(--color-ink-muted);
 		text-align: right;
-	}
-
-	.grow {
-		flex: 1;
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

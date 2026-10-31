@@ -61,8 +61,11 @@ fn the_example_event_survives_saving_and_reopening() {
     assert_eq!(store.book(), &book);
     let l = store.book().ledger();
     assert_eq!(l.result(), eur("2.027,50"));
-    assert_eq!(l.balance(role(store.book(), Role::Verein)), eur("1.757"));
-    assert_eq!(l.balance(role(store.book(), Role::CashBox)), eur("412,90"));
+    assert_eq!(
+        l.balance(asset(store.book(), "Verein account")),
+        eur("1.757")
+    );
+    assert_eq!(l.balance(asset(store.book(), "Cash box")), eur("412,90"));
     assert_eq!(l.person(m.anna).unwrap().net, eur("212,40"));
     assert_eq!(l.person(m.malte).unwrap().net, eur("110"));
     assert_eq!(l.person(m.bob).unwrap().net, eur("-180"));
@@ -74,7 +77,7 @@ fn attachments_are_stored_inside_the_file() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, food) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
@@ -97,7 +100,7 @@ fn attachments_are_stored_inside_the_file() {
 
     let (mut store, _) = open(&path);
     assert_eq!(store.attachment_data(id).unwrap(), pdf);
-    store.remove_attachment(id).unwrap();
+    store.change(|book| book.remove_attachment(id)).unwrap();
     assert_eq!(
         store.attachment_data(id).unwrap_err().code(),
         "unknown_attachment"
@@ -109,7 +112,7 @@ fn deleting_a_transaction_deletes_its_attachments() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, food) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
@@ -120,7 +123,7 @@ fn deleting_a_transaction_deletes_its_attachments() {
         },
     );
     store.attach(txn, false);
-    store.delete_txn(txn).unwrap();
+    store.change(|book| book.delete_txn(txn)).unwrap();
     drop(store);
     let count: i64 = raw(&path)
         .query_row("SELECT COUNT(*) FROM attachment", [], |r| r.get(0))
@@ -134,16 +137,18 @@ fn failed_commands_change_nothing() {
     let (mut store, path) = create(&dir);
     let before = store.book().clone();
     let food = expense(store.book(), "Kitchen");
-    let err = store.save_txn(
-        &draft(
-            "x",
-            Entry::Expense {
-                payer: food,
-                lines: vec![split(food, "1")],
-            },
-        ),
-        None,
-    );
+    let err = store.change(|book| {
+        book.save_txn(
+            &draft(
+                "x",
+                Entry::Expense {
+                    payer: food,
+                    lines: vec![split(food, "1")],
+                },
+            ),
+            None,
+        )
+    });
     assert_eq!(err.unwrap_err().code(), "wrong_account_kind");
     assert_eq!(store.book(), &before);
     drop(store);
@@ -234,7 +239,9 @@ fn a_file_can_only_be_open_once() {
 fn leaves_no_journal_files_behind() {
     let dir = TempDir::new().unwrap();
     let (mut store, _) = create(&dir);
-    store.add_person("Anna", Person::default()).unwrap();
+    store
+        .change(|book| book.add_person("Anna", Person::default()))
+        .unwrap();
     drop(store);
     let names: Vec<_> = std::fs::read_dir(dir.path())
         .unwrap()
@@ -244,60 +251,11 @@ fn leaves_no_journal_files_behind() {
 }
 
 #[test]
-fn the_database_refuses_unbalanced_transactions() {
-    let dir = TempDir::new().unwrap();
-    let (mut store, path) = create(&dir);
-    let (cash, food) = (
-        role(store.book(), Role::CashBox),
-        expense(store.book(), "Kitchen"),
-    );
-    let txn = store.save(
-        "Bakery",
-        Entry::Expense {
-            payer: cash,
-            lines: vec![split(food, "20")],
-        },
-    );
-    drop(store);
-
-    let conn = raw(&path);
-    // Lines of a sealed transaction cannot change.
-    let err = conn
-        .execute("UPDATE line SET amount = 999 WHERE txn_id = ?1", [txn.0])
-        .unwrap_err();
-    assert!(err.to_string().contains("sealed"), "{err}");
-    let err = conn
-        .execute("DELETE FROM line WHERE txn_id = ?1", [txn.0])
-        .unwrap_err();
-    assert!(err.to_string().contains("sealed"), "{err}");
-    // An unbalanced transaction cannot be sealed.
-    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
-        .unwrap();
-    conn.execute(
-        "UPDATE line SET amount = 999 WHERE txn_id = ?1 AND position = 1",
-        [txn.0],
-    )
-    .unwrap();
-    let err = conn
-        .execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [txn.0])
-        .unwrap_err();
-    assert!(err.to_string().contains("unbalanced"), "{err}");
-    // Nor can one be inserted sealed.
-    let err = conn
-        .execute(
-            "INSERT INTO txn (id, kind, date, sealed) VALUES (99, 'expense', '2026-06-13', 1)",
-            [],
-        )
-        .unwrap_err();
-    assert!(err.to_string().contains("unsealed"), "{err}");
-}
-
-#[test]
 fn a_tampered_transaction_is_reported_and_the_file_not_loaded() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, food) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
@@ -310,8 +268,6 @@ fn a_tampered_transaction_is_reported_and_the_file_not_loaded() {
     drop(store);
 
     let conn = raw(&path);
-    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
-        .unwrap();
     conn.execute(
         "UPDATE line SET amount = 999 WHERE txn_id = ?1 AND position = 1",
         [txn.0],
@@ -322,10 +278,7 @@ fn a_tampered_transaction_is_reported_and_the_file_not_loaded() {
     match Store::open(&path, StoreOptions::default()) {
         Err(StoreError::Damaged(report)) => {
             let codes = report.codes();
-            assert!(
-                codes.contains(&"unsealed") && codes.contains(&"unbalanced"),
-                "{codes:?}"
-            );
+            assert!(codes.contains(&"unbalanced"), "{codes:?}");
         }
         other => panic!("unexpected {:?}", other.err()),
     }
@@ -336,7 +289,7 @@ fn a_transaction_with_the_wrong_shape_is_reported() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, food) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
@@ -348,22 +301,19 @@ fn a_transaction_with_the_wrong_shape_is_reported() {
     );
     drop(store);
 
-    // Balanced, but now it books money from Tickets into Kitchen, which no form can create.
-    let tickets = income(&new_book(), "Tickets");
+    // Balanced, but the opening account belongs to opening counts alone.
+    let opening = category(&new_book(), AccountKind::Opening, "Opening balance");
     let conn = raw(&path);
-    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [txn.0])
-        .unwrap();
     conn.execute(
         "UPDATE line SET account_id = ?2 WHERE txn_id = ?1 AND position = 0",
-        [txn.0, tickets.0],
+        [txn.0, opening.0],
     )
     .unwrap();
-    conn.execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [txn.0])
-        .unwrap();
     drop(conn);
 
+    // The file is sound and its contents fail the rules: that is not called damage.
     match Store::open(&path, StoreOptions::default()) {
-        Err(StoreError::Damaged(report)) => {
+        Err(StoreError::Inconsistent(report)) => {
             assert!(report.codes().contains(&"malformed_txn"), "{report:?}")
         }
         other => panic!("unexpected {:?}", other.err()),
@@ -375,7 +325,7 @@ fn a_tampered_attachment_is_reported_but_the_file_opens() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, food) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let txn = store.save(
@@ -404,7 +354,7 @@ fn a_tampered_attachment_is_reported_but_the_file_opens() {
 fn overpaying_shows_as_a_warning() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
-    let verein = role(store.book(), Role::Verein);
+    let verein = asset(store.book(), "Verein account");
     let anna = store.person("Anna");
     store.save(
         "Too much",
@@ -426,7 +376,7 @@ fn every_change_is_in_the_change_log() {
     let dir = TempDir::new().unwrap();
     let (mut store, _) = create(&dir);
     let (cash, food, tech) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
         expense(store.book(), "Tech"),
     );
@@ -438,23 +388,25 @@ fn every_change_is_in_the_change_log() {
         },
     );
     store
-        .save_txn(
-            &draft(
-                "Cables",
-                Entry::Expense {
-                    payer: cash,
-                    lines: vec![split(tech, "35")],
-                },
-            ),
-            Some(txn),
-        )
+        .change(|book| {
+            book.save_txn(
+                &draft(
+                    "Cables",
+                    Entry::Expense {
+                        payer: cash,
+                        lines: vec![split(tech, "35")],
+                    },
+                ),
+                Some(txn),
+            )
+        })
         .unwrap();
-    store.delete_txn(txn).unwrap();
+    store.change(|book| book.delete_txn(txn)).unwrap();
     store
-        .set_closing_count(cash, june(14), Cents::ZERO)
+        .change(|book| book.set_closing_count(cash, june(14), Cents::ZERO))
         .unwrap();
     store.close(vec![]).unwrap();
-    store.reopen().unwrap();
+    store.change(|book| book.reopen()).unwrap();
 
     let log = store.change_log(100).unwrap();
     let ops: Vec<(&str, &str)> = log
@@ -491,7 +443,7 @@ fn ids_are_not_reused_after_reopening() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, food) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let entry = Entry::Expense {
@@ -499,7 +451,7 @@ fn ids_are_not_reused_after_reopening() {
         lines: vec![split(food, "20")],
     };
     let first = store.save("a", entry.clone());
-    store.delete_txn(first).unwrap();
+    store.change(|book| book.delete_txn(first)).unwrap();
     drop(store);
     let (mut store, _) = open(&path);
     assert!(store.save("b", entry) > first);
@@ -531,16 +483,22 @@ fn backups_on_open_after_the_interval_and_pruned() {
 
     let advance = |minutes| *now.lock().unwrap() += Duration::minutes(minutes);
     advance(1);
-    store.add_person("Anna", Person::default()).unwrap();
+    store
+        .change(|book| book.add_person("Anna", Person::default()))
+        .unwrap();
     assert_eq!(count(), 1, "within the interval");
 
     advance(10);
-    store.add_person("Bob", Person::default()).unwrap();
+    store
+        .change(|book| book.add_person("Bob", Person::default()))
+        .unwrap();
     assert_eq!(count(), 2, "after the interval");
 
     for name in ["Clara", "Malte", "Nina"] {
         advance(11);
-        store.add_person(name, Person::default()).unwrap();
+        store
+            .change(|book| book.add_person(name, Person::default()))
+            .unwrap();
     }
     assert_eq!(count(), 3, "only the newest are kept");
     assert!(store.backup_error().is_none());
@@ -569,8 +527,8 @@ proptest! {
         let ids = Ids::of(&book);
         for op in &ops {
             match ids.action(&book, op) {
-                Action::Save(d, id) => prop_assert_eq!(store.save_txn(&d, id).is_ok(), book.save_txn(&d, id).is_ok()),
-                Action::Delete(id) => prop_assert_eq!(store.delete_txn(id).is_ok(), book.delete_txn(id).is_ok()),
+                Action::Save(d, id) => prop_assert_eq!(store.change(|book| book.save_txn(&d, id)).is_ok(), book.save_txn(&d, id).is_ok()),
+                Action::Delete(id) => prop_assert_eq!(store.change(|book| book.delete_txn(id)).is_ok(), book.delete_txn(id).is_ok()),
                 Action::Nothing => {}
             }
             prop_assert_eq!(store.book(), &book);
@@ -587,7 +545,7 @@ fn a_transaction_and_its_files_are_saved_together() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
     let (cash, kitchen) = (
-        role(store.book(), Role::CashBox),
+        asset(store.book(), "Cash box"),
         expense(store.book(), "Kitchen"),
     );
     let entry = Entry::Expense {
@@ -687,14 +645,16 @@ fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
         ..Person::default()
     };
     store
-        .update_person(m.anna, "Anna", iban("DE89370400440532013000"))
+        .change(|book| book.update_person(m.anna, "Anna", iban("DE89370400440532013000")))
         .unwrap();
     store
-        .update_person(m.malte, "Malte", iban("DE02120300000000202051"))
+        .change(|book| book.update_person(m.malte, "Malte", iban("DE02120300000000202051")))
         .unwrap();
-    let verein = role(store.book(), Role::Verein);
+    let verein = asset(store.book(), "Verein account");
 
-    let n = store.mark_payouts_paid(verein, june(20)).unwrap();
+    let n = store
+        .change(|book| book.mark_payouts_paid(verein, june(20)))
+        .unwrap();
     assert_eq!(n, 2);
     let l = store.book().ledger();
     assert_eq!(l.person(m.anna).unwrap().net, Cents::ZERO);
@@ -717,17 +677,27 @@ fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
 fn asset_types_and_counts_survive_reopening() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
-    let bar = store.add_asset("Cash – Bar", AssetType::Cash).unwrap();
-    let verein = role(store.book(), Role::Verein);
-    store.set_asset_type(verein, AssetType::Cash).unwrap();
-    store.set_opening_count(bar, june(12), eur("40")).unwrap();
-    store.set_opening_count(bar, june(12), eur("50")).unwrap();
+    let bar = store
+        .change(|book| book.add_asset("Cash – Bar", AssetType::Cash))
+        .unwrap();
+    let verein = asset(store.book(), "Verein account");
+    store
+        .change(|book| book.set_asset_type(verein, AssetType::Cash))
+        .unwrap();
+    store
+        .change(|book| book.set_opening_count(bar, june(12), eur("40")))
+        .unwrap();
+    store
+        .change(|book| book.set_opening_count(bar, june(12), eur("50")))
+        .unwrap();
     let book = store.book().clone();
     drop(store);
     let (mut reopened, report) = open(&path);
     assert!(report.is_clean(), "{report:?}");
     assert_eq!(reopened.book(), &book);
-    reopened.clear_opening_count(bar).unwrap();
+    reopened
+        .change(|book| book.clear_opening_count(bar))
+        .unwrap();
     assert_eq!(reopened.book().txns().count(), 0);
 }
 
@@ -738,8 +708,8 @@ fn the_database_refuses_an_asset_without_a_type() {
     drop(store);
     let conn = raw(&path);
     for sql in [
-        "UPDATE account SET asset_type = NULL WHERE role = 'cash_box'",
-        "UPDATE account SET asset_type = 'bank' WHERE role = 'opening'",
+        "UPDATE account SET asset_type = NULL WHERE name = 'Cash box'",
+        "UPDATE account SET asset_type = 'bank' WHERE kind = 'opening'",
     ] {
         assert!(conn.execute(sql, []).is_err(), "{sql}");
     }
@@ -751,9 +721,9 @@ fn a_closed_event_reopens_closed_and_read_only() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("e.lancelot");
     let (mut store, _) = Store::create(&path, details(), options.clone()).unwrap();
-    let cash = role(store.book(), Role::CashBox);
+    let cash = asset(store.book(), "Cash box");
     store
-        .set_closing_count(cash, june(14), Cents::ZERO)
+        .change(|book| book.set_closing_count(cash, june(14), Cents::ZERO))
         .unwrap();
     store.close(vec![]).unwrap();
     let closed_at = *at.lock().unwrap();
@@ -764,12 +734,306 @@ fn a_closed_event_reopens_closed_and_read_only() {
     assert_eq!(store.book().event().closed_at, Some(closed_at));
     assert_eq!(
         store
-            .add_person("Kim", Person::default())
+            .change(|book| book.add_person("Kim", Person::default()))
             .unwrap_err()
             .code(),
         "event_closed"
     );
-    store.reopen().unwrap();
+    store.change(|book| book.reopen()).unwrap();
     assert!(!store.book().event().is_closed());
-    store.add_person("Kim", Person::default()).unwrap();
+    store
+        .change(|book| book.add_person("Kim", Person::default()))
+        .unwrap();
+}
+
+#[test]
+fn a_mistyped_person_or_category_can_go_while_nothing_refers_to_it() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("delete.lancelot");
+    let details = new_book().event().details.clone();
+    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let typo = store
+        .change(|book| book.add_person("Aña", Person::default()))
+        .unwrap();
+    let category = store
+        .change(|book| book.add_account(AccountKind::Expense, "Kichten"))
+        .unwrap();
+    let used = store
+        .change(|book| book.add_person("Anna", Person::default()))
+        .unwrap();
+    let entry = Entry::Expense {
+        payer: used,
+        lines: vec![split(category, "10")],
+    };
+    let txn = store
+        .change(|book| book.save_txn(&draft("Food", entry), None))
+        .unwrap()
+        .id;
+
+    assert_eq!(
+        store
+            .change(|book| book.delete_account(used))
+            .unwrap_err()
+            .code(),
+        "account_in_use"
+    );
+    assert_eq!(
+        store
+            .change(|book| book.delete_account(category))
+            .unwrap_err()
+            .code(),
+        "account_in_use"
+    );
+    let verein = asset(store.book(), "Verein account");
+    assert_eq!(
+        store
+            .change(|book| book.delete_account(verein))
+            .unwrap_err()
+            .code(),
+        "account_in_use"
+    );
+    store.change(|book| book.delete_account(typo)).unwrap();
+    assert!(store.book().account(typo).is_none());
+    assert_eq!(
+        store.book().persons().filter(|(a, _)| a.id == typo).count(),
+        0
+    );
+
+    store.change(|book| book.delete_txn(txn)).unwrap();
+    store.change(|book| book.delete_account(category)).unwrap();
+    let log = store.change_log(50).unwrap();
+    assert!(
+        log.iter()
+            .any(|e| e.entity == "account" && e.op == "delete")
+    );
+
+    let expected = store.book().clone();
+    drop(store);
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(store.book(), &expected);
+}
+
+/// A write that reaches the file wrong, here by a trigger, is rolled back and never kept.
+#[test]
+fn a_write_is_read_back_before_it_counts() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("e.lancelot");
+    let (store, _) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    drop(store);
+    // The schema is read when a connection opens, so the trigger goes in before the store does.
+    let extra = raw(&path);
+    extra
+        .execute_batch(
+            "CREATE TRIGGER wrong_name AFTER INSERT ON account BEGIN
+               UPDATE account SET name = 'Someone else' WHERE id = NEW.id;
+             END;",
+        )
+        .unwrap();
+    drop(extra);
+    let (mut store, _) = Store::open(&path, StoreOptions::default()).unwrap();
+    let before = store.book().clone();
+    let error = store
+        .change(|b| b.add_person("Anna", Person::default()))
+        .unwrap_err();
+    assert!(matches!(error, StoreError::IntegrityFailed(_)), "{error:?}");
+    assert_eq!(store.book(), &before);
+    drop(store);
+    // Nothing of it reached the file.
+    let (store, _) = open(&path);
+    assert_eq!(store.book().persons().count(), 0);
+}
+
+#[test]
+fn a_generated_entry_written_wrong_is_caught_although_loading_regenerates_it() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("e.lancelot");
+    let (store, _) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    drop(store);
+    let extra = raw(&path);
+    extra
+        .execute_batch(
+            "CREATE TRIGGER wrong_wording AFTER INSERT ON txn
+             WHEN NEW.origin <> 'manual' BEGIN
+               UPDATE txn SET description = 'Something else' WHERE id = NEW.id;
+             END;",
+        )
+        .unwrap();
+    drop(extra);
+    let (mut store, _) = Store::open(&path, StoreOptions::default()).unwrap();
+    let anna = store
+        .change(|b| b.add_person("Anna", Person::default()))
+        .unwrap();
+    let tier = store
+        .change(|b| {
+            b.add_tier(TierDraft {
+                name: "Regular".into(),
+                price: eur("10,00"),
+                fee_bp: 0,
+                quota: None,
+                aliases: Vec::new(),
+            })
+        })
+        .unwrap();
+    let error = store
+        .change(|b| {
+            b.add_manual_sale(ManualSaleDraft {
+                tier,
+                count: 1,
+                destination: anna,
+                date: june(13),
+                reference: None,
+            })
+        })
+        .unwrap_err();
+    assert!(matches!(error, StoreError::IntegrityFailed(_)), "{error:?}");
+}
+
+#[test]
+fn a_foreign_key_left_dangling_stops_the_commit() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("e.lancelot");
+    let (store, _) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    drop(store);
+    let extra = raw(&path);
+    extra
+        .execute_batch(
+            "CREATE TRIGGER dangling AFTER INSERT ON account
+             WHEN NEW.kind = 'person' BEGIN
+               UPDATE account SET cost_centre_id = 999 WHERE id = NEW.id;
+             END;",
+        )
+        .unwrap();
+    drop(extra);
+    let (mut store, _) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(
+        store
+            .change(|b| b.add_person("Anna", Person::default()))
+            .is_err()
+    );
+    assert_eq!(store.book().persons().count(), 0);
+}
+
+#[test]
+fn the_settings_on_the_event_row_are_saved_and_logged() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let columns = TicketColumns {
+        tier: "Kategorie".into(),
+        order: "Bestellung".into(),
+        sale_date: None,
+    };
+    let settings = DrinkSettings {
+        supplier: Some("Getränke Meyer".into()),
+        price_per_strich: Some(eur("1,50")),
+        ..store.book().drink_settings().clone()
+    };
+    store
+        .change(|book| book.set_ticket_columns(columns.clone()))
+        .unwrap();
+    store
+        .change(|book| book.set_drink_settings(settings.clone()))
+        .unwrap();
+    let log = store.change_log(10).unwrap();
+    let last = |entity: &str| log.iter().find(|e| e.entity == entity).unwrap();
+    assert_eq!(last("ticket_columns").op, "update");
+    assert_eq!(
+        last("ticket_columns").after.as_ref().unwrap()["tier"],
+        "Kategorie"
+    );
+    assert_eq!(last("drink_settings").op, "update");
+    assert!(last("drink_settings").before.is_some());
+    drop(store);
+
+    let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(reopened.book().ticket_columns(), &columns);
+    assert_eq!(reopened.book().drink_settings(), &settings);
+}
+
+#[test]
+fn deleting_an_import_is_logged_once() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, _) = create(&dir);
+    let tier = |name: &str, price| TierDraft {
+        name: name.into(),
+        price: eur(price),
+        fee_bp: 0,
+        quota: None,
+        aliases: Vec::new(),
+    };
+    for (name, price) in [
+        ("Early Bird", "25,00"),
+        ("Regular", "32,00"),
+        ("Supporter", "45,00"),
+    ] {
+        store.change(|b| b.add_tier(tier(name, price))).unwrap();
+    }
+    let sheet = include_bytes!("../../../fixtures/tickets/import-1.ods");
+    let import = store
+        .import_tickets("import-1.ods", sheet, june(1))
+        .unwrap();
+    store.change(|b| b.delete_import(import)).unwrap();
+    let log = store.change_log(100).unwrap();
+    let deletions = log
+        .iter()
+        .filter(|e| e.entity == "ticket_import" && e.op == "delete")
+        .count();
+    assert_eq!(deletions, 1);
+}
+
+#[test]
+fn every_kind_of_transfer_and_setting_survives_reopening() {
+    let dir = TempDir::new().unwrap();
+    let (mut store, path) = create(&dir);
+    let cash = asset(store.book(), "Cash box");
+    let food = expense(store.book(), "Kitchen");
+    let anna = store
+        .change(|b| b.add_person("Anna", Person::default()))
+        .unwrap();
+    store.save(
+        "To Anna",
+        Entry::Transfer {
+            from: cash,
+            to: anna,
+            amount: eur("20"),
+        },
+    );
+    store.save(
+        "Onto a category",
+        Entry::Transfer {
+            from: anna,
+            to: food,
+            amount: eur("5"),
+        },
+    );
+    store.change(|b| b.set_net_movement(cash, true)).unwrap();
+    store.change(|b| b.set_ticket_account(Some(cash))).unwrap();
+    let centre = store.book().drink_settings().cost_centre.unwrap();
+    store.change(|b| b.delete_cost_centre(centre)).unwrap();
+    store.change(|b| b.set_tickets_enabled(false)).unwrap();
+    let book = store.book().clone();
+    let log = store.change_log(1000).unwrap();
+    drop(store);
+
+    let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(reopened.book(), &book);
+    assert!(log.iter().any(|e| e.entity == "ticket_settings"));
+}
+
+#[test]
+fn a_new_file_has_no_triggers_and_lines_are_checked_on_opening() {
+    let dir = TempDir::new().unwrap();
+    let (store, path) = create(&dir);
+    drop(store);
+    let conn = raw(&path);
+    let triggers: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(triggers, 0);
 }

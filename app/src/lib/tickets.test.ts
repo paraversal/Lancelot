@@ -6,12 +6,10 @@ import type { Tickets } from './api/generated/Tickets';
 import {
 	conflictCount,
 	feeInput,
-	feePerTicket,
 	formatFee,
 	labelStep,
 	parseCount,
 	parseFee,
-	refundPerTicket,
 	salesBars,
 	totalQuota
 } from './tickets';
@@ -26,12 +24,6 @@ describe('conflicts', () => {
 			]
 		} as unknown as Tickets;
 		expect(conflictCount(tickets)).toBe(3);
-	});
-
-	it('refund half-up per ticket, like the core', () => {
-		expect(refundPerTicket(25, 5000)).toBe(13);
-		expect(refundPerTicket(3200, 5000)).toBe(1600);
-		expect(refundPerTicket(3200, 0)).toBe(0);
 	});
 });
 
@@ -52,12 +44,6 @@ describe('fees', () => {
 		expect(formatFee(250, 'en')).toBe('2.5%');
 		expect(formatFee(0, 'de')).toBe('0 %');
 		expect(feeInput(1025, 'de')).toBe('10,25');
-	});
-
-	it('round half up per ticket', () => {
-		expect(feePerTicket(3200, 250)).toBe(80);
-		expect(feePerTicket(1850, 250)).toBe(46); // 46,25 ct
-		expect(feePerTicket(1000, 25)).toBe(3); // 2,5 ct
 	});
 });
 

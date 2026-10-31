@@ -12,7 +12,7 @@ fn bal(book: &Book, account: AccountId) -> Cents {
 #[test]
 fn ticket_revenue_arrives_at_the_verein_account() {
     let mut book = new_book();
-    let (verein, tickets) = (role(&book, Role::Verein), income(&book, "Tickets"));
+    let (verein, tickets) = (asset(&book, "Verein account"), income(&book, "Tickets"));
     save(
         &mut book,
         "Tickets",
@@ -49,7 +49,7 @@ fn ticket_sold_outside_regular_channels_is_held_by_the_person() {
 #[test]
 fn person_forwards_held_money_to_the_verein_account() {
     let mut book = new_book();
-    let (verein, tickets) = (role(&book, Role::Verein), income(&book, "Tickets"));
+    let (verein, tickets) = (asset(&book, "Verein account"), income(&book, "Tickets"));
     let bob = person(&mut book, "Bob");
     save(
         &mut book,
@@ -80,7 +80,7 @@ fn person_forwards_held_money_to_the_verein_account() {
 #[test]
 fn cash_box_opening_count() {
     let mut book = new_book();
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     save(
         &mut book,
         "Opening count",
@@ -90,7 +90,13 @@ fn cash_box_opening_count() {
         },
     );
     assert_eq!(bal(&book, cash), eur("80"));
-    assert_eq!(bal(&book, role(&book, Role::Opening)), eur("80"));
+    assert_eq!(
+        bal(
+            &book,
+            category(&book, AccountKind::Opening, "Opening balance")
+        ),
+        eur("80")
+    );
     // An opening count is not income.
     assert_eq!(book.ledger().result(), Cents::ZERO);
     assert_eq!(book.ledger().where_the_money_is().total, Cents::ZERO);
@@ -99,7 +105,7 @@ fn cash_box_opening_count() {
 #[test]
 fn person_puts_own_money_into_the_cash_box() {
     let mut book = new_book();
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     let anna = person(&mut book, "Anna");
     save(
         &mut book,
@@ -139,7 +145,7 @@ fn person_pays_for_food_with_own_card() {
 #[test]
 fn food_bought_from_the_cash_box() {
     let mut book = new_book();
-    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Kitchen"));
+    let (cash, food) = (asset(&book, "Cash box"), expense(&book, "Kitchen"));
     save(
         &mut book,
         "Bakery",
@@ -154,7 +160,7 @@ fn food_bought_from_the_cash_box() {
 #[test]
 fn venue_invoice_paid_by_the_verein() {
     let mut book = new_book();
-    let (verein, venue) = (role(&book, Role::Verein), expense(&book, "Venue"));
+    let (verein, venue) = (asset(&book, "Verein account"), expense(&book, "Venue"));
     save(
         &mut book,
         "Hall",
@@ -170,7 +176,7 @@ fn venue_invoice_paid_by_the_verein() {
 #[test]
 fn person_reimbursed() {
     let mut book = new_book();
-    let (verein, food) = (role(&book, Role::Verein), expense(&book, "Kitchen"));
+    let (verein, food) = (asset(&book, "Verein account"), expense(&book, "Kitchen"));
     let anna = person(&mut book, "Anna");
     save(
         &mut book,
@@ -206,7 +212,7 @@ fn person_reimbursed() {
 #[test]
 fn drink_donations_collected_in_cash() {
     let mut book = new_book();
-    let (cash, donations) = (role(&book, Role::CashBox), income(&book, "Drink donations"));
+    let (cash, donations) = (asset(&book, "Cash box"), income(&book, "Drink donations"));
     save(
         &mut book,
         "Donations",
@@ -224,7 +230,7 @@ fn netting_example_bob() {
     // Requirements §4.1: Bob received €300 of ticket money and advanced €120 for food.
     let mut book = new_book();
     let (verein, tickets, food) = (
-        role(&book, Role::Verein),
+        asset(&book, "Verein account"),
         income(&book, "Tickets"),
         expense(&book, "Kitchen"),
     );
@@ -266,4 +272,104 @@ fn netting_example_bob() {
         PersonStatus::Settled
     );
     assert_eq!(raw_sum(&book), 0);
+}
+
+#[test]
+fn a_transfer_between_people_nets_against_a_later_expense() {
+    let mut book = new_book();
+    let food = expense(&book, "Kitchen");
+    let (a, b) = (
+        book.add_person("A", Person::default()).unwrap(),
+        book.add_person("B", Person::default()).unwrap(),
+    );
+    save(
+        &mut book,
+        "Handed over",
+        Entry::Transfer {
+            from: a,
+            to: b,
+            amount: eur("50"),
+        },
+    );
+    let net = |book: &Book, id| book.ledger().person(id).unwrap().net;
+    assert_eq!(net(&book, a), eur("50"));
+    assert_eq!(net(&book, b), -eur("50"));
+    assert_eq!(book.ledger().result(), Cents::ZERO);
+
+    save(
+        &mut book,
+        "Groceries",
+        Entry::Expense {
+            payer: b,
+            lines: vec![split(food, "50")],
+        },
+    );
+    assert_eq!(net(&book, b), Cents::ZERO);
+    assert_eq!(net(&book, a), eur("50"));
+    assert_eq!(book.ledger().result(), -eur("50"));
+}
+
+#[test]
+fn a_transfer_onto_a_category_counts_in_the_result() {
+    let mut book = new_book();
+    let (cash, food, general) = (
+        asset(&book, "Cash box"),
+        expense(&book, "Kitchen"),
+        income(&book, "General"),
+    );
+    let out = save(
+        &mut book,
+        "Paid from the box",
+        Entry::Transfer {
+            from: cash,
+            to: food,
+            amount: eur("20"),
+        },
+    );
+    assert_eq!(book.ledger().expense_total(), eur("20"));
+    assert_eq!(book.ledger().result(), -eur("20"));
+    let snapshot = EventSnapshot::new(&book);
+    let view = snapshot.txns.iter().find(|t| t.txn.id == out).unwrap();
+    assert_eq!(view.flow, Flow::Out);
+    assert_eq!(view.who, Some(cash));
+    assert!(view.entry.is_some());
+
+    // Between categories the result stays.
+    save(
+        &mut book,
+        "Reclassified",
+        Entry::Transfer {
+            from: general,
+            to: food,
+            amount: eur("5"),
+        },
+    );
+    assert_eq!(book.ledger().income_total(), eur("5"));
+    assert_eq!(book.ledger().expense_total(), eur("25"));
+    assert_eq!(book.ledger().result(), -eur("20"));
+}
+
+#[test]
+fn the_opening_account_takes_no_transfer() {
+    let mut book = new_book();
+    let cash = asset(&book, "Cash box");
+    let opening = category(&book, AccountKind::Opening, "Opening balance");
+    let d = draft(
+        "Nope",
+        Entry::Transfer {
+            from: opening,
+            to: cash,
+            amount: eur("1"),
+        },
+    );
+    assert_eq!(
+        book.save_txn(&d, None).unwrap_err(),
+        DomainError::WrongAccountKind {
+            field: "from".into()
+        }
+    );
+    assert_eq!(
+        book.delete_account(opening).unwrap_err(),
+        DomainError::AccountInUse
+    );
 }

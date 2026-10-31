@@ -7,13 +7,11 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BackupPolicy, BlockerOverride, Book,
-    BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents,
-    CopyChoice, CopySummary, CostCentreId, DomainError, DrinkProductDraft, DrinkProductId,
-    DrinkSettings, EventDetails, EventSnapshot, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE,
-    ManualSaleDraft, ManualSaleId, Parsed, Person, ReconciliationId, Report, Resolution, Store,
-    StoreError, StoreOptions, TemplateSummary, TicketColumns, TierDraft, TierId, TxnDraft, TxnId,
-    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date, read_book,
+    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
+    DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
+    MAX_ATTACHMENT_SIZE, Parsed, Report, Store, StoreError, StoreOptions, TemplateSummary,
+    TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
+    parse_amount, parse_date, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -196,10 +194,7 @@ impl Service {
     /// Copies persons and budget lines from another event (R-ISO-4).
     pub fn copy_from_event(&mut self, path: &Path, choice: CopyChoice) -> Result<OpenEvent> {
         let source = self.other_event(path)?;
-        self.change(|s| {
-            s.copy_from(&source, choice)?;
-            Ok(())
-        })
+        self.change(|b| b.copy_from(&source, choice))
     }
 
     pub fn open_event(&mut self, path: &Path) -> Result<OpenEvent> {
@@ -242,8 +237,35 @@ impl Service {
         })
     }
 
+    /// Applies a command to the open book and returns the new state.
+    pub fn change<T>(
+        &mut self,
+        command: impl FnOnce(&mut Book) -> std::result::Result<T, DomainError>,
+    ) -> Result<OpenEvent> {
+        self.on_store(|s| {
+            s.change(command)?;
+            Ok(())
+        })
+    }
+
+    /// [`Service::change`] for a command that adds an account, whose id the UI needs.
+    pub fn add(
+        &mut self,
+        command: impl FnOnce(&mut Book) -> std::result::Result<AccountId, DomainError>,
+    ) -> Result<Added> {
+        let mut id = None;
+        let event = self.on_store(|s| {
+            id = Some(s.change(command)?);
+            Ok(())
+        })?;
+        Ok(Added {
+            event,
+            id: id.ok_or_else(ApiError::no_event)?,
+        })
+    }
+
     /// Runs a command on the open store and returns the new state.
-    fn change(&mut self, command: impl FnOnce(&mut Store) -> Result<()>) -> Result<OpenEvent> {
+    fn on_store(&mut self, command: impl FnOnce(&mut Store) -> Result<()>) -> Result<OpenEvent> {
         let open = self.open.as_mut().ok_or_else(ApiError::no_event)?;
         command(&mut open.store)?;
         open.revision += 1;
@@ -263,14 +285,6 @@ impl Service {
     }
 
     // --- event commands ------------------------------------------------------------------
-
-    pub fn update_event(&mut self, details: EventDetails) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_event(details)?))
-    }
-
-    pub fn set_default_reimbursement_account(&mut self, account: AccountId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.set_default_reimbursement_account(account)?))
-    }
 
     /// Saves a transaction with the files to attach (paths, e.g. dropped onto the window) and
     /// the attachments to remove, all in one change.
@@ -293,7 +307,7 @@ impl Service {
             read.push((name, std::fs::read(path)?));
         }
         let mut saved = None;
-        let event = self.change(|s| {
+        let event = self.on_store(|s| {
             saved = Some(s.save_txn_with_files(draft, id, &read, remove)?);
             Ok(())
         })?;
@@ -344,40 +358,6 @@ impl Service {
         Ok(())
     }
 
-    pub fn delete_txn(&mut self, id: TxnId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_txn(id)?))
-    }
-
-    /// Adds a category (income or expense) or an asset account.
-    pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<Added> {
-        let mut id = None;
-        let event = self.change(|s| {
-            id = Some(s.add_account(kind, name)?);
-            Ok(())
-        })?;
-        Ok(Added {
-            event,
-            id: id.ok_or_else(ApiError::no_event)?,
-        })
-    }
-
-    /// Adds a bank or cash account (R-ACC-1).
-    pub fn add_asset(&mut self, name: &str, asset_type: AssetType) -> Result<Added> {
-        let mut id = None;
-        let event = self.change(|s| {
-            id = Some(s.add_asset(name, asset_type)?);
-            Ok(())
-        })?;
-        Ok(Added {
-            event,
-            id: id.ok_or_else(ApiError::no_event)?,
-        })
-    }
-
-    pub fn set_asset_type(&mut self, id: AccountId, asset_type: AssetType) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.set_asset_type(id, asset_type)?))
-    }
-
     /// Replaces an asset account's opening and closing counts (R-ISO-3).
     pub fn set_counts(
         &mut self,
@@ -397,144 +377,7 @@ impl Service {
             .transpose()
         };
         let (opening, closing) = (parse(opening, "opening")?, parse(closing, "closing")?);
-        self.change(|s| Ok(s.set_counts(account, opening, closing)?))
-    }
-
-    pub fn add_reconciliation(
-        &mut self,
-        account: AccountId,
-        date: &str,
-        amount: Cents,
-    ) -> Result<OpenEvent> {
-        let date = parse_date(date)?;
-        self.change(|s| {
-            s.add_reconciliation(account, date, amount)?;
-            Ok(())
-        })
-    }
-
-    pub fn update_reconciliation(
-        &mut self,
-        id: ReconciliationId,
-        date: &str,
-        amount: Cents,
-    ) -> Result<OpenEvent> {
-        let date = parse_date(date)?;
-        self.change(|s| Ok(s.update_reconciliation(id, date, amount)?))
-    }
-
-    pub fn delete_reconciliation(&mut self, id: ReconciliationId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_reconciliation(id)?))
-    }
-
-    pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.rename_account(id, name)?))
-    }
-
-    /// Adds a person by name; bank details follow on the People screen (M4).
-    pub fn add_person(&mut self, name: &str) -> Result<Added> {
-        let mut id = None;
-        let event = self.change(|s| {
-            id = Some(s.add_person(name, Person::default())?);
-            Ok(())
-        })?;
-        Ok(Added {
-            event,
-            id: id.ok_or_else(ApiError::no_event)?,
-        })
-    }
-
-    /// Renames a person and replaces their details (R-PER-1). The IBAN arrives validated.
-    pub fn update_person(
-        &mut self,
-        id: AccountId,
-        name: &str,
-        person: Person,
-    ) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_person(id, name, person)?))
-    }
-
-    /// Adds a budget line (R-BUD-1).
-    pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<OpenEvent> {
-        self.change(|s| {
-            s.add_budget_line(draft)?;
-            Ok(())
-        })
-    }
-
-    pub fn update_budget_line(
-        &mut self,
-        id: BudgetLineId,
-        draft: BudgetLineDraft,
-    ) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_budget_line(id, draft)?))
-    }
-
-    /// Deletes a budget line; its linked actuals stay, unbudgeted.
-    pub fn delete_budget_line(&mut self, id: BudgetLineId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_budget_line(id)?))
-    }
-
-    // --- tickets (requirements §5.6) ------------------------------------------------------
-
-    pub fn add_tier(&mut self, draft: TierDraft) -> Result<OpenEvent> {
-        self.change(|s| {
-            s.add_tier(draft)?;
-            Ok(())
-        })
-    }
-
-    pub fn update_tier(&mut self, id: TierId, draft: TierDraft) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_tier(id, draft)?))
-    }
-
-    /// Deletes a tier that no import and no manual sale uses.
-    pub fn delete_tier(&mut self, id: TierId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_tier(id)?))
-    }
-
-    pub fn add_cost_centre(&mut self, name: &str) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.add_cost_centre(name).map(|_| ())?))
-    }
-
-    pub fn rename_cost_centre(&mut self, id: CostCentreId, name: &str) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.rename_cost_centre(id, name)?))
-    }
-
-    pub fn delete_cost_centre(&mut self, id: CostCentreId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_cost_centre(id)?))
-    }
-
-    pub fn set_category_cost_centre(
-        &mut self,
-        category: AccountId,
-        cost_centre: Option<CostCentreId>,
-    ) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.set_category_cost_centre(category, cost_centre)?))
-    }
-
-    pub fn add_drink_product(&mut self, draft: DrinkProductDraft) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.add_drink_product(draft).map(|_| ())?))
-    }
-
-    pub fn update_drink_product(
-        &mut self,
-        id: DrinkProductId,
-        draft: DrinkProductDraft,
-    ) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_drink_product(id, draft)?))
-    }
-
-    pub fn delete_drink_product(&mut self, id: DrinkProductId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_drink_product(id)?))
-    }
-
-    pub fn set_drink_settings(&mut self, settings: DrinkSettings) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.set_drink_settings(settings)?))
-    }
-
-    pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.set_ticket_columns(columns)?))
+        self.change(|b| b.set_counts(account, opening, closing))
     }
 
     /// Reads a ticket sheet from disk and shows what importing it would change (R-TKT-5).
@@ -553,7 +396,7 @@ impl Service {
         sha256: &str,
     ) -> Result<OpenEvent> {
         let (name, data) = read_sheet_file(path)?;
-        self.change(|s| {
+        self.on_store(|s| {
             if s.preview_ticket_import(&name, &data, date)?.sha256 != sha256 {
                 return Err(ApiError::new(
                     "file_changed",
@@ -565,58 +408,10 @@ impl Service {
         })
     }
 
-    pub fn set_import_date(&mut self, id: ImportId, date: time::Date) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.set_import_date(id, date)?))
-    }
-
-    pub fn add_manual_sale(&mut self, draft: ManualSaleDraft) -> Result<OpenEvent> {
-        self.change(|s| {
-            s.add_manual_sale(draft)?;
-            Ok(())
-        })
-    }
-
-    pub fn update_manual_sale(
-        &mut self,
-        id: ManualSaleId,
-        draft: ManualSaleDraft,
-    ) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_manual_sale(id, draft)?))
-    }
-
-    pub fn delete_manual_sale(&mut self, id: ManualSaleId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_manual_sale(id)?))
-    }
-
-    pub fn add_cancellation(&mut self, draft: CancellationDraft) -> Result<OpenEvent> {
-        self.change(|s| {
-            s.add_cancellation(draft)?;
-            Ok(())
-        })
-    }
-
-    pub fn update_cancellation(
-        &mut self,
-        id: CancellationId,
-        edit: CancellationEdit,
-    ) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.update_cancellation(id, edit)?))
-    }
-
-    pub fn delete_cancellation(&mut self, id: CancellationId) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.delete_cancellation(id)?))
-    }
-
-    pub fn resolve_conflict(
-        &mut self,
-        order: &str,
-        tier: TierId,
-        resolution: Resolution,
-    ) -> Result<OpenEvent> {
-        self.change(|s| {
-            s.resolve_conflict(order, tier, resolution)?;
-            Ok(())
-        })
+    /// What deleting an import would change; changes nothing.
+    pub fn preview_delete_import(&self, id: ImportId) -> Result<ImportDeletion> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        Ok(open.store.book().preview_delete_import(id)?)
     }
 
     /// Checks an IBAN as it is typed (R-PER-2).
@@ -650,21 +445,7 @@ impl Service {
 
     /// Closes the event (R-SET-7). Every open item must be resolved or come with a note.
     pub fn close_event(&mut self, overrides: Vec<BlockerOverride>) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.close(overrides)?))
-    }
-
-    /// Makes a closed event editable again (R-EVT-2).
-    pub fn reopen_event(&mut self) -> Result<OpenEvent> {
-        self.change(|s| Ok(s.reopen()?))
-    }
-
-    /// Records the payout list's reimbursements in one step (R-PER-5).
-    pub fn mark_payouts_paid(&mut self, account: AccountId, date: time::Date) -> Result<OpenEvent> {
-        self.change(|s| {
-            s.mark_payouts_paid(account, date)
-                .map(|_| ())
-                .map_err(ApiError::from)
-        })
+        self.on_store(|s| Ok(s.close(overrides)?))
     }
 
     pub fn check_integrity(&mut self) -> Result<OpenEvent> {
@@ -738,6 +519,11 @@ impl Service {
         )?)
     }
 
+    /// The fee or refund a form is about to save, by the core's rule.
+    pub fn ticket_share(&self, price: Cents, bp: u32, count: u32) -> Result<TicketShare> {
+        ticket_share(price, bp, count).map_err(|e| DomainError::from(e).into())
+    }
+
     pub fn parse_date(&self, input: &str) -> Result<ParsedDate> {
         let date = parse_date(input)?;
         Ok(ParsedDate {
@@ -749,7 +535,11 @@ impl Service {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lancelot_core::{CancellationSource, NumberFormat, OpenItem, RefundTerms};
+    use lancelot_core::{
+        AccountKind, AssetType, CancellationDraft, CancellationEdit, CancellationSource,
+        ManualSaleDraft, NumberFormat, OpenItem, Person, RefundTerms, Resolution, TicketColumns,
+        TierDraft,
+    };
     use tempfile::TempDir;
 
     fn details(name: &str) -> EventDetails {
@@ -772,7 +562,7 @@ mod tests {
         let mut s = service(&dir);
         let old = dir.path().join("old.lancelot");
         s.create_event(&old, details("Old")).unwrap();
-        s.add_person("Kim").unwrap();
+        s.add(|b| b.add_person("Kim", Person::default())).unwrap();
         s.close_file();
 
         let summary = s.template_preview(&old).unwrap();
@@ -814,23 +604,22 @@ mod tests {
             .unwrap()
             .cents;
 
-        let open = s.add_reconciliation(verein, "2026-06-30", amount).unwrap();
+        let on = |day| time::Date::from_calendar_date(2026, time::Month::June, day).unwrap();
+        let open = s
+            .change(|b| b.add_reconciliation(verein, on(30), amount))
+            .unwrap();
         let r = open.snapshot.reconciliations[0];
         assert_eq!((r.movement, r.difference), (true, amount));
         let err = s
-            .add_reconciliation(verein, "2026-06-30", amount)
+            .change(|b| b.add_reconciliation(verein, on(30), amount))
             .unwrap_err();
         assert_eq!(err.code, "duplicate_checkpoint");
-        let err = s
-            .add_reconciliation(verein, "nonsense", amount)
-            .unwrap_err();
-        assert_ne!(err.code, "duplicate_checkpoint");
 
         let open = s
-            .update_reconciliation(r.id, "2026-07-01", lancelot_core::Cents::ZERO)
+            .change(|b| b.update_reconciliation(r.id, on(29), lancelot_core::Cents::ZERO))
             .unwrap();
         assert!(open.snapshot.reconciliations[0].difference.is_zero());
-        let open = s.delete_reconciliation(r.id).unwrap();
+        let open = s.change(|b| b.delete_reconciliation(r.id)).unwrap();
         assert!(open.snapshot.reconciliations.is_empty());
     }
 
@@ -851,7 +640,7 @@ mod tests {
 
         let mut dated = details("Sommerfest 2026");
         dated.starts_on = Some(time::macros::date!(2026 - 06 - 12));
-        let renamed = s.update_event(dated).unwrap();
+        let renamed = s.change(|b| b.update_event(dated)).unwrap();
         assert_eq!(renamed.revision, 2);
         assert_eq!(
             s.recent_events()[0].starts_on.as_deref(),
@@ -859,7 +648,7 @@ mod tests {
         );
         s.close_file();
         assert_eq!(
-            s.update_event(details("x")).unwrap_err().code,
+            s.change(|b| b.update_event(details("x"))).unwrap_err().code,
             "no_event_open"
         );
 
@@ -945,7 +734,7 @@ mod tests {
         let backups = s.backups(&path).unwrap();
         assert_eq!(backups.len(), 1);
         assert!(backups[0].taken_at.is_some());
-        s.update_event(details("After")).unwrap();
+        s.change(|b| b.update_event(details("After"))).unwrap();
 
         let backup = PathBuf::from(&backups[0].path);
         let copy = dir.path().join("restored.lancelot");
@@ -977,7 +766,7 @@ mod tests {
         s.create_event(&path, details("Winterfest")).unwrap();
         s.close_file();
 
-        // Break the file behind Lancelot's back: an empty transaction that is sealed.
+        // Break the file behind Lancelot's back: a line of a transaction that does not exist.
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch(
             "PRAGMA foreign_keys = OFF; INSERT INTO line (txn_id, position, account_id, amount) VALUES (99, 0, 1, 5);",
@@ -1015,10 +804,21 @@ mod tests {
         };
         let kitchen = category("Kitchen");
 
-        let anna = s.add_person("Anna").unwrap().id;
-        let mobility = s.add_account(AccountKind::Expense, "Transport").unwrap().id;
-        s.rename_account(mobility, "Fuel").unwrap();
-        assert_eq!(s.add_person("anna").unwrap_err().code, "duplicate_name");
+        let anna = s
+            .add(|b| b.add_person("Anna", Person::default()))
+            .unwrap()
+            .id;
+        let mobility = s
+            .add(|b| b.add_account(AccountKind::Expense, "Transport"))
+            .unwrap()
+            .id;
+        s.change(|b| b.rename_account(mobility, "Fuel")).unwrap();
+        assert_eq!(
+            s.add(|b| b.add_person("anna", Person::default()))
+                .unwrap_err()
+                .code,
+            "duplicate_name"
+        );
 
         let cents = |c: i64| lancelot_core::Cents::new(c).unwrap();
         let draft = TxnDraft {
@@ -1032,14 +832,12 @@ mod tests {
                     SplitLine {
                         account: kitchen,
                         amount: cents(24_890),
-                        memo: None,
                         budget_line: None,
                         cost_centre: None,
                     },
                     SplitLine {
                         account: mobility,
                         amount: cents(6_350),
-                        memo: None,
                         budget_line: None,
                         cost_centre: None,
                     },
@@ -1061,7 +859,7 @@ mod tests {
             ("split_mismatch", Some("lines"))
         );
 
-        let after = s.delete_txn(saved.id).unwrap();
+        let after = s.change(|b| b.delete_txn(saved.id)).unwrap();
         assert!(after.snapshot.txns.is_empty());
     }
 
@@ -1093,7 +891,6 @@ mod tests {
                 lines: vec![SplitLine {
                     account: id_of("Kitchen"),
                     amount: lancelot_core::Cents::new(500).unwrap(),
-                    memo: None,
                     budget_line: None,
                     cost_centre: None,
                 }],
@@ -1139,7 +936,10 @@ mod tests {
         let mut s = service(&dir);
         s.create_event(&dir.path().join("e.lancelot"), details("E"))
             .unwrap();
-        let anna = s.add_person("Anna").unwrap().id;
+        let anna = s
+            .add(|b| b.add_person("Anna", Person::default()))
+            .unwrap()
+            .id;
 
         let checked = s.check_iban("de89 3704 0044 0532 0130 00").unwrap();
         assert_eq!(checked.formatted, "DE89 3704 0044 0532 0130 00");
@@ -1153,7 +953,9 @@ mod tests {
             iban: Some(lancelot_core::validate_iban(&checked.iban).unwrap()),
             ..Person::default()
         };
-        let open = s.update_person(anna, "Anna Krüger", person).unwrap();
+        let open = s
+            .change(|b| b.update_person(anna, "Anna Krüger", person))
+            .unwrap();
         let p = &open.snapshot.persons[0];
         assert_eq!(
             (p.name.as_str(), p.details.iban.as_ref().map(|i| i.as_str())),
@@ -1186,23 +988,27 @@ mod tests {
             complete: false,
         };
 
-        let open = s.add_budget_line(draft(100_000)).unwrap();
+        let open = s.change(|b| b.add_budget_line(draft(100_000))).unwrap();
         let id = open.snapshot.budget_lines[0].id;
         assert_eq!(open.snapshot.budget.expense.forecast.get(), 100_000);
-        let open = s.update_budget_line(id, draft(120_000)).unwrap();
+        let open = s
+            .change(|b| b.update_budget_line(id, draft(120_000)))
+            .unwrap();
         assert_eq!(open.snapshot.budget.expense.estimate.get(), 120_000);
         let err = s
-            .add_budget_line(lancelot_core::BudgetLineDraft {
-                cost_centre: None,
-                description: " ".into(),
-                ..draft(1)
+            .change(|b| {
+                b.add_budget_line(lancelot_core::BudgetLineDraft {
+                    cost_centre: None,
+                    description: " ".into(),
+                    ..draft(1)
+                })
             })
             .unwrap_err();
         assert_eq!(
             (err.code.as_str(), err.field.as_deref()),
             ("empty_name", Some("description"))
         );
-        let open = s.delete_budget_line(id).unwrap();
+        let open = s.change(|b| b.delete_budget_line(id)).unwrap();
         assert!(open.snapshot.budget_lines.is_empty());
     }
 
@@ -1220,7 +1026,7 @@ mod tests {
             quota: None,
             aliases: Vec::new(),
         };
-        s.add_tier(tier("Early Bird", 2_500)).unwrap();
+        s.change(|b| b.add_tier(tier("Early Bird", 2_500))).unwrap();
 
         // Regular is not a tier yet: the preview names it and the import is refused.
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
@@ -1232,9 +1038,9 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code, "unknown_tiers");
 
-        let open = s.add_tier(tier("Regular", 3_200)).unwrap();
+        let open = s.change(|b| b.add_tier(tier("Regular", 3_200))).unwrap();
         let regular = open.snapshot.tickets.tiers[1].tier.id;
-        s.add_tier(tier("Supporter", 4_500)).unwrap();
+        s.change(|b| b.add_tier(tier("Supporter", 4_500))).unwrap();
         let preview = s.preview_tickets(&sheet, june(1)).unwrap();
         assert!(preview.unknown.is_empty());
         // A file that is not the one previewed is not imported.
@@ -1250,40 +1056,45 @@ mod tests {
                 .iter()
                 .all(|t| t.txn.origin.is_generated())
         );
-        let err = s.delete_tier(regular).unwrap_err();
+        let err = s.change(|b| b.delete_tier(regular)).unwrap_err();
         assert_eq!(err.code, "tier_in_use");
 
         let import = tickets.imports[0].import.id;
-        let open = s.set_import_date(import, june(2)).unwrap();
+        let open = s.change(|b| b.set_import_date(import, june(2))).unwrap();
         assert_eq!(open.snapshot.tickets.imports[0].import.date, june(2));
         assert!(open.snapshot.txns.iter().all(|t| t.txn.date == june(2)));
 
-        let bob = s.add_person("Bob").unwrap().id;
+        let bob = s
+            .add(|b| b.add_person("Bob", Person::default()))
+            .unwrap()
+            .id;
         let sale = |count| ManualSaleDraft {
             tier: regular,
             count,
-            person: bob,
+            destination: bob,
             date: june(13),
             reference: Some(" Abendkasse ".into()),
         };
-        let open = s.add_manual_sale(sale(2)).unwrap();
+        let open = s.change(|b| b.add_manual_sale(sale(2))).unwrap();
         let view = &open.snapshot.tickets.manual_sales[0];
         assert_eq!(view.gross.get(), 6_400);
         assert_eq!(view.sale.draft.reference.as_deref(), Some("Abendkasse"));
         let id = view.sale.id;
-        let open = s.update_manual_sale(id, sale(3)).unwrap();
+        let open = s.change(|b| b.update_manual_sale(id, sale(3))).unwrap();
         assert_eq!(open.snapshot.tickets.total.manual, 3);
-        let open = s.delete_manual_sale(id).unwrap();
+        let open = s.change(|b| b.delete_manual_sale(id)).unwrap();
         assert!(open.snapshot.tickets.manual_sales.is_empty());
 
         let open = s
-            .set_ticket_columns(TicketColumns {
-                tier: "Kategorie".into(),
-                order: "Order ID".into(),
-                sale_date: None,
+            .change(|b| {
+                b.set_ticket_columns(TicketColumns {
+                    tier: "Kategorie".into(),
+                    order: "Order ID".into(),
+                    sale_date: None,
+                })
             })
             .unwrap();
-        assert_eq!(open.snapshot.event.ticket_columns.tier, "Kategorie");
+        assert_eq!(open.snapshot.ticket_columns.tier, "Kategorie");
         assert!(s.preview_tickets(&sheet, june(9)).is_err());
     }
 
@@ -1301,10 +1112,10 @@ mod tests {
             quota: None,
             aliases: Vec::new(),
         };
-        s.add_tier(tier("Early Bird", 2_500)).unwrap();
-        let open = s.add_tier(tier("Regular", 3_200)).unwrap();
+        s.change(|b| b.add_tier(tier("Early Bird", 2_500))).unwrap();
+        let open = s.change(|b| b.add_tier(tier("Regular", 3_200))).unwrap();
         let regular = open.snapshot.tickets.tiers[1].tier.id;
-        s.add_tier(tier("Supporter", 4_500)).unwrap();
+        s.change(|b| b.add_tier(tier("Supporter", 4_500))).unwrap();
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let import = |s: &mut Service, name: &str, day| {
             let path = fixtures.join(name);
@@ -1320,27 +1131,31 @@ mod tests {
 
         // Recorded while the order is still in the sheet.
         let open = s
-            .add_cancellation(CancellationDraft {
-                source: CancellationSource::Order {
-                    order: "4711".into(),
-                    tier: regular,
-                },
-                count: 1,
-                terms,
-                note: None,
+            .change(|b| {
+                b.add_cancellation(CancellationDraft {
+                    source: CancellationSource::Order {
+                        order: "4711".into(),
+                        tier: regular,
+                    },
+                    count: 1,
+                    terms,
+                    note: None,
+                })
             })
             .unwrap();
         let id = open.snapshot.tickets.cancellations[0].cancellation.id;
         assert!(open.snapshot.tickets.conflicts.is_empty());
         let err = s
-            .add_cancellation(CancellationDraft {
-                source: CancellationSource::Order {
-                    order: "nope".into(),
-                    tier: regular,
-                },
-                count: 1,
-                terms,
-                note: None,
+            .change(|b| {
+                b.add_cancellation(CancellationDraft {
+                    source: CancellationSource::Order {
+                        order: "nope".into(),
+                        tier: regular,
+                    },
+                    count: 1,
+                    terms,
+                    note: None,
+                })
             })
             .unwrap_err();
         assert_eq!(err.code, "unknown_order");
@@ -1358,67 +1173,77 @@ mod tests {
         );
 
         let open = s
-            .resolve_conflict(
-                "4711",
-                regular,
-                Resolution::Match {
-                    cancellation: id,
-                    count: 1,
-                },
-            )
+            .change(|b| {
+                b.resolve_conflict(
+                    "4711",
+                    regular,
+                    Resolution::Match {
+                        cancellation: id,
+                        count: 1,
+                    },
+                )
+            })
             .unwrap();
         assert_eq!(open.snapshot.tickets.total.cancelled, 1);
         let open = s
-            .resolve_conflict(
-                "4711",
-                regular,
-                Resolution::Correction {
-                    count: 1,
-                    note: None,
-                },
-            )
+            .change(|b| {
+                b.resolve_conflict(
+                    "4711",
+                    regular,
+                    Resolution::Correction {
+                        count: 1,
+                        note: None,
+                    },
+                )
+            })
             .unwrap();
         let correction = open.snapshot.tickets.cancellations[1].cancellation.id;
         let open = s
-            .resolve_conflict(
-                "4702",
-                regular,
-                Resolution::Refund {
-                    count: 1,
-                    terms,
-                    note: Some("called in".into()),
-                },
-            )
+            .change(|b| {
+                b.resolve_conflict(
+                    "4702",
+                    regular,
+                    Resolution::Refund {
+                        count: 1,
+                        terms,
+                        note: Some("called in".into()),
+                    },
+                )
+            })
             .unwrap();
         assert!(open.snapshot.tickets.conflicts.is_empty());
         assert_eq!(open.snapshot.tickets.total.refunds.get(), 3_200);
 
         let err = s
-            .update_cancellation(
-                correction,
-                CancellationEdit {
-                    count: 1,
-                    terms,
-                    note: None,
-                },
-            )
+            .change(|b| {
+                b.update_cancellation(
+                    correction,
+                    CancellationEdit {
+                        count: 1,
+                        terms,
+                        note: None,
+                    },
+                )
+            })
             .unwrap_err();
         assert_eq!(err.code, "correction_not_editable");
         let open = s
-            .update_cancellation(
-                id,
-                CancellationEdit {
-                    count: 1,
-                    terms: RefundTerms {
-                        refund_bp: 10_000,
-                        ..terms
+            .change(|b| {
+                b.update_cancellation(
+                    id,
+                    CancellationEdit {
+                        count: 1,
+                        terms: RefundTerms {
+                            refund_bp: 10_000,
+                            ..terms
+                        },
+                        note: None,
                     },
-                    note: None,
-                },
-            )
+                )
+            })
             .unwrap();
         assert_eq!(open.snapshot.tickets.total.refunds.get(), 4_800);
-        let open = s.delete_cancellation(correction).unwrap();
+        let open = s.change(|b| b.delete_cancellation(correction)).unwrap();
         assert_eq!(open.snapshot.tickets.conflicts.len(), 1);
     }
 
@@ -1442,12 +1267,16 @@ mod tests {
                 .id
         };
         let (verein, kitchen) = (id_of("Verein account"), id_of("Kitchen"));
-        let anna = s.add_person("Anna Krüger").unwrap().id;
+        let anna = s
+            .add(|b| b.add_person("Anna Krüger", Person::default()))
+            .unwrap()
+            .id;
         let person = Person {
             iban: Some(lancelot_core::validate_iban("DE89370400440532013000").unwrap()),
             ..Person::default()
         };
-        s.update_person(anna, "Anna Krüger", person).unwrap();
+        s.change(|b| b.update_person(anna, "Anna Krüger", person))
+            .unwrap();
         let draft = TxnDraft {
             date: time::macros::date!(2026 - 06 - 13),
             description: "Metro".into(),
@@ -1458,7 +1287,6 @@ mod tests {
                 lines: vec![lancelot_core::SplitLine {
                     account: kitchen,
                     amount: lancelot_core::Cents::new(21_240).unwrap(),
-                    memo: None,
                     budget_line: None,
                     cost_centre: None,
                 }],
@@ -1479,7 +1307,7 @@ mod tests {
         );
 
         let paid = s
-            .mark_payouts_paid(verein, time::macros::date!(2026 - 06 - 20))
+            .change(|b| b.mark_payouts_paid(verein, time::macros::date!(2026 - 06 - 20)))
             .unwrap();
         assert!(paid.snapshot.payouts.payouts.is_empty());
         assert_eq!(paid.snapshot.persons[0].summary.net.get(), 0);
@@ -1491,7 +1319,7 @@ mod tests {
         let mut s = service(&dir);
         s.create_event(&dir.path().join("e.lancelot"), details("Fest"))
             .unwrap();
-        let bar = s.add_asset("Bar till", AssetType::Cash).unwrap();
+        let bar = s.add(|b| b.add_asset("Bar till", AssetType::Cash)).unwrap();
         let account = bar
             .event
             .snapshot
@@ -1536,7 +1364,9 @@ mod tests {
         assert_eq!((status.opening, status.counted), (None, None));
         assert!(open.snapshot.txns.is_empty());
 
-        let open = s.set_asset_type(bar.id, AssetType::Bank).unwrap();
+        let open = s
+            .change(|b| b.set_asset_type(bar.id, AssetType::Bank))
+            .unwrap();
         assert!(open.snapshot.cash.iter().all(|c| c.account != bar.id));
     }
 
@@ -1566,15 +1396,20 @@ mod tests {
         let closed = s.close_event(vec![accepted.clone()]).unwrap();
         assert!(closed.snapshot.event.closed_at.is_some());
         assert_eq!(closed.snapshot.event.closing_overrides, [accepted]);
-        assert_eq!(s.add_person("Kim").unwrap_err().code, "event_closed");
+        assert_eq!(
+            s.add(|b| b.add_person("Kim", Person::default()))
+                .unwrap_err()
+                .code,
+            "event_closed"
+        );
 
         let target = dir.path().join("entries.csv");
         s.export_transactions_csv(&target).unwrap();
         let csv = std::fs::read_to_string(&target).unwrap();
         assert!(csv.starts_with("\u{feff}Date,Entry,Type,"), "{csv}");
 
-        let reopened = s.reopen_event().unwrap();
+        let reopened = s.change(|b| b.reopen()).unwrap();
         assert!(reopened.snapshot.event.closed_at.is_none());
-        s.add_person("Kim").unwrap();
+        s.add(|b| b.add_person("Kim", Person::default())).unwrap();
     }
 }

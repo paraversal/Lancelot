@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
 use common::mock::{self, Mock};
 use common::*;
 use lancelot_core::*;
@@ -45,8 +47,8 @@ fn result_and_totals_match_the_mockups() {
 fn accounts_and_people_match_the_mockups() {
     let (book, m) = mock_event();
     let l = book.ledger();
-    assert_eq!(l.balance(role(&book, Role::Verein)), eur("1.757"));
-    assert_eq!(l.balance(role(&book, Role::CashBox)), eur("412,90"));
+    assert_eq!(l.balance(asset(&book, "Verein account")), eur("1.757"));
+    assert_eq!(l.balance(asset(&book, "Cash box")), eur("412,90"));
 
     let person = |id| *l.person(id).unwrap();
     assert_eq!(
@@ -80,7 +82,7 @@ fn where_the_money_is_reconciles_to_the_result() {
 #[test]
 fn open_items_are_the_unsettled_people_a_receipt_and_the_cash_box() {
     let (book, m) = mock_event();
-    let open = book.ledger().open_items();
+    let open = book.open_items();
     assert_eq!(
         open,
         vec![
@@ -98,7 +100,7 @@ fn open_items_are_the_unsettled_people_a_receipt_and_the_cash_box() {
             },
             OpenItem::MissingReceipt { txn: m.cups },
             OpenItem::CashDifference {
-                account: role(&book, Role::CashBox),
+                account: asset(&book, "Cash box"),
                 difference: eur("-2,90")
             },
         ]
@@ -111,7 +113,7 @@ fn the_snapshot_carries_every_figure_in_ui_form() {
     let snapshot = EventSnapshot::new(&book);
     assert_eq!(snapshot.totals.result, eur("2.027,50"));
     assert_eq!(snapshot.persons.len(), 4);
-    assert_eq!(snapshot.open_items, book.ledger().open_items());
+    assert_eq!(snapshot.open_items, book.open_items());
     assert!(
         snapshot
             .txns
@@ -138,19 +140,33 @@ fn the_snapshot_carries_every_figure_in_ui_form() {
     assert_eq!(json["openItems"][3]["type"], "missingReceipt");
 }
 
-/// Writes the example event and an empty one as JSON for the UI's development mock backend
-/// (`app/src/lib/api/mock`), like ts-rs writes the types. CI checks that they are up to date.
+/// Writes the example event as JSON for the UI's tests and the `/design` page
+/// (`app/src/lib/api/fixtures`), like ts-rs writes the types. CI checks that it is up to date.
 #[test]
-fn export_snapshots_for_the_ui_mock() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src/lib/api/mock");
+fn export_the_snapshot_for_the_ui() {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/src/lib/api/fixtures");
     let (book, _) = mock_event();
-    for (name, snapshot) in [
-        ("example-event.json", EventSnapshot::new(&book)),
-        ("empty-event.json", EventSnapshot::new(&new_book())),
-    ] {
-        let mut json = serde_json::to_string_pretty(&snapshot).unwrap();
-        json.push('\n');
-        std::fs::write(dir.join(name), json).unwrap();
+    let mut json = serde_json::to_string_pretty(&EventSnapshot::new(&book)).unwrap();
+    json.push('\n');
+    std::fs::write(dir.join("example-event.json"), json).unwrap();
+}
+
+/// What the app edits is what is stored: a typed-in entry rebuilds exactly its lines.
+#[test]
+fn every_entry_of_the_example_shows_in_the_form_that_made_it() {
+    let (book, _) = mock_event();
+    let accounts: BTreeMap<_, _> = book.accounts().map(|a| (a.id, a.clone())).collect();
+    let snapshot = EventSnapshot::new(&book);
+    assert!(!snapshot.txns.is_empty());
+    for view in &snapshot.txns {
+        let entry = view
+            .entry
+            .as_ref()
+            .expect("the example's entries have forms");
+        assert_eq!(entry.kind(), view.txn.kind);
+        assert_eq!(build_lines(entry, &accounts).unwrap(), view.txn.lines);
+        assert_eq!(view.who, Some(entry.who()));
     }
 }
 
@@ -224,7 +240,6 @@ fn the_transactions_csv_has_one_row_per_line() {
             "Account",
             "Account type",
             "Amount",
-            "Memo",
             "Receipt",
             "Notes",
             "Cost centre"
@@ -238,7 +253,7 @@ fn the_transactions_csv_has_one_row_per_line() {
     assert_eq!(
         groceries
             .iter()
-            .map(|r| (r[5], r[6], r[7], r[9]))
+            .map(|r| (r[5], r[6], r[7], r[8]))
             .collect::<Vec<_>>(),
         [
             ("Anna", "Person", "-312,40", "yes"),
@@ -246,9 +261,9 @@ fn the_transactions_csv_has_one_row_per_line() {
         ]
     );
     let cups = rows.iter().find(|r| r[3] == "Cups and ice").unwrap();
-    assert_eq!(cups[9], "no");
+    assert_eq!(cups[8], "no");
     let reimbursed = rows.iter().find(|r| r[3] == "Reimbursement Anna").unwrap();
-    assert_eq!((reimbursed[2], reimbursed[9]), ("Reimbursement", ""));
+    assert_eq!((reimbursed[2], reimbursed[8]), ("Reimbursement", ""));
 
     let en = transactions_csv(&book, NumberFormat::En);
     assert!(en.contains(",Kitchen,Expense,312.40,"), "{en}");

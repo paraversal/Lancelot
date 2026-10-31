@@ -2,7 +2,7 @@
 	// A date as text in the user's format (R-NF-6). Both formats are accepted; while the typed
 	// text differs from how the date is shown, the hint previews it (`= 06.12.2026`).
 	import { untrack } from 'svelte';
-	import { api, ApiError } from '../api';
+	import { api, errorMessage } from '../api';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatDate } from '../format';
 	import Field from './Field.svelte';
@@ -62,7 +62,7 @@
 		} catch (e) {
 			if (mine !== seq) return;
 			parsed = null;
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 			onvalue?.(null);
 		}
 	}

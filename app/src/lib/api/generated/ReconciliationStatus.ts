@@ -8,14 +8,18 @@ import type { ReconciliationId } from "./ReconciliationId";
  */
 export type ReconciliationStatus = { id: ReconciliationId, account: AccountId, date: string, amount: Cents, 
 /**
- * The account's lines up to and including the date.
+ * What the books say by the date: see [`book_figure`].
  */
 computed: Cents, 
+/**
+ * The part of `computed` that the ticket sheets known by the date brought in.
+ */
+fromSheet: Cents, 
 /**
  * `amount − computed`: positive when the statement shows more than the books.
  */
 difference: Cents, 
 /**
- * The Verein account: `amount` and `computed` are net movements, without opening counts.
+ * A net-movement account: `amount` and `computed` leave out opening counts (R-ISO-2).
  */
 movement: boolean, };

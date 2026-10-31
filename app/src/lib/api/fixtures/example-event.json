@@ -7,24 +7,31 @@
     "notes": null,
     "closedAt": null,
     "defaultReimbursementAccount": 1,
-    "closingOverrides": [],
-    "ticketColumns": {
-      "tier": "Ticket",
-      "order": "Order ID",
-      "saleDate": null
-    },
-    "drinks": {
-      "supplier": "Hoffmann",
-      "pricePerStrich": 100
-    }
+    "closingOverrides": []
+  },
+  "ticketColumns": {
+    "tier": "Ticket",
+    "order": "Order ID",
+    "saleDate": null
+  },
+  "ticketSettings": {
+    "enabled": true,
+    "account": 1
+  },
+  "drinkSettings": {
+    "supplier": "Hoffmann",
+    "pricePerStrich": 100,
+    "costCentre": 1,
+    "pfand": 9
   },
   "accounts": [
     {
       "id": 1,
       "kind": "asset",
       "name": "Verein account",
-      "role": "verein",
+      "role": null,
       "assetType": "bank",
+      "netMovement": true,
       "costCentre": null,
       "balance": 175700
     },
@@ -32,8 +39,9 @@
       "id": 2,
       "kind": "asset",
       "name": "Cash box",
-      "role": "cash_box",
+      "role": null,
       "assetType": "cash",
+      "netMovement": false,
       "costCentre": null,
       "balance": 41290
     },
@@ -41,8 +49,9 @@
       "id": 3,
       "kind": "opening",
       "name": "Opening balance",
-      "role": "opening",
+      "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 0
     },
@@ -52,6 +61,7 @@
       "name": "Tickets",
       "role": "tickets",
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 652750
     },
@@ -61,6 +71,7 @@
       "name": "Drink donations",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": 1,
       "balance": 81250
     },
@@ -70,6 +81,7 @@
       "name": "General",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 5000
     },
@@ -79,6 +91,7 @@
       "name": "Kitchen",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 210000
     },
@@ -88,6 +101,7 @@
       "name": "Drinks",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": 1,
       "balance": 45200
     },
@@ -95,8 +109,9 @@
       "id": 9,
       "kind": "expense",
       "name": "Pfand",
-      "role": "pfand",
+      "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": 1,
       "balance": 3200
     },
@@ -106,6 +121,7 @@
       "name": "Mobility",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 0
     },
@@ -115,6 +131,7 @@
       "name": "Venue",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 180000
     },
@@ -124,6 +141,7 @@
       "name": "Tech",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 61000
     },
@@ -133,6 +151,7 @@
       "name": "General",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 36850
     },
@@ -142,6 +161,7 @@
       "name": "Anna",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 21240
     },
@@ -151,6 +171,7 @@
       "name": "Malte",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 11000
     },
@@ -160,6 +181,7 @@
       "name": "Bob",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": -18000
     },
@@ -169,6 +191,7 @@
       "name": "Clara",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 0
     }
@@ -313,14 +336,12 @@
         {
           "account": 4,
           "amount": -622750,
-          "memo": null,
           "budgetLine": 1,
           "costCentre": null
         },
         {
           "account": 1,
           "amount": 622750,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -329,7 +350,22 @@
         "type": "manual"
       },
       "amount": 622750,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "income",
+        "destination": 1,
+        "lines": [
+          {
+            "account": 4,
+            "amount": 622750,
+            "budgetLine": 1,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 1,
+      "flow": "in",
+      "needsReceipt": false
     },
     {
       "id": 2,
@@ -342,14 +378,12 @@
         {
           "account": 4,
           "amount": -30000,
-          "memo": null,
           "budgetLine": 1,
           "costCentre": null
         },
         {
           "account": 16,
           "amount": 30000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -358,7 +392,22 @@
         "type": "manual"
       },
       "amount": 30000,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "income",
+        "destination": 16,
+        "lines": [
+          {
+            "account": 4,
+            "amount": 30000,
+            "budgetLine": 1,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 16,
+      "flow": "in",
+      "needsReceipt": false
     },
     {
       "id": 3,
@@ -371,14 +420,12 @@
         {
           "account": 5,
           "amount": -81250,
-          "memo": null,
           "budgetLine": 2,
           "costCentre": 1
         },
         {
           "account": 2,
           "amount": 81250,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -387,7 +434,22 @@
         "type": "manual"
       },
       "amount": 81250,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "income",
+        "destination": 2,
+        "lines": [
+          {
+            "account": 5,
+            "amount": 81250,
+            "budgetLine": 2,
+            "costCentre": 1
+          }
+        ]
+      },
+      "who": 2,
+      "flow": "in",
+      "needsReceipt": false
     },
     {
       "id": 4,
@@ -400,14 +462,12 @@
         {
           "account": 6,
           "amount": -5000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 2,
           "amount": 5000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -416,7 +476,22 @@
         "type": "manual"
       },
       "amount": 5000,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "income",
+        "destination": 2,
+        "lines": [
+          {
+            "account": 6,
+            "amount": 5000,
+            "budgetLine": null,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 2,
+      "flow": "in",
+      "needsReceipt": false
     },
     {
       "id": 5,
@@ -429,21 +504,18 @@
         {
           "account": 1,
           "amount": -45200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 8,
           "amount": 42000,
-          "memo": null,
           "budgetLine": 6,
           "costCentre": 1
         },
         {
           "account": 9,
           "amount": 3200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": 1
         }
@@ -462,7 +534,28 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 1,
+        "lines": [
+          {
+            "account": 8,
+            "amount": 42000,
+            "budgetLine": 6,
+            "costCentre": 1
+          },
+          {
+            "account": 9,
+            "amount": 3200,
+            "budgetLine": null,
+            "costCentre": 1
+          }
+        ]
+      },
+      "who": 1,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 6,
@@ -475,14 +568,12 @@
         {
           "account": 1,
           "amount": -180000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 11,
           "amount": 180000,
-          "memo": null,
           "budgetLine": 3,
           "costCentre": null
         }
@@ -501,7 +592,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 1,
+        "lines": [
+          {
+            "account": 11,
+            "amount": 180000,
+            "budgetLine": 3,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 1,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 7,
@@ -514,14 +620,12 @@
         {
           "account": 1,
           "amount": -50000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 12,
           "amount": 50000,
-          "memo": null,
           "budgetLine": 7,
           "costCentre": null
         }
@@ -540,7 +644,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 1,
+        "lines": [
+          {
+            "account": 12,
+            "amount": 50000,
+            "budgetLine": 7,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 1,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 8,
@@ -553,14 +672,12 @@
         {
           "account": 1,
           "amount": -109850,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 109850,
-          "memo": null,
           "budgetLine": 4,
           "costCentre": null
         }
@@ -579,7 +696,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 1,
+        "lines": [
+          {
+            "account": 7,
+            "amount": 109850,
+            "budgetLine": 4,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 1,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 9,
@@ -592,14 +724,12 @@
         {
           "account": 1,
           "amount": -22500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 13,
           "amount": 22500,
-          "memo": null,
           "budgetLine": 8,
           "costCentre": null
         }
@@ -618,7 +748,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 1,
+        "lines": [
+          {
+            "account": 13,
+            "amount": 22500,
+            "budgetLine": 8,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 1,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 10,
@@ -631,21 +776,18 @@
         {
           "account": 2,
           "amount": -39125,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 34275,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         },
         {
           "account": 13,
           "amount": 4850,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -664,7 +806,28 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 2,
+        "lines": [
+          {
+            "account": 7,
+            "amount": 34275,
+            "budgetLine": 5,
+            "costCentre": null
+          },
+          {
+            "account": 13,
+            "amount": 4850,
+            "budgetLine": null,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 2,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 11,
@@ -677,14 +840,12 @@
         {
           "account": 2,
           "amount": -22635,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 22635,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         }
@@ -703,7 +864,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 2,
+        "lines": [
+          {
+            "account": 7,
+            "amount": 22635,
+            "budgetLine": 5,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 2,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 12,
@@ -716,14 +892,12 @@
         {
           "account": 14,
           "amount": -31240,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 31240,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         }
@@ -742,7 +916,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 14,
+        "lines": [
+          {
+            "account": 7,
+            "amount": 31240,
+            "budgetLine": 5,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 14,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 13,
@@ -755,14 +944,12 @@
         {
           "account": 15,
           "amount": -11000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 12,
           "amount": 11000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -781,7 +968,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 15,
+        "lines": [
+          {
+            "account": 12,
+            "amount": 11000,
+            "budgetLine": null,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 15,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 14,
@@ -794,14 +996,12 @@
         {
           "account": 16,
           "amount": -12000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 12000,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         }
@@ -820,7 +1020,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 16,
+        "lines": [
+          {
+            "account": 7,
+            "amount": 12000,
+            "budgetLine": 5,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 16,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 15,
@@ -833,14 +1048,12 @@
         {
           "account": 17,
           "amount": -9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 13,
           "amount": 9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -859,7 +1072,22 @@
           "sha256": "00",
           "addedAt": "2026-06-14T18:00:00Z"
         }
-      ]
+      ],
+      "entry": {
+        "type": "expense",
+        "payer": 17,
+        "lines": [
+          {
+            "account": 13,
+            "amount": 9500,
+            "budgetLine": null,
+            "costCentre": null
+          }
+        ]
+      },
+      "who": 17,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 16,
@@ -872,14 +1100,12 @@
         {
           "account": 2,
           "amount": -3200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 8,
           "amount": 3200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": 1
         }
@@ -888,7 +1114,22 @@
         "type": "manual"
       },
       "amount": 3200,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "expense",
+        "payer": 2,
+        "lines": [
+          {
+            "account": 8,
+            "amount": 3200,
+            "budgetLine": null,
+            "costCentre": 1
+          }
+        ]
+      },
+      "who": 2,
+      "flow": "out",
+      "needsReceipt": true
     },
     {
       "id": 17,
@@ -901,14 +1142,12 @@
         {
           "account": 14,
           "amount": -20000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 2,
           "amount": 20000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -917,7 +1156,16 @@
         "type": "manual"
       },
       "amount": 20000,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "transfer",
+        "from": 14,
+        "to": 2,
+        "amount": 20000
+      },
+      "who": 14,
+      "flow": "moved",
+      "needsReceipt": false
     },
     {
       "id": 18,
@@ -930,14 +1178,12 @@
         {
           "account": 1,
           "amount": -30000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 14,
           "amount": 30000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -946,7 +1192,17 @@
         "type": "manual"
       },
       "amount": 30000,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "settle",
+        "person": 14,
+        "account": 1,
+        "amount": 30000,
+        "direction": "reimburse"
+      },
+      "who": 14,
+      "flow": "moved",
+      "needsReceipt": false
     },
     {
       "id": 19,
@@ -959,14 +1215,12 @@
         {
           "account": 1,
           "amount": -9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 17,
           "amount": 9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -975,7 +1229,17 @@
         "type": "manual"
       },
       "amount": 9500,
-      "attachments": []
+      "attachments": [],
+      "entry": {
+        "type": "settle",
+        "person": 17,
+        "account": 1,
+        "amount": 9500,
+        "direction": "reimburse"
+      },
+      "who": 17,
+      "flow": "moved",
+      "needsReceipt": false
     }
   ],
   "totals": {
@@ -1023,6 +1287,7 @@
       "date": "2026-06-30",
       "amount": 175700,
       "computed": 175700,
+      "fromSheet": 0,
       "difference": 0,
       "movement": true
     }
@@ -1408,8 +1673,7 @@
   "costCentres": [
     {
       "id": 1,
-      "name": "Drinks",
-      "role": "drinks"
+      "name": "Drinks"
     }
   ],
   "drinkProducts": [

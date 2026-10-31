@@ -9,8 +9,7 @@ use ts_rs::TS;
 
 use crate::ledger::Ledger;
 use crate::model::{
-    Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentre, CostCentreId, Role, Txn,
-    TxnId,
+    Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentre, CostCentreId, Txn, TxnId,
 };
 use crate::money::{Cents, MoneyError};
 
@@ -231,10 +230,7 @@ impl Budget {
 /// The ticket categories are generated from what was sold (R-TKT-6, R-TKT-15). Their forecast is
 /// what is booked: an estimate on top would count the same money twice.
 fn follows_the_tickets(account: &Account) -> bool {
-    matches!(
-        account.role,
-        Some(Role::Tickets | Role::TicketFees | Role::TicketRefunds)
-    )
+    account.role.is_some()
 }
 
 fn difference(income: Figures, expense: Figures) -> Result<Figures, MoneyError> {

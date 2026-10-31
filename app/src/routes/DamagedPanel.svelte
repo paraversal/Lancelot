@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A file that cannot be opened: what the integrity check found, and its backups.
 	import { goto } from '$app/navigation';
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
 	import type { BackupInfo } from '#lib/api/generated/BackupInfo.ts';
 	import { chooseNewEventFile } from '#lib/api/dialogs.ts';
 	import Button from '#lib/components/Button.svelte';
@@ -36,7 +36,7 @@
 			session.update(await api.restoreBackup(path, b.path, target));
 			await goto('/event/overview');
 		} catch (e) {
-			failure = e instanceof ApiError ? e.message : String(e);
+			failure = errorMessage(e);
 		}
 	}
 
@@ -44,7 +44,9 @@
 </script>
 
 <Panel title={fileName} {onclose}>
-	<span class="state"><Icon name="warn" size={14} />Damaged</span>
+	<span class="state"
+		><Icon name="warn" size={14} />{error.code === 'damaged' ? 'Damaged' : 'Cannot be opened'}</span
+	>
 	{#if issues.length}
 		<section>
 			<h3>Issues</h3>
@@ -68,7 +70,7 @@
 			</ul>
 		</section>
 	{/if}
-	{#if failure}<p class="error">{failure}</p>{/if}
+	{#if failure}<p class="form-error">{failure}</p>{/if}
 </Panel>
 
 <style>
@@ -117,11 +119,5 @@
 		height: 40px;
 		border-bottom: 1px solid var(--color-rule);
 		font-size: 13px;
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

@@ -1,10 +1,7 @@
 //! Tauri shell: command handlers, dialogs and the window ↔ open-event mapping.
 //! No money logic lives here; everything goes through `lancelot_core`.
 
-mod api;
 mod commands;
-mod service;
-mod settings;
 
 use std::sync::Mutex;
 
@@ -12,7 +9,7 @@ use tauri::menu::{Menu, MenuItemBuilder, SubmenuBuilder};
 use tauri::{App, Emitter, Manager};
 
 use commands::AppState;
-use service::Service;
+use lancelot_service::Service;
 
 fn attachment_response(app: &tauri::AppHandle, path: &str) -> tauri::http::Response<Vec<u8>> {
     use tauri::http::{Response, StatusCode, header};
@@ -127,6 +124,7 @@ pub fn run() {
             commands::backups_list,
             commands::backup_restore,
             commands::amount_parse,
+            commands::ticket_share,
             commands::date_parse,
             commands::txn_save,
             commands::txn_delete,
@@ -134,6 +132,7 @@ pub fn run() {
             commands::account_rename,
             commands::asset_add,
             commands::asset_set_type,
+            commands::asset_set_net_movement,
             commands::counts_set,
             commands::reconciliation_add,
             commands::reconciliation_update,
@@ -156,9 +155,14 @@ pub fn run() {
             commands::tier_update,
             commands::tier_delete,
             commands::ticket_columns_set,
+            commands::tickets_set_enabled,
+            commands::ticket_account_set,
             commands::tickets_preview,
             commands::tickets_import,
             commands::import_set_date,
+            commands::import_delete_preview,
+            commands::import_delete,
+            commands::account_delete,
             commands::manual_sale_add,
             commands::manual_sale_update,
             commands::manual_sale_delete,

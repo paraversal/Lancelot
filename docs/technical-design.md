@@ -1,6 +1,6 @@
 # Lancelot — Technical design
 
-Status: draft v0.1 (milestone M0). It implements [requirements v0.7](requirements.md) and follows the [roadmap](roadmap.md). This document covers the MVP (M1–M5) in detail. Phase 2 and 3 appear only where they affect today's decisions.
+Status: v0.2. It implements [requirements v0.10](requirements.md) and follows the [roadmap](roadmap.md). It records decisions and invariants that the code does not explain by itself. For module layout, signatures, the commands and the routes, read the code. The refactoring on the roadmap will change parts of §3 and §5, which are updated when that stage lands.
 
 ## 1. Components
 
@@ -11,7 +11,7 @@ Status: draft v0.1 (milestone M0). It implements [requirements v0.7](requirement
                 │ EventSnapshot (JSON)          │ commands (invoke)
 ┌───────────────┴───────────── app/src-tauri/ ──▼────────────────────────┐
 │ Tauri 2 shell: command handlers, file dialogs, drag-and-drop,          │
-│ attachment protocol, app settings, window ↔ open event                 │
+│ attachment protocol. crates/lancelot-service: app settings, open event │
 └───────────────▲───────────────────────────────┬────────────────────────┘
                 │                               │
 ┌───────────────┴──────────── crates/lancelot-core/ ─▼───────────────────┐
@@ -23,59 +23,54 @@ Status: draft v0.1 (milestone M0). It implements [requirements v0.7](requirement
 ```
 
 **Rules:**
-- No arithmetic on money in TypeScript. The UI receives every figure from the core, already computed, as integer cents. It only *formats* them.
+
+- No arithmetic on money in TypeScript. The UI receives every figure from the core, already computed, as integer cents. It only _formats_ them.
 - One window holds one open event. App-wide settings live outside the event files (§6.4).
 
 ## 2. Money
 
 ### 2.1 Representation
+
 - `Cents(i64)` is a newtype with `checked_add`, `checked_sub` and `checked_mul(i64)`. An overflow is a `DomainError::Overflow`, never a wrap.
 - It crosses the IPC boundary as a JSON number. All plausible values are far below 2⁵³, and the core rejects any amount above `MAX_AMOUNT = 10¹²` cents (10 billion €).
 
 ### 2.2 Rounding and splitting (R-COR-3)
 
 **`allocate(total, n)`** splits `total` into `n` parts:
+
 - `base = total / n`, truncated towards zero.
 - `r = |total − base·n|`.
 - The first `r` parts get one extra cent, with the sign of `total`.
 
 Examples:
+
 - `allocate(10,00 €, 3)` → `3,34 · 3,33 · 3,33`
 - `allocate(−0,05 €, 2)` → `−0,03 · −0,02`
 
 **`percent_bp(amount, bp)`** computes `amount × bp / 10 000` and rounds half away from zero. For the non-negative amounts where it is used, that is the same as rounding half-up.
+
 - In integers: `(amount·bp + 5 000) / 10 000` for `amount ≥ 0`, and symmetrical for negative amounts.
 - Examples:
   - `percent_bp(25,00 €, 250)` → `0,63 €` (exactly 0,625)
   - `percent_bp(32,00 €, 250)` → `0,80 €`
 
 **Per-ticket rule** (R-TKT-10, R-TKT-15): the fee and the refund are computed for **one ticket**, then multiplied by the count.
+
 - Example: fee for 128 × Regular at 32 € with a 2.5 % fee = `128 × 0,80 €` = `102,40 €`.
 - Example: refund for 3 × Early Bird at 25 € with a 50 % refund = `3 × percent_bp(25,00 €, 5000)` = `3 × 12,50 €` = `37,50 €`.
+- `ticket_share` is the one place for this rule. The forms preview through the command of the same name, and the UI has no rounding of its own.
 
 **Quantity × unit price** (budget lines, drink products) is an exact multiplication, so no rounding is needed.
 
 ### 2.3 Amount input (R-NF-8)
 
-```rust
-pub enum NumberFormat { De /* 1.234,56 € · 31.12.2026 */, En /* €1,234.56 · 2026-12-31 */ }
-
-pub fn parse_amount(input: &str, fmt: NumberFormat, allow_negative: bool)
-    -> Result<Parsed, AmountError>;
-pub struct Parsed { pub cents: Cents, pub ambiguous: bool }
-pub enum AmountError { Empty, InvalidCharacter, BadGrouping, TooManyDecimals,
-                       MisplacedSign, NegativeNotAllowed, TooLarge }
-pub enum SignStyle { Plain /* −12,50 € */, Always /* +12,50 € */, Magnitude /* 12,50 € */ }
-
-pub fn format_amount(c: Cents, fmt: NumberFormat, sign: SignStyle) -> String;
-```
-
 The parser works in these steps:
+
 1. Strip spaces and `€`. Accept one leading `-`, `−` or `+`. A sign anywhere else is `MisplacedSign`.
 2. Find the decimal separator: the last `.` or `,` that is followed by 1–2 digits and nothing else.
 3. Treat every other separator as a thousands separator. It must be the other character, the groups must be 3 digits, and the first group 1–3 digits.
 4. Four or more digits after the last separator, or three digits after a last separator that differs from the others (`1.234,567`), are `TooManyDecimals`.
-5. A single separator followed by exactly 3 digits is *ambiguous* and read according to `fmt`:
+5. A single separator followed by exactly 3 digits is _ambiguous_ and read according to `fmt`:
    - If it is the thousands separator of `fmt` (`1.234` in De, `1,234` in En), the amount is accepted and `ambiguous = true`, so the preview is shown in `attention`.
    - If it is the decimal separator of `fmt` (`1,234` in De, `1.234` in En), it means three decimals and is rejected as `TooManyDecimals`. A German user who types `1,234` almost certainly meant `1,23` or `12,34`, and reading it as a thousand euros would be a 1000× error.
 
@@ -86,210 +81,84 @@ The parser works in these steps:
 ### 3.1 Sign convention
 
 Every line stores a **signed** amount: money leaving an account is negative, money arriving is positive. The arrows in requirements §4.1 map directly onto this:
+
 - `Person: Anna → Expense: Kitchen, 50 €` becomes the lines `Anna −50,00` and `Kitchen +50,00`.
 
 The **raw balance** of an account is the sum of its lines. The sum over all accounts is always 0.
 
 The **displayed balance** converts the raw balance according to the account kind:
 
-| Kind | Displayed balance | Meaning when positive |
-|---|---|---|
-| asset | raw | money is sitting there |
-| expense | raw | spent |
-| income | −raw | earned |
-| person | −raw | **the event owes the person** (net advances) |
-| opening | −raw | opening counts brought in |
+| Kind    | Displayed balance | Meaning when positive                        |
+| ------- | ----------------- | -------------------------------------------- |
+| asset   | raw               | money is sitting there                       |
+| expense | raw               | spent                                        |
+| income  | −raw              | earned                                       |
+| person  | −raw              | **the event owes the person** (net advances) |
+| opening | −raw              | opening counts brought in                    |
 
 Check against Bob from requirements §4.1:
+
 - He received 300 € of tickets: line `+300`.
 - He advanced 120 € for food: line `−120`.
 - Raw balance `+180`, displayed `−180,00 €`, which means "Bob owes 180,00 €". ✓
 
-### 3.2 Schema (MVP, schema version 1)
+### 3.2 Schema
 
-The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). Until v0.1.0 ships it is edited in place: files from earlier development builds stop opening. From v0.1.0 on, every change is a new migration. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). The format is frozen: this file is never edited again, and every change is a new migration, added to `MIGRATIONS` with `SCHEMA_VERSION` raised. Files from development builds before the freeze don't open. [`fixtures/events/sample-v1.lancelot`](../fixtures/events/sample-v1.lancelot) proves it: a frozen file with rows in every table, kept byte for byte. [`tests/sample_file.rs`](../crates/lancelot-core/tests/sample_file.rs) opens a copy with its figures written out, keeps working on it, and fails if a new file's schema differs from the migrated sample's. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
-| Table | Holds |
-|---|---|
-| `meta` | Key/value pairs: `event_uuid`, `created_at`, `created_by`, and the `next_*_id` of accounts, transactions, attachments, budget lines, tiers, imports and manual sales. Ids are never reused, so the change log stays unambiguous. |
-| `event` | Exactly one row: details, `closed_at` (set while the event is closed), default reimbursement account, the closing overrides as JSON, and the ticket sheet's column names (R-TKT-3). |
-| `account` | `id`, `kind`, `name`, an optional unique `role` (`verein`, `cash_box`, `opening`, `tickets`, `ticket_fees` once a tier has a fee, and `ticket_refunds` with the first refund), and `asset_type` (`bank`, `cash`), set exactly for assets. Every cash account needs a closing count before the event can close. |
-| `person` | Bank and contact details, 1:1 with an account of kind `person`. |
-| `txn` | Kind, date, description, counterparty, notes, `origin` (`manual`, `ticket_import`, `ticket_sale` or `ticket_refund`) with `origin_id` (the tier, the manual sale or the cancellation), and the `sealed` flag. |
-| `line` | `txn_id`, `position`, `account_id`, a signed `amount` that is never 0, and a memo. |
-| `closing_count` | One per asset account at most: date and counted amount (R-ISO-3). Opening counts are `opening` transactions; the count panel keeps one per account. |
-| `attachment` | File name, type, size, SHA-256, `added_at`, and the bytes as a BLOB. |
-| `ticket_tier`, `ticket_tier_alias` | Name, price, fee in basis points and quota; the sheet's other names for the tier, in order (R-TKT-1, R-TKT-2). |
-| `ticket_import`, `ticket_import_row` | One row per import: file name, SHA-256, `imported_at` and the date it stands for; its tickets per (order ID, tier). The file is not stored (R-TKT-5, R-TKT-17). |
-| `ticket_manual_sale` | Tier, count, the person who took the money, date and reference (R-TKT-7). |
-| `ticket_cancellation` | The resolutions of conflicts and the manual cancellations (R-TKT-13, R-TKT-14): tier, count, the order or the manual sale, how many are confirmed as gone from the sheet, a note, and the refund %, date and payer. A correction has no refund terms. Conflicts themselves are derived from the imports. |
-| `change_log` | `at`, `entity`, `entity_id`, `op` (`create`, `update`, `delete`, `close`, `reopen`) and the before and after values as JSON (R-TX-6). |
-
-Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents.
+Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents. Ids are never reused, so the change log stays unambiguous.
 
 **Why the person data is separate:** a person is an account of kind `person`, because that is how their net balance falls out of the ledger. The bank details live in `person`, so the `account` table stays uniform.
 
-**Defaults on create:**
+### 3.3 Enforcing balance (R-COR-2)
 
-| Kind | Accounts | Role |
-|---|---|---|
-| asset (bank) | `Verein account` | `verein` |
-| asset (cash) | `Cash box` | `cash_box` |
-| opening | `Opening balance` | `opening` |
-| income | Tickets, Drink donations, General | |
-| expense | Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General | |
+SQLite can neither check an aggregate in a CHECK constraint nor defer a trigger until commit, so balance is not a database rule. It is checked in three places: when a transaction is built, before each commit, because `Store::change` reads the write back into a `Book` and commits only if it equals the one written (§4.1), and whenever a file is loaded. The column-level SQL CHECKs stay.
 
-The default reimbursement account is the Verein account.
+**The rules, checked in the `Book` and again by the integrity check.** `TxnKind` is only a label:
 
-### 3.3 Enforcing balance in the database (R-COR-2)
+- A transaction has at least two non-zero lines on known accounts, summing to zero.
+- The `opening` account appears only in `opening` transactions, which are that account's line and one asset line.
+- `refund` comes only from a cancellation.
+- No new transactions are allowed when the event is closed.
 
-SQLite can neither check an aggregate in a CHECK constraint nor defer a trigger until commit. The schema therefore uses a **seal**:
+**The forms are stricter than the file** (`build_lines`): an expense pays one or more expense lines from an asset or person, and income is the reverse. A settle has one person and one asset, with its direction stored as the sign of the lines. A transfer goes from any account to any other except the opening account. `entry_of` is their reverse: a stored transaction no form can show has no `entry` and opens read-only.
 
-```sql
--- a transaction may only be sealed if its lines sum to 0 and there are at least two
-CREATE TRIGGER txn_seal_check BEFORE UPDATE OF sealed ON txn
-WHEN NEW.sealed = 1 BEGIN
-  SELECT RAISE(ABORT, 'unbalanced transaction')
-  WHERE (SELECT COALESCE(SUM(amount), 0) FROM line WHERE txn_id = NEW.id) <> 0
-     OR (SELECT COUNT(*) FROM line WHERE txn_id = NEW.id) < 2;
-END;
+### 3.4 Generated data and other files
 
--- lines of a sealed transaction cannot change
-CREATE TRIGGER line_insert_sealed BEFORE INSERT ON line
-WHEN (SELECT sealed FROM txn WHERE id = NEW.txn_id) = 1
-BEGIN SELECT RAISE(ABORT, 'transaction is sealed'); END;
--- … the same for UPDATE and DELETE, and transactions must be inserted unsealed
-```
+**Ticket income** (R-TKT-6, R-TKT-7) is generated by the `Book` after every change: one `income` transaction per tier of the latest import (the one with the latest date) (`Tickets −gross`, `Ticket fees +fee` when there is one, the ticket account `+net`) and one per manual sale (`Tickets →` its destination). A refund is one more, of kind `refund`: `Ticket refunds +refund`, payer `−refund`, per cancellation (R-TKT-15). The income of a tier counts its cancelled tickets that left the sheet too. Each keeps its id while its tier, sale or cancellation exists, so attachments and links stay. `txn.origin` marks them; `save_txn` and `delete_txn` refuse them. The tickets are the source of truth and the rows only keep the file readable without Lancelot (R-NF-4): opening a file regenerates them and writes any difference with its change log entries, after the backup. Changed money is reported as a warning, changed wording is not. `read_book` keeps the result in memory only.
 
-Every write of a transaction is part of one SQL transaction with these steps:
-1. Unseal the transaction (or insert it unsealed).
-2. Replace its lines.
-3. Seal it.
-4. Write the change log entry.
-5. Run the quick integrity check, and commit only if it passes.
-
-Deleting a transaction also unseals it first, so the cascade can remove its lines.
-
-The domain layer has already checked the balance before this. The trigger is the second line of defence. The integrity check also reports any transaction with `sealed = 0`, because that could only exist after a crash outside a transaction, which should be impossible.
-
-**Further rules, checked in the domain layer and again by the integrity check:**
-- An `opening` account appears only in `opening` transactions.
-- A `settle` transaction has exactly one person line and one asset line. Its direction (reimburse or repay) is chosen explicitly and stored as the sign of the lines.
-- An `expense` transaction has one source (asset or person) and one or more expense lines.
-- An `income` transaction has one or more income lines and one destination (asset or person).
-- A `transfer` transaction has exactly two lines: from an asset or person account, to an asset account. Money going to a person is always a `settle`.
-- No new transactions are allowed when the event state is `closed`.
-
-### 3.4 Phase 2 tables (outline only)
-
-These are added by migrations; the names are fixed now so the MVP code does not paint us into a corner. The budget (M6) and the ticket tables of M7 came before v0.1.0, so they are in the initial schema.
-- `tally`.
-
-Cost centres and drink records (M9) also came before v0.1.0, so they are in the initial schema too: `cost_centre`, `drink_product`, `cost_centre_id` on `line`, `budget_line` and `account` (what a category's new lines start with), and `drink_supplier` and `price_per_strich` on `event`. So did `reconciliation` (M10): one row per account and date, whose amount for the Verein account is its net movement.
+**Reconciliation** (M10) has one row per account and date. Its amount on a net-movement account is the net movement. Closing counts and statements are compared through one function, `book_figure` in `ledger.rs`. Generated ticket income stands for money that came in over time but carries the date of the latest import, so on the ticket account that function leaves those lines out and takes the income of the sheets known by the date instead. On a net-movement account it leaves out opening counts. A count may be below zero only on a bank account.
 
 **Other event files** (R-EVT-3, R-ISO-4) are read with `store::read_book`: read-only, without the lock, and refused as `already_open` while another window holds them. It cannot migrate, so a second schema version must make it migrate a copy; a compile-time assert is the reminder. `Book::from_template` keeps the source's ids, which only mean something within a file; `Book::copy_from` gives what it adds new ones.
 
-**Ticket income** (R-TKT-6, R-TKT-7) is generated by the `Book` after every change: one `income` transaction per tier of the latest import (the one with the latest date) (`Tickets −gross`, `Ticket fees +fee` when there is one, `Verein +net`) and one per manual sale (`Tickets → person`). A refund is one more: `Ticket refunds +refund`, payer `−refund`, per cancellation (R-TKT-15). The income of a tier counts its cancelled tickets that left the sheet too. Each keeps its id while its tier, sale or cancellation exists, so attachments and links stay. `txn.origin` marks them; `save_txn` and `delete_txn` refuse them. Loading a file regenerates them and refuses the file if they differ.
-
 ## 4. Core crate
-
-```
-crates/lancelot-core/src/
-  lib.rs
-  money.rs       Cents, allocate, percent_bp
-  amount.rs      parse_amount, format_amount, NumberFormat
-  iban.rs        normalise, validate (mod 97), format in groups of four
-  model.rs       AccountKind, Account, Person, Txn, Line, TxnKind, Event, ids
-  drinks.rs      commission records, cost per drink, the check of the supplier invoice
-  entry.rs       TxnDraft / Entry → balanced lines (expense, income, transfer, settle, opening)
-  book.rs        Book: the event in memory; every change is checked on a copy, then kept
-    tickets.rs     tiers, imports, manual sales and the ticket income they generate
-  tickets.rs     tier rules, import preview (changes per tier and per order), conflicts, ticket figures
-  sales.rs       sales over time from one source of dated steps, fed by the import snapshots (R-TKT-8); the projected result, the estimate to break even and the places left (R-TKT-9)
-  sheet.rs       reads the configured columns of a ticket sheet (.ods, .xlsx, .csv)
-  ledger.rs      Ledger: balances, person summaries, totals, where the money is, open items
-  store/         Store: the event file (rusqlite)
-    mod.rs         create/open, locking, migrations, commands, attachments
-    read.rs        file → BookParts
-    write.rs       difference between two books → rows and change log entries
-    backup.rs      VACUUM INTO backups, pruning, listing
-    codec.rs       dates, timestamps, enums as text
-  integrity.rs   check(&Connection, Depth) -> Report
-  error.rs       DomainError
-  export/        csv (payout list, transactions) and pdf, from M4
-```
 
 ### 4.1 Commands and queries
 
 `Book` holds the whole event in memory and enforces every domain rule. Each change is applied to a copy, the `Ledger` is recomputed, and the copy replaces the original only if both succeed. A closed event rejects every change except reopening.
 
-`Store` holds the open file and a `Book`. For each command it:
+`Store` holds the open file and a `Book`. A command is a closure over the `Book`, passed to `Store::change`, which:
+
 1. applies the command to a copy of the `Book`;
 2. writes the difference between the two books in one SQL transaction, with one change log entry per changed row;
-3. runs the quick integrity check inside that transaction;
-4. commits, and only then keeps the copy.
+3. reads the file back inside that transaction and compares it with the copy, including the generated entries as stored, since loading regenerates them;
+4. commits, which also enforces the foreign keys, and only then keeps the copy.
 
-Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
+A command therefore lives in `Book`, whatever its size, and a new one needs a Tauri command, an API wrapper and a line in the dev bridge. `Store` has its own methods only where a command needs the clock or bytes from outside the book: closing, importing a sheet and attaching files. `Service::change` wraps `Store::change` and returns the new state; `Service::add` also returns a new account's id.
 
-```rust
-impl Book {
-    pub fn new(details: EventDetails) -> Result<Book>;      // default accounts and categories
-    pub fn add_account(&mut self, kind: AccountKind, name: &str) -> Result<AccountId>;
-    pub fn rename_account(&mut self, id: AccountId, name: &str) -> Result<()>;
-    pub fn add_person(&mut self, name: &str, person: Person) -> Result<AccountId>;
-    pub fn update_person(&mut self, id: AccountId, name: &str, person: Person) -> Result<()>;
-    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved>;  // Saved { id, warnings }
-    pub fn delete_txn(&mut self, id: TxnId) -> Result<Txn>;
-    pub fn update_event(&mut self, details: EventDetails) -> Result<()>;
-    pub fn set_default_reimbursement_account(&mut self, id: AccountId) -> Result<()>;
-    pub fn close(&mut self, overrides: Vec<BlockerOverride>) -> Result<()>;  // R-SET-7
-    pub fn reopen(&mut self);
-    pub fn ledger(&self) -> &Ledger;                         // always up to date
-}
-```
-
-```rust
-impl Store {
-    pub fn create(path: &Path, details: EventDetails, options: StoreOptions) -> Result<(Store, Report)>;
-    pub fn open(path: &Path, options: StoreOptions) -> Result<(Store, Report)>;
-
-    // commands: the Book's, plus attachments and closing counts; each one SQL transaction
-    pub fn save_txn(&mut self, draft: &TxnDraft, id: Option<TxnId>) -> Result<Saved>;
-    pub fn delete_txn(&mut self, id: TxnId) -> Result<()>;
-    pub fn add_attachment(&mut self, txn: TxnId, filename: &str, data: &[u8]) -> Result<AttachmentId>;
-    pub fn remove_attachment(&mut self, id: AttachmentId) -> Result<()>;
-    pub fn set_closing_count(&mut self, account: AccountId, date: Date, amount: Cents) -> Result<()>;
-    pub fn clear_closing_count(&mut self, account: AccountId) -> Result<()>;
-    // … add_account, rename_account, add_person, update_person, update_event,
-    //   set_default_reimbursement_account, close, reopen
-
-    // queries
-    pub fn book(&self) -> &Book;                      // with its always-current Ledger
-    pub fn attachment_data(&self, id: AttachmentId) -> Result<Vec<u8>>;
-    pub fn change_log(&self, limit: usize) -> Result<Vec<ChangeLogEntry>>;
-    pub fn check_integrity(&self) -> Result<Report>;  // full check, on demand
-    pub fn backup_now(&mut self) -> Result<PathBuf>;
-}
-```
+Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Foreign keys are deferred during the write, so each table is handled in one place and in any order. Only checkpoints keep an order of their own, because a checkpoint can take the date another one just left. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
 
 The settle direction is explicit, and the UI pre-fills it from the person's balance. Deriving it from the balance would let an edit to an older transaction silently turn a reimbursement into a repayment.
 
 `Ledger` is a pure value computed from the accounts and transactions. It holds:
+
 - `raw_balance(account)` and the displayed `balance(account)`.
 - `person(p)` with these figures:
   - `advanced`: money that left the person in non-settle transactions.
   - `held`: money that reached the person in non-settle transactions.
   - `reimbursed` and `repaid`: the person's settle transactions in each direction.
   - `net = advanced − held − reimbursed + repaid`. A positive value means the event owes the person.
-- `income_total()`, `expense_total()` and `result()` (income − expense). Category totals are the displayed balances of the income and expense accounts.
-- `where_the_money_is()`, which splits the result into:
-  - asset accounts,
-  - money held by people (negative person balances),
-  - money owed to people (positive person balances),
-  - minus the opening balance.
-
-  These always sum to `result()`. This is a property test.
-- `open_items()`: non-zero person balances. M1c adds expense transactions without an attachment and the cash box closing count (missing, or with a discrepancy). M7c adds ticket conflicts; M10 adds reconciliation mismatches, one per checkpoint.
+- `where_the_money_is()` always sums to `result()`, which is a property test.
 
 ### 4.2 Errors
 
@@ -299,55 +168,31 @@ Settling more than the open balance is not an error, because partial and late co
 
 ### 4.3 Tests (R-COR-6)
 
-- **Unit tests** for every module.
-- **Property tests** with `proptest`:
-  - all raw balances sum to 0 after any sequence of valid drafts;
-  - `allocate` parts sum to the total and differ by at most one cent;
-  - `parse_amount(format_amount(x)) == x` in both formats;
-  - `where_the_money_is()` sums to `result()`;
-  - after any sequence of changes the file holds exactly the book, and reopening gives it back.
-- **Fixture test:** `tests/common/mock.rs` builds the event from `UI.fig`, in a `Book` or a `Store`. It asserts a result of **+2.027,50 €**, Verein account 1.757,00 €, cash box 412,90 € (counted 410,00 €), Anna owed 212,40 €, Malte owed 110,00 € and Bob owes 180,00 €, also after saving and reopening.
-- **File tests:** bad files, newer schema, locking, the triggers, tampered lines and attachments, the change log and backups.
-- **Snapshot tests** (`insta`) for CSV exports.
+Unit tests for every module, property tests with `proptest` for the money invariants and for "after any sequence of changes the file holds exactly the book", file tests for bad files, locking, triggers and tampering, and the example event from `UI.fig` (`tests/common/mock.rs`), which must keep reaching **+2.027,50 €** after saving and reopening.
 
 ## 5. IPC contract
 
-- **Commands** are Tauri `#[command]`s in `app/src-tauri/src/commands.rs`. They only lock the app state and call `service.rs`, which does the work and is tested without Tauri. Each returns `Result<T, ApiError>`, where `ApiError = { code, message, field?, report? }`: `field` names the input for domain errors, and `report` carries the integrity report of a damaged file.
+- **Commands** are Tauri `#[command]`s in `app/src-tauri/src/commands.rs`. They only lock the app state and call `Service` in `crates/lancelot-service`, which does the work and has no Tauri dependency, so it is tested without it. Each returns `Result<T, ApiError>`, where `ApiError = { code, message, field?, report? }`: `field` names the input for domain errors, and `report` carries the integrity report of a damaged file.
 - **Every event command returns a fresh `OpenEvent`**: `{ revision, path, fileName, snapshot, integrity, backupError }`. The `snapshot` (`EventSnapshot` in the core) holds every figure the UI shows. At ≈100 transactions it is a few tens of kilobytes. In return, the UI never has to patch state or derive anything about money. `revision` grows with every change, so a late response cannot overwrite a newer one.
+- **A `TxnView` says what a transaction means**, so the UI does not read signs and account kinds: `entry` (what the form shows, with `build_lines(entry) == lines` for every typed-in entry), `who`, `flow` (what the lines do to the result) and `needsReceipt`. Generated entries show in the same form, read-only.
 - **Types** for everything that crosses the boundary are generated from Rust with `ts-rs` into `app/src/lib/api/generated/`, one file per type, whenever `cargo test` runs. The files are checked in; CI fails if they differ from what the Rust types produce. `Cents`, ids and counts are mapped to `number`, dates and timestamps to `string`.
 - **One window holds one open event.** Opening or creating another closes the current one first, which releases its lock.
 
-```ts
-// app/src/lib/api/index.ts — thin typed wrappers around invoke()
-appInfo(): AppInfo
-settings() / setSettings(settings): AppSettings          // number format, backup count
-recentEvents() / forgetRecent(path): RecentEvent[]        // with `exists` for moved files
-createEvent(path, details) / openEvent(path): OpenEvent
-closeFile() / currentEvent(): OpenEvent | null
-updateEvent(details) / setDefaultReimbursementAccount(account): OpenEvent
-checkIntegrity(): OpenEvent
-backups(): BackupInfo[] / restoreBackup(backup, target): OpenEvent
-parseAmount(input, allowNegative): Parsed                 // uses the app's number format
-parseDate(input): { date }                                // ISO
-saveTxn(draft, id?): SavedTxn / deleteTxn(id): OpenEvent         // draft.total checks the split
-addAccount(kind, name) / addPerson(name): Added / renameAccount(id, name)
-// saveTxn also takes `files` (paths) and `remove` (attachment ids), saved in one change
-openAttachment(id) / exportAttachment(id, target)
-updatePerson(id, name, person): OpenEvent / checkIban(input): { iban, formatted }
-exportPayoutsCsv(target) / markPayoutsPaid(account, date): OpenEvent / print()
-// the payout and repayment lists come in the snapshot (`payouts`)
-// M5: closing counts, closing the event
-```
-
 `backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.
 
-**Menu and keyboard.** New Event (⇧⌘N), Open (⌘O), Close (⌘W) and Settings (⌘,) are native menu items (`app/src-tauri/src/lib.rs`); they send a `menu` event that `app/src/lib/shortcuts.ts` turns into the action. ⌘1–3 switch pages and Esc closes the right-hand panel.
+**Menu and keyboard.** New Event (⇧⌘N), Open (⌘O), Close (⌘W) and Settings (⌘,) are native menu items (`app/src-tauri/src/lib.rs`); they send a `menu` event that `app/src/lib/shortcuts.ts` turns into the action. ⌘1–6 switch pages and Esc closes the right-hand panel.
 
 **Saving edits.** Fields save when they are left (blur or Enter). Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
 
-**Development mock.** In a plain browser (`pnpm dev`), `lib/api` uses `lib/api/mock` instead of Tauri: the example event and an empty one, exported as JSON by `crates/lancelot-core/tests/mock_event.rs`, plus rough stand-ins for the commands and dialogs. It is loaded only in development and never in the app.
+**Shared styles.** `lib/styles/forms.css` holds what the panels' forms share, as `form-*` classes. Layout stays in each component.
 
-**Attachments** are served through a custom URI scheme, `lancelot://localhost/attachment/<id>` (built with `convertFileSrc`), registered in `app/src-tauri/src/lib.rs`. `<img>` and `<iframe>` load them directly, without base64 over IPC; WebKit shows images, PDFs and HEIC itself. *Open* writes the file to a temporary folder under its own name and opens it with the system's default app.
+**Dev bridge.** In a plain browser (`pnpm dev`), `lib/api/dev.ts` sends the commands to `crates/lancelot-bridge`, through Vite's proxy at `/__bridge`, instead of Tauri. The bridge runs the real `Service` on real event files in a temporary folder, on `127.0.0.1:5174`, so screens are checked against the real core and nothing about money is imitated. It is never part of the app, and adding a command to the app means an entry in its `commands.rs`, which a test enforces. Start it with `cargo run -p lancelot-bridge`, or the `bridge` entry in `.claude/launch.json`. To run a second pair beside it, set `LANCELOT_BRIDGE_PORT` for both the bridge and Vite, as the `bridge-alt` and `ui-alt` entries do.
+
+- **Scenarios:** `POST /__bridge/reset/<name>`, with the header `X-Lancelot-Bridge`, starts over from `start` (the default, nothing open), `example`, `empty`, `conflict` or `closed`. The recent events always include a damaged file and one that is already open. Reload the page afterwards. Add a scenario in `scenarios.rs`.
+- **Stand-ins:** the native dialogs never ask. Open gives the example event, a save gives a new path in the folder, receipts come from `fixtures/receipts` and sheets from `fixtures/tickets` in turn. Files dropped onto the page are uploaded to the folder. Opening an attachment in its app and revealing a file in Finder do nothing.
+- **Guard:** a POST without that header is refused, so other pages open in the browser cannot call commands that write files.
+
+**Attachments** are served through a custom URI scheme, `lancelot://localhost/attachment/<id>` (built with `convertFileSrc`), registered in `app/src-tauri/src/lib.rs`. `<img>` and `<iframe>` load them directly, without base64 over IPC; WebKit shows images, PDFs and HEIC itself. _Open_ writes the file to a temporary folder under its own name and opens it with the system's default app.
 
 **Drag and drop** uses Tauri's webview drag-drop events, which give file paths; the shell reads the files when the transaction is saved, so a dropped file is only stored once the entry is saved.
 
@@ -364,7 +209,7 @@ exportPayoutsCsv(target) / markPayoutsPaid(account, date): OpenEvent / print()
   - `application_id` must be `LNCL`, or the file is rejected as not an event file.
   - A `user_version` higher than the app supports means the file is refused, with a message that a newer Lancelot is needed.
   - Next, the file is backed up and migrated if needed, and the full integrity check runs (R-COR-5).
-  - A file that does not load into a `Book` is reported as damaged, with the integrity report. A file that loads but has issues opens, and the report is shown.
+  - A file that does not load into a `Book` is refused with the integrity report: as `damaged` when the file itself is harmed (SQLite pages, foreign keys, balance, attachment hashes), and as `inconsistent` when it is intact but its contents fail the rules. A file that loads but has issues opens, and the report is shown.
 
 ### 6.2 Backups (R-NF-5)
 
@@ -385,11 +230,11 @@ Migrations are forward-only, numbered SQL files in `crates/lancelot-core/migrati
 
 The settings are stored as JSON in `<app data>/settings.json`, written atomically. A missing or damaged file gives the defaults, so it can never keep the app from starting:
 
-| Setting | Default |
-|---|---|
+| Setting        | Default                                                                     |
+| -------------- | --------------------------------------------------------------------------- |
 | `numberFormat` | from the OS locale: `de` for languages with a decimal comma, `en` otherwise |
-| `backupCount` | 20 (1–100) |
-| `recent` | path, name and last opened time of the last 10 events |
+| `backupCount`  | 20 (1–100)                                                                  |
+| `recent`       | path, name and last opened time of the last 10 events                       |
 
 Event settings (name, dates, default reimbursement account) live inside the event file.
 
@@ -404,32 +249,21 @@ Event settings (name, dates, default reimbursement account) live inside the even
 - **Font:** Familjen Grotesk (OFL), in weights 400 and 600, from `@fontsource/familjen-grotesk` (latin and latin-ext). Vite bundles the `woff2` files into the build, so the app works fully offline.
 - **Display formatting:** `format.ts` mirrors the core's `format_amount` and `format_date`. `formatAmount` is tested against `fixtures/amount-format.json`, the same cases the Rust formatter is tested against. It is the one piece of money code in TypeScript, and it only turns cents into strings, never strings into cents.
 - **Dates** are text fields that follow the number-format setting (`31.12.2026` or `2026-12-31`). Input accepts both and is parsed in Rust (`fixtures/date-input.json`). The native date picker is not used, because it follows the OS locale rather than the setting.
-- **Routes:**
+- **Routes** are the folders in `app/src/routes`. `/design` shows the components in their states, in development builds only.
 
-  | Route | Screen |
-  |---|---|
-  | `/` | start: recent events, New, Open |
-  | `/event/overview` | Overview |
-  | `/event/ledger` | Ledger |
-  | `/event/people` | People |
-  | `/event/settings` | Settings |
-  | `/design` | the components in their states, next to the System frame (development builds only) |
+## 8. Decisions
 
-  Phase 2 adds `/event/budget`, `/event/tickets` and `/event/drinks`.
-
-## 8. Decisions made in M0
-
-| Topic | Decision | Reason |
-|---|---|---|
-| PDF export | **The print dialog for now** (M4): a print layout of the page, saved as PDF from macOS's dialog. Typst stays the plan for the polished settlement report (M13). | No new dependency and little code; the print layout uses the app's own type and tokens. The cost is one click in the dialog. Typst gives deterministic files without the dialog, at ≈10–15 MB more binary. |
-| Charts | **No library. Hand-written SVG components** for bars and stacked bars | The design needs only simple bars, and the data is tiny. The sales over time (M8) are stacked bars too. |
-| HEIC preview | **Native WebKit rendering** on macOS (WKWebView shows HEIC and PDF directly). On other platforms, a fallback to "open externally". | No conversion code, and the primary platform is macOS (R-NF-1). |
-| Amount parser | **Rust only**, a synchronous IPC command, with shared fixtures | One implementation in the money path (R-COR-1). |
-| TS types | **`ts-rs`**, with the generated file checked in | Stable and simple. Commands stay hand-written wrappers. |
-| Dates | **`time` crate**. ISO dates as TEXT, timestamps as RFC 3339 UTC | Readable without Lancelot (R-NF-4). |
-| SQLite | **`rusqlite`** with the `bundled` feature | No system SQLite dependency, and it is synchronous, which suits the small data size. |
-| Package manager | **pnpm** | Strict dependency resolution and a fast install. pnpm 12 also skips packages released in the last week, which guards against compromised releases. |
+| Topic           | Decision                                                                                                                                                        | Reason                                                                                                                                                                                                     |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PDF export      | **The print dialog for now** (M4): a print layout of the page, saved as PDF from macOS's dialog. Typst stays the plan for the polished settlement report (M13). | No new dependency and little code; the print layout uses the app's own type and tokens. The cost is one click in the dialog. Typst gives deterministic files without the dialog, at ≈10–15 MB more binary. |
+| Charts          | **No library. Hand-written SVG components** for bars and stacked bars                                                                                           | The design needs only simple bars, and the data is tiny. The sales over time (M8) are stacked bars too.                                                                                                    |
+| HEIC preview    | **Native WebKit rendering** on macOS (WKWebView shows HEIC and PDF directly). On other platforms, a fallback to "open externally".                              | No conversion code, and the primary platform is macOS (R-NF-1).                                                                                                                                            |
+| Amount parser   | **Rust only**, a synchronous IPC command, with shared fixtures                                                                                                  | One implementation in the money path (R-COR-1).                                                                                                                                                            |
+| TS types        | **`ts-rs`**, with the generated file checked in                                                                                                                 | Stable and simple. Commands stay hand-written wrappers.                                                                                                                                                    |
+| Dates           | **`time` crate**. ISO dates as TEXT, timestamps as RFC 3339 UTC                                                                                                 | Readable without Lancelot (R-NF-4).                                                                                                                                                                        |
+| SQLite          | **`rusqlite`** with the `bundled` feature                                                                                                                       | No system SQLite dependency, and it is synchronous, which suits the small data size.                                                                                                                       |
+| Package manager | **pnpm**                                                                                                                                                        | Strict dependency resolution and a fast install. pnpm 12 also skips packages released in the last week, which guards against compromised releases.                                                         |
 
 ## 9. Open for later milestones
 
-- **Code signing** (M5): it needs an Apple Developer account.
+- **Code signing** (after v0.1.0): it needs an Apple Developer account.

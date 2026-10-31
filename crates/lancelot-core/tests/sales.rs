@@ -30,7 +30,7 @@ fn sheet(book: &Book, name: &str, rows: &[(&str, &str)]) -> Sheet {
     for (order, tier) in rows {
         text.push_str(&format!("{order},{tier}\n"));
     }
-    read_sheet(name, text.as_bytes(), &book.event().ticket_columns).unwrap()
+    read_sheet(name, text.as_bytes(), book.ticket_columns()).unwrap()
 }
 
 fn import(book: &mut Book, day: u8, rows: &[(&str, &str)]) -> ImportId {
@@ -55,11 +55,11 @@ fn refund(count: u32, refund_bp: u32, day: u8) -> Resolution {
 }
 
 fn sale(book: &mut Book, tier: TierId, count: u32, day: u8) -> ManualSaleId {
-    let person = person(book, &format!("Seller {day}"));
+    let destination = person(book, &format!("Seller {day}"));
     book.add_manual_sale(ManualSaleDraft {
         tier,
         count,
-        person,
+        destination,
         date: june(day),
         reference: None,
     })
@@ -339,7 +339,6 @@ fn there_is_no_break_even_without_a_budget_or_after_closing() {
     let (mut budgeted, _, _) = with_budget(&[]);
     assert!(budgeted.profitability().is_some());
     let accepted = budgeted
-        .ledger()
         .open_items()
         .into_iter()
         .map(|item| BlockerOverride {
@@ -539,9 +538,9 @@ proptest! {
         }
         for (i, (tier, count, day)) in sales.iter().enumerate() {
             let tier = if *tier == 0 { early } else { regular };
-            let person = person(&mut book, &format!("Seller {i}"));
+            let destination = person(&mut book, &format!("Seller {i}"));
             let id = book.add_manual_sale(ManualSaleDraft {
-                tier, count: *count, person, date: june(*day), reference: None,
+                tier, count: *count, destination, date: june(*day), reference: None,
             }).unwrap();
             if let Some((bp, day)) = refunds.next() {
                 book.add_cancellation(CancellationDraft {

@@ -4,6 +4,7 @@ A local desktop app for settling volunteer-run events: receipts, advances, reimb
 
 - [Requirements](docs/requirements.md)
 - [Roadmap](docs/roadmap.md)
+- [Future](docs/FUTURE.md)
 - [Technical design](docs/technical-design.md)
 - [Design notes](docs/design/README.md)
 
@@ -17,6 +18,16 @@ cd app && pnpm install
 
 ```bash
 cd app && pnpm tauri dev
+```
+
+To look at the screens in a plain browser, against the real core and throwaway event files, run these side by side and open <http://localhost:5173> ([details](docs/technical-design.md#5-ipc-contract)):
+
+```bash
+cargo run -p lancelot-bridge
+```
+
+```bash
+cd app && pnpm dev
 ```
 
 Run all checks, the same ones CI runs on every push:

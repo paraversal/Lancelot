@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '#lib/styles/tokens.css';
 	import '#lib/styles/base.css';
+	import '#lib/styles/forms.css';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api/index.ts';
 	import { motion, reduced, watchReducedMotion } from '#lib/motion/mode.svelte.ts';
@@ -10,10 +11,18 @@
 
 	let { children }: LayoutProps = $props();
 
+	// The app cannot get here without its backend; a plain browser can, without the dev bridge.
+	let unavailable = $state<string | null>(null);
+
 	onMount(() => {
-		api.settings().then((s) => {
-			session.settings = s;
-		});
+		api
+			.settings()
+			.then((s) => {
+				session.settings = s;
+			})
+			.catch((e: Error) => {
+				unavailable = e.message;
+			});
 		const stopWatching = watchReducedMotion();
 		const removeShortcuts = installShortcuts();
 		return () => {
@@ -34,4 +43,12 @@
 
 {#if session.settings}
 	{@render children()}
+{:else if unavailable}
+	<p class="unavailable">{unavailable}</p>
 {/if}
+
+<style>
+	.unavailable {
+		margin: var(--spacing-10);
+	}
+</style>

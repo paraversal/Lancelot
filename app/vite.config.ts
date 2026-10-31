@@ -1,3 +1,4 @@
+import { loadEnv } from 'vite';
 import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -17,7 +18,17 @@ export default defineConfig({
 	],
 	// Tauri expects a fixed port and its own console output.
 	clearScreen: false,
-	server: { port: 5173, strictPort: true },
+	server: {
+		port: 5173,
+		strictPort: true,
+		// A plain browser talks to the dev bridge (crates/lancelot-bridge); see lib/api/dev.ts.
+		proxy: {
+			'/__bridge': {
+				target: `http://127.0.0.1:${loadEnv('', '.', 'LANCELOT_').LANCELOT_BRIDGE_PORT ?? 5174}`,
+				rewrite: (path) => path.replace(/^\/__bridge/, '')
+			}
+		}
+	},
 	test: {
 		expect: { requireAssertions: true },
 		passWithNoTests: true,

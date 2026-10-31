@@ -10,15 +10,17 @@ use crate::model::{
     Account, AccountId, AccountKind, CancellationId, ImportId, Line, ManualSaleId, Origin, Role,
     TierId, Txn, TxnId, TxnKind,
 };
-use crate::money::{BP_FULL, percent_bp};
+use crate::money::BP_FULL;
 use crate::sales::Profitability;
 use crate::sheet::Sheet;
 use crate::tickets::{
-    self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportPreview,
-    ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketColumns, TicketImport, Tickets,
-    Tier, TierDraft, clean_tier, default_payer, most_ever,
+    self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportDeletion,
+    ImportPreview, ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketColumns,
+    TicketImport, TicketSettings, Tickets, Tier, TierDraft, clean_tier, default_payer, most_ever,
 };
 
+/// The name of the income category of tickets.
+const TICKETS: &str = "Tickets";
 /// The name of the fee category when the first fee needs one.
 const TICKET_FEES: &str = "Ticket fees";
 /// The name of the refund category when the first refund needs one.
@@ -54,6 +56,11 @@ impl Book {
         self.cancellations.values()
     }
 
+    /// Whether the event sells tickets, and where the sheet's money arrives.
+    pub fn ticket_settings(&self) -> TicketSettings {
+        self.ticket_settings
+    }
+
     /// Ticket figures, always up to date.
     pub fn tickets(&self) -> &Tickets {
         &self.tickets
@@ -62,11 +69,9 @@ impl Book {
     /// The projected result and break-even (R-TKT-9), once there is a budget and while the event
     /// is open.
     pub fn profitability(&self) -> Option<Profitability> {
-        if self.budget_lines.is_empty() || self.event.closed_at.is_some() {
-            return None;
-        }
-        // Differences of figures the budget already checked: cannot overflow.
-        Profitability::compute(&self.tickets, &self.budget).ok()
+        self.profitability
+            .clone()
+            .filter(|_| self.event.closed_at.is_none())
     }
 
     // --- tiers and settings --------------------------------------------------------------
@@ -74,6 +79,9 @@ impl Book {
     /// Adds a ticket tier (R-TKT-1, R-TKT-2, R-TKT-10).
     pub fn add_tier(&mut self, draft: TierDraft) -> Result<TierId, DomainError> {
         self.change(|book| {
+            if !book.ticket_settings.enabled {
+                return Err(DomainError::TicketsOff);
+            }
             let draft = clean_tier(draft, None, &book.tiers)?;
             let id = TierId(book.next.tier);
             book.next.tier += 1;
@@ -110,6 +118,74 @@ impl Book {
         })
     }
 
+    /// Switches tickets on or off for this event. Off is refused while there are tiers, and it takes
+    /// the ticket categories along: one that something refers to stays as an ordinary category, so
+    /// no figure changes. On, the sheet's money starts out arriving where reimbursements come from.
+    pub fn set_tickets_enabled(&mut self, enabled: bool) -> Result<(), DomainError> {
+        self.change(|book| {
+            if enabled == book.ticket_settings.enabled {
+                return Ok(());
+            }
+            if enabled {
+                book.ticket_settings = TicketSettings {
+                    enabled,
+                    account: Some(book.event.default_reimbursement_account),
+                };
+                book.ticket_category(Role::Tickets, AccountKind::Income, TICKETS);
+                return Ok(());
+            }
+            if !book.tiers.is_empty() {
+                return Err(DomainError::TicketsInUse);
+            }
+            book.ticket_settings = TicketSettings {
+                enabled,
+                account: None,
+            };
+            let categories: Vec<AccountId> = book
+                .accounts
+                .values()
+                .filter(|a| a.role.is_some())
+                .map(|a| a.id)
+                .collect();
+            for id in categories {
+                if book.category_in_use(id) {
+                    if let Some(a) = book.accounts.get_mut(&id) {
+                        a.role = None;
+                    }
+                } else {
+                    book.accounts.remove(&id);
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Sets the asset account the sheet's money arrives in. The ticket income moves with it. Once
+    /// there are imports there must be one.
+    pub fn set_ticket_account(&mut self, account: Option<AccountId>) -> Result<(), DomainError> {
+        self.change(|book| {
+            if !book.ticket_settings.enabled {
+                return Err(DomainError::TicketsOff);
+            }
+            match account.map(|id| book.accounts.get(&id).map(|a| a.kind)) {
+                None if !book.imports.is_empty() => return Err(DomainError::NoTicketAccount),
+                None | Some(Some(AccountKind::Asset)) => {}
+                Some(None) => {
+                    return Err(DomainError::UnknownAccount {
+                        field: "account".into(),
+                    });
+                }
+                Some(Some(_)) => {
+                    return Err(DomainError::WrongAccountKind {
+                        field: "account".into(),
+                    });
+                }
+            }
+            book.ticket_settings.account = account;
+            Ok(())
+        })
+    }
+
     /// Sets the columns the ticket sheet is read from (R-TKT-3).
     pub fn set_ticket_columns(&mut self, columns: TicketColumns) -> Result<(), DomainError> {
         self.change(|book| {
@@ -139,7 +215,7 @@ impl Book {
                     field: "saleDate".into(),
                 });
             }
-            book.event.ticket_columns = TicketColumns {
+            book.ticket_columns = TicketColumns {
                 tier,
                 order,
                 sale_date,
@@ -156,7 +232,55 @@ impl Book {
         let imports = tickets::by_date(&self.imports);
         let previous = imports.iter().rev().find(|i| i.date <= date).copied();
         let current = imports.last().is_none_or(|i| i.date <= date);
-        tickets::preview(sheet, &self.tiers, previous, current)
+        let mut preview = tickets::preview(sheet, &self.tiers, previous, current);
+        let mut after = self.clone();
+        if after
+            .import_tickets(sheet, date, OffsetDateTime::UNIX_EPOCH)
+            .is_ok()
+        {
+            preview.receipts_lost = self.receipts_lost_in(&after);
+        }
+        preview
+    }
+
+    /// The receipts that are in this book but not in `after`, by file name.
+    fn receipts_lost_in(&self, after: &Book) -> Vec<String> {
+        self.attachments
+            .values()
+            .filter(|a| !after.attachments.contains_key(&a.id))
+            .map(|a| a.filename.clone())
+            .collect()
+    }
+
+    /// Deletes an import, such as a wrongly chosen sheet: everything goes back to the sheets that
+    /// are left (R-TKT-5). Refused while a cancellation still needs its tickets.
+    pub fn delete_import(&mut self, id: ImportId) -> Result<TicketImport, DomainError> {
+        self.change(|book| {
+            let import = book.imports.remove(&id).ok_or(DomainError::UnknownImport)?;
+            let needed = book
+                .cancellations
+                .values()
+                .any(|c| check_cancellation(c, book).is_err());
+            if needed {
+                return Err(DomainError::ImportInUse);
+            }
+            Ok(import)
+        })
+    }
+
+    /// What [`Book::delete_import`] would change.
+    pub fn preview_delete_import(&self, id: ImportId) -> Result<ImportDeletion, DomainError> {
+        let mut after = self.clone();
+        after.delete_import(id)?;
+        Ok(ImportDeletion {
+            sold_before: self.tickets.total.sold,
+            sold_after: after.tickets.total.sold,
+            net_before: self.tickets.total.net,
+            net_after: after.tickets.total.net,
+            conflicts_before: self.tickets.conflict_count(),
+            conflicts_after: after.tickets.conflict_count(),
+            receipts_lost: self.receipts_lost_in(&after),
+        })
     }
 
     /// Imports a ticket sheet as a snapshot dated `date`, the current one unless an import is
@@ -170,6 +294,9 @@ impl Book {
         at: OffsetDateTime,
     ) -> Result<ImportId, DomainError> {
         self.change(|book| {
+            if book.ticket_settings.account.is_none() {
+                return Err(DomainError::NoTicketAccount);
+            }
             let orders = tickets::orders(sheet, &book.tiers);
             if !orders.unknown.is_empty() {
                 return Err(DomainError::UnknownTiers {
@@ -208,7 +335,7 @@ impl Book {
 
     // --- manual sales --------------------------------------------------------------------
 
-    /// Records tickets sold outside the sheet: income to the person who took the money
+    /// Records tickets sold outside the sheet: income to the account or person who took the money
     /// (R-TKT-7).
     pub fn add_manual_sale(&mut self, draft: ManualSaleDraft) -> Result<ManualSaleId, DomainError> {
         self.change(|book| {
@@ -406,8 +533,8 @@ impl Book {
     // --- generated income ----------------------------------------------------------------
 
     /// Makes the ticket income match the tickets (R-TKT-6, R-TKT-7, R-TKT-15): one income per tier
-    /// of the latest import and its cancelled tickets, to the Verein account, net of the tier's
-    /// fee; one per manual sale, to the person who took the money; and one negative income per
+    /// of the latest import and its cancelled tickets, to the ticket account, net of the tier's
+    /// fee; one per manual sale, to whoever took the money; and one negative income per
     /// refund, from whoever pays it. Existing ones keep their ids; ones no longer needed go.
     pub(super) fn sync_tickets(&mut self) -> Result<(), DomainError> {
         let existing: BTreeMap<Origin, TxnId> = self
@@ -419,17 +546,11 @@ impl Book {
         if existing.is_empty() && self.imports.is_empty() && self.manual_sales.is_empty() {
             return Ok(());
         }
-        let role = |book: &Book, role| book.account_by_role(role).map(|a| a.id);
-        let (Some(income), Some(verein)) = (role(self, Role::Tickets), role(self, Role::Verein))
-        else {
-            return Err(DomainError::Inconsistent {
-                reason: "the Tickets or Verein account is missing".into(),
-            });
-        };
+        let income = self.ticket_category(Role::Tickets, AccountKind::Income, TICKETS);
+        let ticket_account = self.ticket_settings.account;
         let line = |account, amount| Line {
             account,
             amount,
-            memo: None,
             budget_line: None,
             cost_centre: None,
         };
@@ -438,6 +559,7 @@ impl Book {
             BTreeMap::new();
         if let Some(latest) = self.latest_import() {
             let date = latest.date;
+            let account = ticket_account.ok_or(DomainError::NoTicketAccount)?;
             let mut counts = latest.counts();
             let reckoning =
                 tickets::reckon(&tickets::by_date(&self.imports), &self.cancellations, None);
@@ -446,17 +568,16 @@ impl Book {
             }
             for (tier, count) in counts {
                 let t = self.tiers.get(&tier).ok_or(DomainError::UnknownTier)?;
-                let gross = t.draft.price.checked_mul(i64::from(count))?;
-                if gross.is_zero() {
+                let money = t.money(count)?;
+                if money.gross.is_zero() {
                     continue;
                 }
-                let fee = t.fee()?.checked_mul(i64::from(count))?;
                 let description = format!("{count} × {}", t.draft.name);
-                let mut lines = vec![line(income, -gross)];
-                if fee.is_positive() {
-                    lines.push(line(self.ticket_fees_account(), fee));
+                let mut lines = vec![line(income, -money.gross)];
+                if money.fees.is_positive() {
+                    lines.push(line(self.ticket_fees_account(), money.fees));
                 }
-                lines.push(line(verein, gross.checked_sub(fee)?));
+                lines.push(line(account, money.net));
                 wanted.insert(
                     Origin::TicketImport { tier },
                     (date, description, None, lines),
@@ -468,7 +589,7 @@ impl Book {
                 .tiers
                 .get(&s.draft.tier)
                 .ok_or(DomainError::UnknownTier)?;
-            let gross = t.draft.price.checked_mul(i64::from(s.draft.count))?;
+            let gross = t.money(s.draft.count)?.gross;
             if gross.is_zero() {
                 continue;
             }
@@ -478,7 +599,7 @@ impl Book {
                     s.draft.date,
                     format!("{} × {}", s.draft.count, t.draft.name),
                     s.draft.reference.clone(),
-                    vec![line(income, -gross), line(s.draft.person, gross)],
+                    vec![line(income, -gross), line(s.draft.destination, gross)],
                 ),
             );
         }
@@ -487,15 +608,14 @@ impl Book {
         for c in refunds {
             let Some(terms) = c.terms else { continue };
             let t = self.tiers.get(&c.tier).ok_or(DomainError::UnknownTier)?;
-            let refund =
-                percent_bp(t.draft.price, terms.refund_bp)?.checked_mul(i64::from(c.count))?;
+            let refund = t.refund(terms.refund_bp, c.count)?;
             if refund.is_zero() {
                 continue;
             }
             let description = format!("Refund {} × {}", c.count, t.draft.name);
             let payer = terms
                 .payer
-                .or(default_payer(&c, &self.manual_sales, Some(verein)))
+                .or(default_payer(&c, &self.manual_sales, ticket_account))
                 .ok_or(DomainError::UnknownManualSale)?;
             wanted.insert(
                 Origin::TicketRefund { cancellation: c.id },
@@ -529,7 +649,10 @@ impl Book {
                 id,
                 Txn {
                     id,
-                    kind: TxnKind::Income,
+                    kind: match origin {
+                        Origin::TicketRefund { .. } => TxnKind::Refund,
+                        _ => TxnKind::Income,
+                    },
                     date,
                     description,
                     counterparty: None,
@@ -561,7 +684,12 @@ impl Book {
 
     /// A generated category: the one with the role, else an unassigned one with the name, else
     /// a new one.
-    fn ticket_category(&mut self, role: Role, kind: AccountKind, name: &str) -> AccountId {
+    pub(super) fn ticket_category(
+        &mut self,
+        role: Role,
+        kind: AccountKind,
+        name: &str,
+    ) -> AccountId {
         if let Some(a) = self.account_by_role(role) {
             return a.id;
         }
@@ -655,7 +783,7 @@ fn check_cancellation_parts(
     Ok(())
 }
 
-/// A tier that exists, a positive count, a person and a trimmed reference.
+/// A tier that exists, a positive count, an asset or a person, and a trimmed reference.
 fn clean_sale(
     d: ManualSaleDraft,
     tiers: &BTreeMap<TierId, Tier>,
@@ -669,12 +797,16 @@ fn clean_sale(
             field: "count".into(),
         });
     }
-    match accounts.get(&d.person).map(|a| a.kind) {
-        Some(AccountKind::Person) => {}
-        None => return Err(DomainError::UnknownPerson),
+    match accounts.get(&d.destination).map(|a| a.kind) {
+        Some(AccountKind::Asset | AccountKind::Person) => {}
+        None => {
+            return Err(DomainError::UnknownAccount {
+                field: "destination".into(),
+            });
+        }
         Some(_) => {
             return Err(DomainError::WrongAccountKind {
-                field: "person".into(),
+                field: "destination".into(),
             });
         }
     }
@@ -736,7 +868,7 @@ pub(super) fn check_parts(
         if s.id.0 >= next.manual_sale
             || clean_sale(s.draft.clone(), &tier_map, accounts).as_ref() != Ok(&s.draft)
         {
-            return Err(bad("manual sale with an unknown tier or person"));
+            return Err(bad("manual sale with an unknown tier or destination"));
         }
         sale_map.insert(s.id, s);
     }

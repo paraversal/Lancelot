@@ -4,7 +4,7 @@
 	// (R-BUD-2), each opening its transaction in the ledger.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLine } from '#lib/api/generated/BudgetLine.ts';
 	import type { BudgetLineDraft } from '#lib/api/generated/BudgetLineDraft.ts';
@@ -115,9 +115,9 @@
 
 	async function addCategory(name: string) {
 		try {
-			return (await session.run(() => api.addAccount('expense', name))).id;
+			return (await session.change(() => api.addAccount('expense', name))).id;
 		} catch (e) {
-			error = { field: 'category', message: e instanceof ApiError ? e.message : String(e) };
+			error = { field: 'category', message: errorMessage(e) };
 			return null;
 		}
 	}
@@ -141,10 +141,12 @@
 <Panel title={line ? line.description : 'New budget line'} {onclose}>
 	{#if figures}
 		<div class="figures">
-			<div><span class="label">Estimate</span>{formatAmount(figures.estimate, format)}</div>
-			<div><span class="label">Actual</span>{formatAmount(figures.actual, format)}</div>
+			<div><span class="form-label">Estimate</span>{formatAmount(figures.estimate, format)}</div>
+			<div><span class="form-label">Actual</span>{formatAmount(figures.actual, format)}</div>
 			<div>
-				<span class="label">Forecast</span><strong>{formatAmount(figures.forecast, format)}</strong>
+				<span class="form-label">Forecast</span><strong
+					>{formatAmount(figures.forecast, format)}</strong
+				>
 			</div>
 		</div>
 	{/if}
@@ -184,11 +186,12 @@
 				oninput={(v) => (description = v)}
 				oncommit={(v) => (description = v ?? '')}
 			/>
-			{#if fieldError('description')}<span class="error">{fieldError('description')}</span>{/if}
+			{#if fieldError('description')}<span class="form-error">{fieldError('description')}</span
+				>{/if}
 		</div>
 
 		<div class="labelled">
-			<span class="label">Estimate</span>
+			<span class="form-label">Estimate</span>
 			<Segmented
 				label="Estimate"
 				bind:value={mode}
@@ -218,7 +221,7 @@
 				</div>
 				{#if total !== null}<span class="hint">= {formatAmount(total, format)}</span>{/if}
 			{/if}
-			{#if fieldError('estimate')}<span class="error">{fieldError('estimate')}</span>{/if}
+			{#if fieldError('estimate')}<span class="form-error">{fieldError('estimate')}</span>{/if}
 		</div>
 
 		<label class="check">
@@ -228,12 +231,12 @@
 	</fieldset>
 
 	{#if error && !['category', 'description', 'estimate'].some((f) => error?.field?.startsWith(f))}
-		<p class="error">{error.message}</p>
+		<p class="form-error">{error.message}</p>
 	{/if}
 
 	{#if linked.length}
 		<div class="linked">
-			<span class="label">Linked</span>
+			<span class="form-label">Linked</span>
 			{#each linked as l, i (i)}
 				<button type="button" class="entry" onclick={() => goto(`/event/ledger?txn=${l.txn.id}`)}>
 					<span class="date">{formatDate(l.txn.date, format)}</span>
@@ -248,7 +251,7 @@
 		{#if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
 		{:else if confirming}
-			<div class="confirm">
+			<div class="form-confirm">
 				<strong>Delete this budget line?</strong>
 				<span class="grow"></span>
 				<Button size="sm" kind="primary" onclick={remove}>Delete</Button>
@@ -264,17 +267,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		/* A fieldset is at least as wide as its content unless told otherwise. */
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
 	.figures {
 		display: flex;
 		gap: var(--spacing-6);
@@ -286,11 +278,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.labelled {
@@ -378,23 +365,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
-	}
-
-	.confirm {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		width: 100%;
-		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 </style>

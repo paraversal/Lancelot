@@ -34,7 +34,7 @@
 </script>
 
 <div class="receipts">
-	<span class="label">Receipt</span>
+	<span class="form-label">Receipt</span>
 	{#each attachments as a (a.id)}
 		<div class="item" class:selected={previewing === a.id} in:receiptIn={{ level: level('B5') }}>
 			<button type="button" class="open" onclick={() => onpreview(a)}>
@@ -86,11 +86,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.item {

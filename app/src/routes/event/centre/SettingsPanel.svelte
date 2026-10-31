@@ -14,7 +14,7 @@
 	let { onclose }: { onclose: () => void } = $props();
 
 	const format = $derived(session.format);
-	const settings = $derived(session.event!.snapshot.event.drinks);
+	const settings = $derived(session.event!.snapshot.drinkSettings);
 
 	let supplier = $state<string | null>(null);
 	let pricePerStrich = $state<Cents | null>(null);
@@ -27,7 +27,7 @@
 	async function save() {
 		error = null;
 		try {
-			await session.change(() => api.setDrinkSettings({ supplier, pricePerStrich }));
+			await session.change(() => api.setDrinkSettings({ ...settings, supplier, pricePerStrich }));
 			onclose();
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
@@ -62,7 +62,7 @@
 		/>
 	</fieldset>
 
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 
 	{#snippet footer()}
 		{#if session.closed}
@@ -74,16 +74,6 @@
 </Panel>
 
 <style>
-	fieldset {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
-		min-width: 0;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
-
 	.closed {
 		display: inline-flex;
 		align-items: center;
@@ -91,11 +81,5 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

@@ -4,7 +4,7 @@ import type { Cents } from "./Cents";
 import type { ReconciliationId } from "./ReconciliationId";
 
 /**
- * "The statement shows this on this date" for an asset account (R-ACC-4). For the Verein account
+ * "The statement shows this on this date" for an asset account (R-ACC-4). On a net-movement account
  * the amount is the event's net movement up to the date, since its real balance is never entered
  * (R-ISO-2). Either can be negative.
  */

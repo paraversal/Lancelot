@@ -10,7 +10,7 @@
 	// core checks the split against the total again when saving.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { ApiError, api } from '#lib/api/index.ts';
+	import { ApiError, api, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
@@ -77,11 +77,12 @@
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
-	// Ticket income comes from the Tickets page and cannot be changed here (R-TKT-6).
+	// Ticket income comes from the Tickets page and cannot be changed here (R-TKT-6), and an
+	// opening count from the Overview (R-ISO-3). A form can only save what it can show.
 	const origin = $derived(txn?.origin ?? { type: 'manual' as const });
-	const locked = $derived(session.closed || origin.type !== 'manual');
+	const elsewhere = $derived(!!txn && (txn.kind === 'opening' || !txn.entry));
+	const locked = $derived(session.closed || origin.type !== 'manual' || elsewhere);
 	const byId = $derived(new Map(snapshot.accounts.map((a) => [a.id, a])));
-	const kindOf = (id: AccountId | null) => (id === null ? undefined : byId.get(id)?.kind);
 
 	// --- state, filled from the transaction being edited --------------------------------
 	let kind = $state<Kind>('expense');
@@ -93,6 +94,7 @@
 	let date = $state<string | null>(null);
 	let counterparty = $state<string | null>(null);
 	let description = $state<string | null>(null);
+	let notes = $state<string | null>(null);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 	let confirming = $state(false);
 	let generation = $state(0); // remounts the fields after "Save & next"
@@ -109,39 +111,36 @@
 			date = lastDate ?? snapshot.event.startsOn ?? new Date().toISOString().slice(0, 10);
 			counterparty = null;
 			description = null;
+			notes = null;
 			return;
 		}
-		const category = (id: AccountId) => kindOf(id) === 'income' || kindOf(id) === 'expense';
-		kind = t.kind === 'opening' ? 'transfer' : t.kind;
+		const e = t.entry;
+		kind = !e || e.type === 'opening' ? 'transfer' : e.type;
 		amount = t.amount;
 		date = t.date;
 		counterparty = t.counterparty;
 		description = t.description || null;
-		const cats = t.lines.filter((l) => category(l.account));
-		lines = cats.map((l) => ({
-			account: l.account,
-			amount: Math.abs(l.amount),
-			budgetLine: l.budgetLine,
-			costCentre: l.costCentre
-		}));
-		if (!lines.length) lines = [{ account: null, amount: null }];
-		const parties = t.lines.filter((l) => !category(l.account));
-		if (t.kind === 'expense') party = parties.find((l) => l.amount < 0)?.account ?? null;
-		// A ticket refund is negative income: it is paid, not received (R-TKT-15).
-		if (t.kind === 'income')
-			party =
-				parties.find((l) => (t.origin.type === 'ticketRefund' ? l.amount < 0 : l.amount > 0))
-					?.account ?? null;
-		if (t.kind === 'transfer' || t.kind === 'opening') {
-			party = parties.find((l) => l.amount < 0)?.account ?? null;
-			other = parties.find((l) => l.amount > 0)?.account ?? null;
+		notes = t.notes;
+		lines = [{ account: null, amount: null }];
+		if (e?.type === 'expense' || e?.type === 'income') {
+			party = e.type === 'expense' ? e.payer : e.destination;
+			lines = e.lines.map((l) => ({
+				account: l.account,
+				amount: l.amount,
+				budgetLine: l.budgetLine,
+				costCentre: l.costCentre
+			}));
 		}
-		if (t.kind === 'settle') {
-			const person = parties.find((l) => kindOf(l.account) === 'person');
-			party = person?.account ?? null;
-			other = parties.find((l) => kindOf(l.account) === 'asset')?.account ?? null;
-			direction = (person?.amount ?? 0) > 0 ? 'reimburse' : 'repay';
+		if (e?.type === 'transfer') {
+			party = e.from;
+			other = e.to;
 		}
+		if (e?.type === 'settle') {
+			party = e.person;
+			other = e.account;
+			direction = e.direction;
+		}
+		if (e?.type === 'opening') other = e.account;
 	}
 
 	// --- options ----------------------------------------------------------------------
@@ -156,6 +155,16 @@
 			.filter((a) => a.kind === (kind === 'income' ? 'income' : 'expense'))
 			.map((a) => ({ value: a.id, label: a.name }))
 	);
+	// A transfer goes from any account to any other (not the opening account).
+	const everywhere = $derived([
+		...sources,
+		...snapshot.accounts
+			.filter((a) => a.kind === 'income')
+			.map((a) => ({ value: a.id, label: a.name, group: 'Income' })),
+		...snapshot.accounts
+			.filter((a) => a.kind === 'expense')
+			.map((a) => ({ value: a.id, label: a.name, group: 'Expenses' }))
+	]);
 	const personOptions = $derived(people.map((a) => ({ value: a.id, label: a.name })));
 	const assetOptions = $derived(assets.map((a) => ({ value: a.id, label: a.name })));
 
@@ -186,14 +195,14 @@
 		generation++;
 	}
 
-	// The supplier's invoice: the kept drinks at their price, in the Drinks cost centre's first
+	// The supplier's invoice: the kept drinks at their price, in the drinks cost centre's first
 	// expense category that is not Pfand. Pfand is added as a line if there is any (R-DRK-2).
 	function fillInvoice() {
-		const centre = snapshot.costCentres.find((c) => c.role === 'drinks')?.id;
+		const { costCentre: centre, pfand } = snapshot.drinkSettings;
 		const category = snapshot.accounts.find(
-			(a) => a.kind === 'expense' && a.costCentre === centre && a.role !== 'pfand'
+			(a) => a.kind === 'expense' && a.costCentre === centre && a.id !== pfand
 		);
-		counterparty = snapshot.event.drinks.supplier;
+		counterparty = snapshot.drinkSettings.supplier;
 		party = snapshot.event.defaultReimbursementAccount;
 		amount = snapshot.drinks.cost || null;
 		if (category) lines = [{ account: category.id, amount: null, costCentre: centre }];
@@ -202,21 +211,21 @@
 	// --- adding people and categories on the spot ------------------------------------
 	async function addPerson(name: string) {
 		try {
-			return (await session.run(() => api.addPerson(name))).id;
+			return (await session.change(() => api.addPerson(name))).id;
 		} catch (e) {
-			error = { field: 'party', message: e instanceof ApiError ? e.message : String(e) };
+			error = { field: 'party', message: errorMessage(e) };
 			return null;
 		}
 	}
 
 	async function addCategory(name: string) {
 		try {
-			const added = await session.run(() =>
+			const added = await session.change(() =>
 				api.addAccount(kind === 'income' ? 'income' : 'expense', name)
 			);
 			return added.id;
 		} catch (e) {
-			error = { field: 'lines', message: e instanceof ApiError ? e.message : String(e) };
+			error = { field: 'lines', message: errorMessage(e) };
 			return null;
 		}
 	}
@@ -231,7 +240,6 @@
 			const splits = lines.map((l) => ({
 				account: l.account!,
 				amount: split ? (l.amount ?? 0) : amount!,
-				memo: null,
 				budgetLine: l.budgetLine ?? null,
 				costCentre: l.costCentre ?? null
 			}));
@@ -254,13 +262,13 @@
 		const total = kind === 'expense' || kind === 'income' ? amount : null;
 		try {
 			const files = [...pending];
-			const saved = await session.run(() =>
+			const saved = await session.change(() =>
 				api.saveTxn(
 					{
 						date: date!,
 						description: description ?? '',
 						counterparty,
-						notes: txn?.notes ?? null,
+						notes,
 						entry,
 						total
 					},
@@ -292,6 +300,15 @@
 		}
 	}
 
+	// A category chosen for a transfer means nothing to the other forms.
+	function changeKind() {
+		error = null;
+		lines = [{ account: null, amount: null }];
+		if (kind === 'transfer') return;
+		if (!sources.some((o) => o.value === party)) party = null;
+		if (!assetOptions.some((o) => o.value === other)) other = null;
+	}
+
 	async function remove() {
 		if (!txn) return;
 		await session.change(() => api.deleteTxn(txn.id));
@@ -308,7 +325,7 @@
 
 	const fieldError = (name: string) => (error?.field === name ? error.message : null);
 	const partyLabel = $derived(
-		origin.type === 'ticketRefund'
+		txn?.kind === 'refund'
 			? 'Paid by'
 			: { expense: 'Paid by', income: 'Received by', transfer: 'From', settle: 'Person' }[kind]
 	);
@@ -333,7 +350,7 @@
 			<Segmented
 				label="Kind"
 				bind:value={kind}
-				onchange={() => ((error = null), (lines = [{ account: null, amount: null }]))}
+				onchange={changeKind}
 				options={[
 					{ value: 'expense', label: 'Expense' },
 					{ value: 'income', label: 'Income' },
@@ -365,7 +382,7 @@
 							{/snippet}
 						</ChoiceField>
 						<div class="labelled">
-							<span class="label">Direction</span>
+							<span class="form-label">Direction</span>
 							<Segmented
 								label="Direction"
 								bind:value={direction}
@@ -390,14 +407,14 @@
 						{#if overSettles}
 							<span class="attention">more than {formatAmount(net, format, 'magnitude')}</span>
 						{/if}
-						{#if fieldError('amount')}<span class="error">{fieldError('amount')}</span>{/if}
+						{#if fieldError('amount')}<span class="form-error">{fieldError('amount')}</span>{/if}
 					</div>
 
 					{#if kind !== 'settle'}
 						<ChoiceField
 							label={partyLabel}
 							value={party}
-							options={sources}
+							options={kind === 'transfer' ? everywhere : sources}
 							addLabel="New person…"
 							error={fieldError('party')}
 							onchange={(v) => (party = v)}
@@ -407,9 +424,21 @@
 						</ChoiceField>
 					{/if}
 
-					{#if kind === 'transfer' || kind === 'settle'}
+					{#if kind === 'transfer'}
 						<ChoiceField
-							label={kind === 'transfer' ? 'To' : direction === 'reimburse' ? 'From' : 'To'}
+							label="To"
+							value={other}
+							options={everywhere}
+							addLabel="New person…"
+							error={fieldError('other')}
+							onchange={(v) => (other = v)}
+							onadd={addPerson}
+						>
+							{#snippet hint()}{balanceHint(other) ?? ''}{/snippet}
+						</ChoiceField>
+					{:else if kind === 'settle'}
+						<ChoiceField
+							label={direction === 'reimburse' ? 'From' : 'To'}
 							value={other}
 							options={assetOptions}
 							addLabel="New account…"
@@ -417,11 +446,11 @@
 							onchange={(v) => (other = v)}
 							onadd={async (name) => {
 								try {
-									return (await session.run(() => api.addAccount('asset', name))).id;
+									return (await session.change(() => api.addAccount('asset', name))).id;
 								} catch (e) {
 									error = {
 										field: 'other',
-										message: e instanceof ApiError ? e.message : String(e)
+										message: errorMessage(e)
 									};
 									return null;
 								}
@@ -432,7 +461,7 @@
 					{#if kind === 'expense' || kind === 'income'}
 						<div class="split">
 							<div class="split-head">
-								<span class="label">Split</span>
+								<span class="form-label">Split</span>
 								{#if left !== null}
 									<span class="left" class:done={left === 0}>{formatAmount(left, format)} left</span
 									>
@@ -526,11 +555,11 @@
 							>
 								<Icon name="plus" size={14} />Line
 							</button>
-							{#if fieldError('lines')}<span class="error">{fieldError('lines')}</span>{/if}
+							{#if fieldError('lines')}<span class="form-error">{fieldError('lines')}</span>{/if}
 						</div>
 					{/if}
 
-					<div class="pair">
+					<div class="form-pair">
 						<DateField
 							label="Date"
 							value={date}
@@ -554,6 +583,13 @@
 						oninput={(t) => (description = t.trim() || null)}
 						oncommit={(v) => (description = v)}
 					/>
+					<TextField
+						label="Notes"
+						value={notes}
+						multiline
+						oninput={(t) => (notes = t.trim() || null)}
+						oncommit={(v) => (notes = v)}
+					/>
 					{#if origin.type === 'manual'}
 						<Receipts
 							{attachments}
@@ -567,7 +603,7 @@
 						/>
 					{/if}
 					{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
-						<p class="error">{error.message}</p>
+						<p class="form-error">{error.message}</p>
 					{/if}
 				</div>
 			{/key}
@@ -593,6 +629,10 @@
 			>
 		{:else if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
+		{:else if elsewhere}
+			<span class="closed"><Icon name="lock" size={14} />Opening count</span>
+			<span class="grow"></span>
+			<Button size="sm" onclick={() => goto('/event/overview')}>Overview</Button>
 		{:else if confirming}
 			<div class="confirm">
 				<strong>Delete this entry?</strong>
@@ -630,11 +670,6 @@
 		gap: 6px;
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--color-ink-muted);
-	}
-
-	.label {
-		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
 	}
 
@@ -704,21 +739,9 @@
 		align-self: flex-start;
 	}
 
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
-	}
-
 	.attention {
 		font-size: var(--type-xs);
 		color: var(--color-attention);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 
 	.confirm {
@@ -729,9 +752,5 @@
 		padding-top: 14px;
 		border-top: 1px solid var(--color-rule);
 		font-size: 13px;
-	}
-
-	.grow {
-		flex: 1;
 	}
 </style>

@@ -3,7 +3,7 @@
 
 use lancelot_core::*;
 
-use super::{draft, eur, expense, income, june, role, split};
+use super::{asset, draft, eur, expense, income, june, split};
 
 /// Something the example event can be built in: a [`Book`] or a [`Store`].
 pub trait Target {
@@ -70,36 +70,47 @@ impl Target for Store {
         Store::book(self)
     }
     fn person(&mut self, name: &str) -> AccountId {
-        self.add_person(name, Person::default()).unwrap()
+        self.change(|b| b.add_person(name, Person::default()))
+            .unwrap()
     }
     fn save(&mut self, description: &str, entry: Entry) -> TxnId {
-        self.save_txn(&draft(description, entry), None).unwrap().id
+        self.change(|b| b.save_txn(&draft(description, entry), None))
+            .unwrap()
+            .id
     }
     fn attach(&mut self, txn: TxnId, pdf: bool) {
         let (name, bytes): (&str, &[u8]) = if pdf {
-            ("invoice.pdf", b"%PDF-1.7\n an invoice")
+            (
+                "invoice.pdf",
+                include_bytes!("../../../../fixtures/receipts/invoice.pdf"),
+            )
         } else {
-            ("receipt.jpg", b"\xFF\xD8\xFF\xE0 a receipt")
+            (
+                "receipt.jpg",
+                include_bytes!("../../../../fixtures/receipts/receipt.jpg"),
+            )
         };
         self.add_attachment(txn, name, bytes).unwrap();
     }
     fn count(&mut self, account: AccountId, amount: Cents) {
-        self.set_closing_count(account, june(14), amount).unwrap();
+        self.change(|b| b.set_closing_count(account, june(14), amount))
+            .unwrap();
     }
     fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents) {
-        self.add_reconciliation(account, date, amount).unwrap();
+        self.change(|b| b.add_reconciliation(account, date, amount))
+            .unwrap();
     }
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId {
-        self.add_budget_line(draft).unwrap()
+        self.change(|b| b.add_budget_line(draft)).unwrap()
     }
     fn save_draft(&mut self, draft: TxnDraft) -> TxnId {
-        self.save_txn(&draft, None).unwrap().id
+        self.change(|b| b.save_txn(&draft, None)).unwrap().id
     }
     fn product(&mut self, draft: DrinkProductDraft) {
-        self.add_drink_product(draft).unwrap();
+        self.change(|b| b.add_drink_product(draft)).unwrap();
     }
     fn drink_settings(&mut self, settings: DrinkSettings) {
-        self.set_drink_settings(settings).unwrap();
+        self.change(|b| b.set_drink_settings(settings)).unwrap();
     }
 }
 
@@ -114,7 +125,7 @@ pub struct Mock {
 
 pub fn build(t: &mut impl Target) -> Mock {
     let b = t.book();
-    let (verein, cash) = (role(b, Role::Verein), role(b, Role::CashBox));
+    let (verein, cash) = (asset(b, "Verein account"), asset(b, "Cash box"));
     let [tickets, donations, other_in] =
         ["Tickets", "Drink donations", "General"].map(|n| income(b, n));
     let [food, venue, drinks, pfand, tech, other, mobility] = [
@@ -193,6 +204,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     t.drink_settings(DrinkSettings {
         supplier: Some("Hoffmann".into()),
         price_per_strich: Some(eur("1,00")),
+        ..t.book().drink_settings().clone()
     });
     for (name, taken, returned, unit) in [
         ("Club-Mate 0,5", 240, 96, "1,15"),
@@ -284,7 +296,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     t.count(cash, eur("410"));
 
     // The Verein account's statement agrees with the books.
-    let verein = role(t.book(), Role::Verein);
+    let verein = asset(t.book(), "Verein account");
     let movement = t.book().ledger().balance(verein);
     t.checkpoint(verein, june(30), movement);
 

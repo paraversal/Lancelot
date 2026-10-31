@@ -3,7 +3,7 @@
 	// went, where it is now, and what is still open. Cash accounts are counted here; open items lead to their fix.
 	// Closing happens here too; a closed event shows its final balance and what was accepted.
 	import { goto } from '$app/navigation';
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import { chooseCsvPath } from '#lib/api/dialogs.ts';
 	import type { OpenItem } from '#lib/api/generated/OpenItem.ts';
 	import Button from '#lib/components/Button.svelte';
@@ -68,7 +68,7 @@
 			const target = await chooseCsvPath(`${snapshot.event.name} entries.csv`);
 			if (target) await api.exportTransactionsCsv(target);
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 	let width = $state(0);
@@ -181,7 +181,7 @@
 				{/if}
 			</div>
 		</header>
-		{#if error}<p class="error" role="alert">{error}</p>{/if}
+		{#if error}<p class="form-error" role="alert">{error}</p>{/if}
 
 		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
 			<div class="figure">
@@ -293,7 +293,7 @@
 									</span>
 								{/if}
 							</span>
-							{#if !closed && (account.assetType === 'cash' || cash)}
+							{#if !closed}
 								<Button size="sm" onclick={() => panel('count', account.id)}>Count</Button>
 							{/if}
 							{#if !closed}
@@ -449,12 +449,6 @@
 		margin-top: 2px;
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 
 	h1 {

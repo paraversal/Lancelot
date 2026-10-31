@@ -1,0 +1,48 @@
+/* What the panels' forms share. Layout stays in each component. */
+
+fieldset {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+	/* A fieldset is at least as wide as its content unless told otherwise. */
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+}
+
+.grow {
+	flex: 1;
+}
+
+.form-error {
+	margin: 0;
+	font-size: var(--type-xs);
+	color: var(--color-minus);
+}
+
+.form-label {
+	font-size: var(--type-xs);
+	color: var(--color-ink-muted);
+}
+
+.form-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	min-width: 0;
+}
+
+.form-pair {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--spacing-3);
+}
+
+.form-confirm {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-2);
+	width: 100%;
+	font-size: 13px;
+}

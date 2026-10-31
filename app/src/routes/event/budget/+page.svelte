@@ -2,6 +2,7 @@
 	// Budget (R-BUD-3, R-BUD-4): estimate, actual and forecast per budget line, per category and
 	// in total, for income and expenses. Every figure comes from the core; a line opens in the
 	// panel. Not designed in UI.fig yet: this follows the People page's table and panel.
+	import { centreLink } from '#lib/nav.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
@@ -116,7 +117,7 @@
 
 		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
 			<div class="figure">
-				<span class="label">Forecast</span>
+				<span class="form-label">Forecast</span>
 				<span
 					class="result"
 					class:plus={budget.result.forecast > 0}
@@ -125,11 +126,11 @@
 				>
 			</div>
 			<div class="figure">
-				<span class="label">Planned</span>
+				<span class="form-label">Planned</span>
 				<span class="total">{formatAmount(budget.result.estimate, format, 'always')}</span>
 			</div>
 			<div class="figure">
-				<span class="label">{session.closed ? 'Result' : 'Result so far'}</span>
+				<span class="form-label">{session.closed ? 'Result' : 'Result so far'}</span>
 				<span class="total">{formatAmount(budget.result.actual, format, 'always')}</span>
 			</div>
 		</div>
@@ -197,11 +198,7 @@
 				{#each centres as c (c.centre.id)}
 					<div class="row" role="row">
 						<span class="name">
-							{#if c.centre.role === 'drinks'}
-								<a href="/event/drinks">{c.centre.name}</a>
-							{:else}
-								{c.centre.name}
-							{/if}
+							<a href={centreLink(c.centre.id)}>{c.centre.name}</a>
 						</span>
 						<span class="num">{formatAmount(c.figures.estimate, format, 'always')}</span>
 						<span class="num">{formatAmount(c.figures.actual, format, 'always')}</span>
@@ -268,11 +265,6 @@
 	.figure:first-child {
 		padding-left: 0;
 		border-left: none;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.result {

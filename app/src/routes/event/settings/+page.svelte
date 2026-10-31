@@ -3,7 +3,7 @@
 	// integrity, backups. Every field saves when it is left; there is no Save button.
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import { chooseEventFile, chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
 	import type { CopySummary } from '#lib/api/generated/CopySummary.ts';
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
@@ -49,7 +49,7 @@
 			error = null;
 			await f();
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 
@@ -81,7 +81,7 @@
 			keepInvalid = false;
 		} catch (e) {
 			keepInvalid = true;
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 
@@ -118,6 +118,8 @@
 			}
 		});
 
+	// An account or category can go while nothing refers to it; the core has the last word.
+	let deletingAccount = $state<number | null>(null);
 	const accounts = $derived(open.snapshot.accounts.filter((a) => a.kind === 'asset'));
 	const assets = $derived(accounts.map((a) => ({ value: a.id, label: a.name })));
 	const TYPES: { value: AssetType; label: string }[] = [
@@ -147,7 +149,7 @@
 			let name = 'New account';
 			for (let n = 2; accounts.some((a) => a.name.toLowerCase() === name.toLowerCase()); n++)
 				name = `New account ${n}`;
-			const added = await session.run(() => api.addAsset(name, 'cash'));
+			const added = await session.change(() => api.addAsset(name, 'cash'));
 			await tick();
 			const input = document.getElementById(`account-${added.id}`) as HTMLInputElement | null;
 			input?.focus();
@@ -228,6 +230,12 @@
 			source = null;
 		});
 
+	// Which cost centre and category the drink records use; either can be none.
+	const drinks = $derived(open.snapshot.drinkSettings);
+	const expenses = $derived(categories.filter((a) => a.kind === 'expense'));
+	const setDrinks = (patch: Partial<typeof drinks>) =>
+		run(() => session.change(() => api.setDrinkSettings({ ...drinks, ...patch })));
+
 	const issues = $derived(open.integrity.issues.length);
 	const shortPath = $derived(open.path.replace(/^\/Users\/[^/]+/, '~'));
 	const checked = $derived(
@@ -236,6 +244,24 @@
 			: null
 	);
 </script>
+
+{#snippet deleteAccount(a: { id: number; role: unknown; balance: number })}
+	{#if !a.role && !closed && !a.balance && a.id !== event.defaultReimbursementAccount && a.id !== open.snapshot.ticketSettings.account}
+		{#if deletingAccount === a.id}
+			<Button
+				size="sm"
+				kind="primary"
+				onclick={() => {
+					deletingAccount = null;
+					return run(() => session.change(() => api.deleteAccount(a.id)));
+				}}>Delete</Button
+			>
+			<Button size="sm" onclick={() => (deletingAccount = null)}>Keep</Button>
+		{:else}
+			<Button size="sm" onclick={() => (deletingAccount = a.id)}>Delete</Button>
+		{/if}
+	{/if}
+{/snippet}
 
 <div class="page">
 	<h1>Settings</h1>
@@ -251,7 +277,7 @@
 						required
 						oncommit={(v) => v && update({ name: v })}
 					/>
-					<div class="pair">
+					<div class="form-pair">
 						<DateField
 							label="From"
 							value={event.startsOn}
@@ -283,6 +309,25 @@
 						onchange={(account) =>
 							run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
 					/>
+					<label class="toggle">
+						<input
+							type="checkbox"
+							checked={open.snapshot.ticketSettings.enabled}
+							onchange={(e) => {
+								const { checked } = e.currentTarget;
+								const box = e.currentTarget;
+								run(async () => {
+									try {
+										await session.change(() => api.setTicketsEnabled(checked));
+									} catch (err) {
+										box.checked = !checked;
+										throw err;
+									}
+								});
+							}}
+						/>
+						Sells tickets
+					</label>
 				</section>
 
 				<section>
@@ -311,7 +356,19 @@
 									options={TYPES}
 									onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
 								/>
+								<label class="toggle" title="Counts and statements leave out opening counts">
+									<input
+										type="checkbox"
+										checked={a.netMovement}
+										onchange={(e) => {
+											const { checked } = e.currentTarget;
+											run(() => session.change(() => api.setNetMovement(a.id, checked)));
+										}}
+									/>
+									Net movement
+								</label>
 								<span class="balance">{formatAmount(a.balance, format)}</span>
+								{@render deleteAccount(a)}
 							</li>
 						{/each}
 					</ul>
@@ -339,13 +396,15 @@
 										}
 									}}
 								/>
-								{#if !c.role && !closed}
+								{#if !closed}
 									{#if deletingCentre === c.id}
 										<Button
 											size="sm"
 											kind="primary"
-											onclick={() => run(() => session.change(() => api.deleteCostCentre(c.id)))}
-											>Delete</Button
+											onclick={() => {
+												deletingCentre = null;
+												return run(() => session.change(() => api.deleteCostCentre(c.id)));
+											}}>Delete</Button
 										>
 										<Button size="sm" onclick={() => (deletingCentre = null)}>Keep</Button>
 									{:else}
@@ -358,8 +417,25 @@
 					{#if !closed}
 						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
 					{/if}
+					<div class="form-pair">
+						<Select
+							label="Drinks are in"
+							value={drinks.costCentre ?? 0}
+							options={centreOptions}
+							onchange={(v) => setDrinks({ costCentre: v === 0 ? null : v })}
+						/>
+						<Select
+							label="Pfand category"
+							value={drinks.pfand ?? 0}
+							options={[
+								{ value: 0, label: 'None' },
+								...expenses.map((a) => ({ value: a.id, label: a.name }))
+							]}
+							onchange={(v) => setDrinks({ pfand: v === 0 ? null : v })}
+						/>
+					</div>
 					<div class="labelled">
-						<span class="label">Categories start in</span>
+						<span class="form-label">Categories start in</span>
 						<ul class="accounts starts">
 							{#each categories as a (a.id)}
 								<li>
@@ -368,6 +444,7 @@
 												· income</span
 											>{/if}</span
 									>
+									{@render deleteAccount(a)}
 									<Select
 										name="{a.name} starts in"
 										value={a.costCentre ?? 0}
@@ -406,7 +483,7 @@
 			<section>
 				<h2>Display</h2>
 				<div class="labelled">
-					<span class="label">Numbers and dates</span>
+					<span class="form-label">Numbers and dates</span>
 					<Segmented
 						label="Numbers and dates"
 						value={format}
@@ -573,22 +650,11 @@
 		font-weight: 600;
 	}
 
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
-	}
-
 	.labelled {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 6px;
-	}
-
-	.label {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.toggle {
@@ -603,6 +669,11 @@
 	.counts {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.accounts .toggle {
+		align-self: center;
+		white-space: nowrap;
 	}
 
 	.toggle input {
@@ -623,10 +694,6 @@
 		color: var(--color-ink-muted);
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.grow {
-		flex: 1;
 	}
 
 	.muted {
@@ -667,14 +734,16 @@
 
 	.accounts li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--spacing-4);
-		height: 44px;
+		gap: 4px var(--spacing-4);
+		min-height: 44px;
+		padding: 4px 0;
 		border-bottom: 1px solid var(--color-rule);
 	}
 
 	.accounts .name {
-		flex: 1;
+		flex: 1 1 140px;
 		min-width: 0;
 		height: 34px;
 		margin-left: -9px;
@@ -702,7 +771,12 @@
 		text-align: right;
 	}
 
+	.starts li {
+		flex-wrap: nowrap;
+	}
+
 	.starts span.name {
+		flex: 1 1 0;
 		display: flex;
 		align-items: center;
 		gap: 4px;

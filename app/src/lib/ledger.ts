@@ -4,6 +4,7 @@
 import type { AccountView } from './api/generated/AccountView';
 import type { Cents } from './api/generated/Cents';
 import type { EventSnapshot } from './api/generated/EventSnapshot';
+import type { Flow } from './api/generated/Flow';
 import type { NumberFormat } from './api/generated/NumberFormat';
 import type { TxnView } from './api/generated/TxnView';
 import { formatAmount } from './format';
@@ -14,12 +15,11 @@ export interface Row {
 	txn: TxnView;
 	/** What the row says: the description, else the counterparty. */
 	title: string;
-	/** Who paid or received: the payer, the destination, the person settling. */
+	/** Who paid or received: the payer, the destination, the source, the person settling. */
 	who: string;
 	/** The income or expense categories the transaction books to. */
 	categories: AccountView[];
-	/** Money in (income), out (expense, ticket refund) or moved (transfer, settle, opening). */
-	flow: 'in' | 'out' | 'moved';
+	flow: Flow;
 	receipt: 'attached' | 'missing' | 'none';
 }
 
@@ -43,33 +43,14 @@ const isCategory = (a: AccountView | undefined) => a?.kind === 'income' || a?.ki
 
 export function rows(snapshot: EventSnapshot): Row[] {
 	const byId = new Map(snapshot.accounts.map((a) => [a.id, a]));
-	return snapshot.txns.map((txn) => {
-		const accounts = txn.lines.map((l) => ({ line: l, account: byId.get(l.account) }));
-		const categories = accounts.filter((x) => isCategory(x.account)).map((x) => x.account!);
-		const parties = accounts.filter((x) => !isCategory(x.account) && x.account?.kind !== 'opening');
-		// A ticket refund is negative income: money out, from whoever pays it (R-TKT-15).
-		const refund = txn.origin.type === 'ticketRefund';
-		const party =
-			txn.kind === 'settle'
-				? parties.find((x) => x.account?.kind === 'person')
-				: txn.kind === 'income' && !refund
-					? parties.find((x) => x.line.amount > 0)
-					: (parties.find((x) => x.line.amount < 0) ?? parties[0]);
-		const flow = txn.kind === 'expense' || refund ? 'out' : txn.kind === 'income' ? 'in' : 'moved';
-		const receipt = txn.attachments.length
-			? 'attached'
-			: txn.kind === 'expense'
-				? 'missing'
-				: 'none';
-		return {
-			txn,
-			title: txn.description || txn.counterparty || '',
-			who: party?.account?.name ?? '',
-			categories,
-			flow,
-			receipt
-		};
-	});
+	return snapshot.txns.map((txn) => ({
+		txn,
+		title: txn.description || txn.counterparty || '',
+		who: (txn.who !== null && byId.get(txn.who)?.name) || '',
+		categories: txn.lines.map((l) => byId.get(l.account)!).filter(isCategory),
+		flow: txn.flow,
+		receipt: txn.attachments.length ? 'attached' : txn.needsReceipt ? 'missing' : 'none'
+	}));
 }
 
 export function matches(row: Row, filter: Filter, query: string, format: NumberFormat): boolean {
@@ -77,7 +58,7 @@ export function matches(row: Row, filter: Filter, query: string, format: NumberF
 	const passes =
 		filter === 'all' ||
 		(filter === 'expense' && kind === 'expense') ||
-		(filter === 'income' && kind === 'income') ||
+		(filter === 'income' && (kind === 'income' || kind === 'refund')) ||
 		(filter === 'transfer' && (kind === 'transfer' || kind === 'settle' || kind === 'opening')) ||
 		(filter === 'missing' && row.receipt === 'missing');
 	if (!passes) return false;

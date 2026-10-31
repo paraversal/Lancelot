@@ -4,6 +4,7 @@ mod common;
 
 use common::*;
 use lancelot_core::*;
+use time::OffsetDateTime;
 
 #[test]
 fn new_event_has_default_accounts() {
@@ -28,7 +29,7 @@ fn new_event_has_default_accounts() {
     assert!(!book.event().is_closed());
     assert_eq!(
         book.event().default_reimbursement_account,
-        role(&book, Role::Verein)
+        asset(&book, "Verein account")
     );
 }
 
@@ -141,7 +142,7 @@ fn failed_changes_leave_the_book_untouched() {
 fn editing_replaces_and_deleting_removes() {
     let mut book = new_book();
     let (cash, food, tech) = (
-        role(&book, Role::CashBox),
+        asset(&book, "Cash box"),
         expense(&book, "Kitchen"),
         expense(&book, "Tech"),
     );
@@ -177,7 +178,7 @@ fn editing_replaces_and_deleting_removes() {
             "x",
             Entry::Transfer {
                 from: cash,
-                to: role(&book, Role::Verein),
+                to: asset(&book, "Verein account"),
                 amount: eur("1"),
             },
         ),
@@ -189,7 +190,7 @@ fn editing_replaces_and_deleting_removes() {
 #[test]
 fn overpaying_a_settle_is_allowed_with_a_warning() {
     let mut book = new_book();
-    let (verein, food) = (role(&book, Role::Verein), expense(&book, "Kitchen"));
+    let (verein, food) = (asset(&book, "Verein account"), expense(&book, "Kitchen"));
     let malte = person(&mut book, "Malte");
     save(
         &mut book,
@@ -225,7 +226,7 @@ fn overpaying_a_settle_is_allowed_with_a_warning() {
 #[test]
 fn reimbursement_account_must_be_an_asset() {
     let mut book = new_book();
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     book.set_default_reimbursement_account(cash).unwrap();
     assert_eq!(book.event().default_reimbursement_account, cash);
     let food = expense(&book, "Kitchen");
@@ -242,7 +243,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
     let mut book = new_book();
     let food = expense(&book, "Kitchen");
     let anna = person(&mut book, "Anna");
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     let groceries = save(
         &mut book,
         "Groceries",
@@ -294,7 +295,7 @@ fn closing_needs_open_items_resolved_or_overridden() {
 #[test]
 fn a_closed_event_is_read_only_until_reopened() {
     let mut book = new_book();
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
     book.close(vec![], now()).unwrap();
     // Closing twice does nothing.
@@ -318,7 +319,7 @@ fn a_closed_event_is_read_only_until_reopened() {
         DomainError::EventClosed
     );
 
-    book.reopen();
+    book.reopen().unwrap();
     assert!(!book.event().is_closed());
     assert!(book.event().closing_overrides.is_empty());
     assert!(
@@ -340,8 +341,8 @@ fn a_closed_event_is_read_only_until_reopened() {
 fn closing_counts_show_the_difference() {
     let mut book = new_book();
     let (cash, verein, donations) = (
-        role(&book, Role::CashBox),
-        role(&book, Role::Verein),
+        asset(&book, "Cash box"),
+        asset(&book, "Verein account"),
         income(&book, "Drink donations"),
     );
     save(
@@ -359,7 +360,7 @@ fn closing_counts_show_the_difference() {
         (cash, eur("412,90"), None)
     );
     assert_eq!(
-        book.ledger().open_items(),
+        book.open_items(),
         vec![OpenItem::ClosingCountMissing { account: cash }]
     );
 
@@ -367,7 +368,7 @@ fn closing_counts_show_the_difference() {
     let status = book.ledger().cash()[0];
     assert_eq!(status.difference, Some(eur("-2,90")));
     assert_eq!(
-        book.ledger().open_items(),
+        book.open_items(),
         vec![OpenItem::CashDifference {
             account: cash,
             difference: eur("-2,90")
@@ -376,7 +377,7 @@ fn closing_counts_show_the_difference() {
 
     book.set_closing_count(cash, june(14), eur("412,90"))
         .unwrap();
-    assert!(book.ledger().open_items().is_empty());
+    assert!(book.open_items().is_empty());
 
     // Other asset accounts appear once they have a count; they never need one.
     assert_eq!(book.ledger().cash().len(), 1);
@@ -390,8 +391,24 @@ fn closing_counts_show_the_difference() {
         book.set_closing_count(cash, june(14), eur("-1"))
             .unwrap_err()
             .code(),
-        "negative_amount"
+        "negative_cash_count"
     );
+    // A bank account can end below zero: it holds only the event's net movement (R-ISO-2).
+    book.set_closing_count(verein, june(14), eur("-100"))
+        .unwrap();
+    let counted = book.ledger().cash().iter().find(|c| c.account == verein);
+    assert_eq!(
+        counted.unwrap().difference,
+        Some(eur("-100")),
+        "nothing has moved on the Verein account yet"
+    );
+    assert_eq!(
+        book.set_asset_type(verein, AssetType::Cash)
+            .unwrap_err()
+            .code(),
+        "negative_cash_count"
+    );
+    book.clear_closing_count(verein).unwrap();
     let food = expense(&book, "Kitchen");
     assert_eq!(
         book.set_closing_count(food, june(14), eur("1"))
@@ -404,7 +421,7 @@ fn closing_counts_show_the_difference() {
 #[test]
 fn attachments_belong_to_transactions() {
     let mut book = new_book();
-    let (cash, food) = (role(&book, Role::CashBox), expense(&book, "Kitchen"));
+    let (cash, food) = (asset(&book, "Cash box"), expense(&book, "Kitchen"));
     let id = save(
         &mut book,
         "Bakery",
@@ -451,7 +468,7 @@ fn attachments_belong_to_transactions() {
 fn a_split_must_add_up_to_the_receipt_total() {
     let mut book = new_book();
     let (cash, kitchen, drinks) = (
-        role(&book, Role::CashBox),
+        asset(&book, "Cash box"),
         expense(&book, "Kitchen"),
         expense(&book, "Drinks"),
     );
@@ -520,9 +537,8 @@ fn asset_accounts_are_bank_or_cash() {
     );
 
     // Every cash account needs a closing count; bank accounts don't.
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     let missing: Vec<_> = book
-        .ledger()
         .open_items()
         .into_iter()
         .filter(|i| matches!(i, OpenItem::ClosingCountMissing { .. }))
@@ -536,7 +552,7 @@ fn asset_accounts_are_bank_or_cash() {
 #[test]
 fn an_opening_count_is_one_opening_transaction() {
     let mut book = new_book();
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     let status = |book: &Book| {
         *book
             .ledger()
@@ -588,7 +604,7 @@ fn an_opening_count_is_one_opening_transaction() {
     assert_eq!(book.txns().count(), 0);
 
     // A bank account with an opening count shows up among the counts, but needs no closing count.
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     book.set_opening_count(verein, june(12), eur("1000"))
         .unwrap();
     let bank = book
@@ -605,4 +621,131 @@ fn an_opening_count_is_one_opening_transaction() {
             .open_items()
             .contains(&OpenItem::ClosingCountMissing { account: verein })
     );
+}
+
+#[test]
+fn marking_payouts_paid_settles_only_those_with_an_iban() {
+    let mut book = new_book();
+    let kitchen = book
+        .account_by_name(AccountKind::Expense, "Kitchen")
+        .unwrap()
+        .id;
+    let verein = book
+        .account_by_name(AccountKind::Asset, "Verein account")
+        .unwrap()
+        .id;
+    let with_iban = Person {
+        iban: Some(validate_iban("DE89370400440532013000").unwrap()),
+        ..Person::default()
+    };
+    let anna = book.add_person("Anna", with_iban).unwrap();
+    let bob = book.add_person("Bob", Person::default()).unwrap();
+    for payer in [anna, bob] {
+        let draft = TxnDraft {
+            date: june(13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: Entry::Expense {
+                payer,
+                lines: vec![SplitLine {
+                    account: kitchen,
+                    amount: eur("20,00"),
+                    budget_line: None,
+                    cost_centre: None,
+                }],
+            },
+            total: None,
+        };
+        book.save_txn(&draft, None).unwrap();
+    }
+    assert_eq!(book.mark_payouts_paid(verein, june(20)), Ok(1));
+    assert!(book.ledger().person(anna).unwrap().net.is_zero());
+    assert_eq!(book.ledger().person(bob).unwrap().net, eur("20,00"));
+}
+
+#[test]
+fn setting_both_counts_is_one_change_that_fails_whole() {
+    let mut book = new_book();
+    let cash = book
+        .account_by_name(AccountKind::Asset, "Cash box")
+        .unwrap()
+        .id;
+    book.set_counts(
+        cash,
+        Some((june(12), eur("50,00"))),
+        Some((june(14), eur("45,00"))),
+    )
+    .unwrap();
+    assert_eq!(book.closing_count(cash).unwrap().amount, eur("45,00"));
+    let before = book.clone();
+
+    let negative = Cents::ZERO.checked_sub(eur("1,00")).unwrap();
+    assert!(
+        book.set_counts(
+            cash,
+            Some((june(12), eur("60,00"))),
+            Some((june(14), negative))
+        )
+        .is_err()
+    );
+    assert_eq!(book, before);
+    assert!(
+        book.set_counts(cash, Some((june(12), negative)), None)
+            .is_err()
+    );
+    assert_eq!(book, before);
+
+    book.set_counts(cash, None, None).unwrap();
+    assert!(book.closing_count(cash).is_none());
+    assert!(book.txns().next().is_none());
+
+    let kitchen = book
+        .account_by_name(AccountKind::Expense, "Kitchen")
+        .unwrap()
+        .id;
+    assert!(book.set_counts(kitchen, None, None).is_err());
+}
+
+#[test]
+fn reopening_keeps_the_notes_for_closing_again() {
+    let mut book = new_book();
+    let anna = book.add_person("Anna", Person::default()).unwrap();
+    let cash = asset(&book, "Cash box");
+    let food = expense(&book, "Kitchen");
+    save(
+        &mut book,
+        "Groceries",
+        Entry::Expense {
+            payer: anna,
+            lines: vec![split(food, "20")],
+        },
+    );
+    let overrides: Vec<_> = book
+        .open_items()
+        .into_iter()
+        .map(|item| BlockerOverride {
+            item,
+            note: "fine".into(),
+        })
+        .collect();
+    book.close(overrides.clone(), OffsetDateTime::UNIX_EPOCH)
+        .unwrap();
+    book.reopen().unwrap();
+    assert_eq!(book.event().closing_overrides, overrides);
+    assert!(book.close(Vec::new(), OffsetDateTime::UNIX_EPOCH).is_err());
+
+    // What is accepted is what the second closing says.
+    book.set_closing_count(cash, june(30), Cents::ZERO).unwrap();
+    let kept: Vec<_> = book
+        .open_items()
+        .into_iter()
+        .map(|item| BlockerOverride {
+            item,
+            note: "still fine".into(),
+        })
+        .collect();
+    book.close(kept.clone(), OffsetDateTime::UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(book.event().closing_overrides, kept);
 }

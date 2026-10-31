@@ -28,12 +28,12 @@ fn linked(account: AccountId, value: &str, line: BudgetLineId) -> SplitLine {
 }
 
 fn spend(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
-    let payer = role(book, Role::Verein);
+    let payer = asset(book, "Verein account");
     save(book, "Receipt", Entry::Expense { payer, lines })
 }
 
 fn earn(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
-    let destination = role(book, Role::CashBox);
+    let destination = asset(book, "Cash box");
     save(book, "Takings", Entry::Income { destination, lines })
 }
 
@@ -166,7 +166,7 @@ fn budget_lines_never_change_a_balance() {
 fn rejects_invalid_budget_lines() {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     let err = |book: &mut Book, d: BudgetLineDraft| book.add_budget_line(d).unwrap_err();
 
     assert_eq!(
@@ -220,7 +220,7 @@ fn a_link_stays_within_its_category() {
     let food = book
         .add_budget_line(amount(kitchen, "Food", "100"))
         .unwrap();
-    let payer = role(&book, Role::Verein);
+    let payer = asset(&book, "Verein account");
     let receipt = |lines| draft("Receipt", Entry::Expense { payer, lines });
 
     let wrong = book.save_txn(
@@ -288,7 +288,7 @@ fn a_closed_event_keeps_its_budget() {
     let food = book
         .add_budget_line(amount(kitchen, "Food", "100"))
         .unwrap();
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     book.set_closing_count(cash, june(14), Cents::ZERO).unwrap();
     book.close(Vec::new(), now()).unwrap();
     assert_eq!(
@@ -312,37 +312,43 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
     let kitchen = expense(store.book(), "Kitchen");
     let drinks = expense(store.book(), "Drinks");
     let food = store
-        .add_budget_line(amount(kitchen, "Food", "1.000"))
+        .change(|book| book.add_budget_line(amount(kitchen, "Food", "1.000")))
         .unwrap();
     let crates = store
-        .add_budget_line(BudgetLineDraft {
-            cost_centre: None,
-            estimate: Estimate::Quantity {
-                quantity: 40,
-                unit_price: eur("12,50"),
-            },
-            complete: true,
-            ..amount(drinks, "Crates", "0")
+        .change(|book| {
+            book.add_budget_line(BudgetLineDraft {
+                cost_centre: None,
+                estimate: Estimate::Quantity {
+                    quantity: 40,
+                    unit_price: eur("12,50"),
+                },
+                complete: true,
+                ..amount(drinks, "Crates", "0")
+            })
         })
         .unwrap();
-    let payer = role(store.book(), Role::Verein);
+    let payer = asset(store.book(), "Verein account");
     store
-        .save_txn(
-            &draft(
-                "Groceries",
-                Entry::Expense {
-                    payer,
-                    lines: vec![
-                        linked(kitchen, "312,40", food),
-                        linked(drinks, "480", crates),
-                    ],
-                },
-            ),
-            None,
-        )
+        .change(|book| {
+            book.save_txn(
+                &draft(
+                    "Groceries",
+                    Entry::Expense {
+                        payer,
+                        lines: vec![
+                            linked(kitchen, "312,40", food),
+                            linked(drinks, "480", crates),
+                        ],
+                    },
+                ),
+                None,
+            )
+        })
         .unwrap();
-    let gone = store.add_budget_line(amount(kitchen, "Gas", "50")).unwrap();
-    store.delete_budget_line(gone).unwrap();
+    let gone = store
+        .change(|book| book.add_budget_line(amount(kitchen, "Gas", "50")))
+        .unwrap();
+    store.change(|book| book.delete_budget_line(gone)).unwrap();
 
     let book = store.book().clone();
     drop(store);
@@ -400,7 +406,6 @@ proptest! {
             let line = SplitLine {
                 account: category,
                 amount: Cents::new(*cents).unwrap(),
-                memo: None,
                 budget_line,
                 cost_centre: None,
             };
@@ -433,10 +438,7 @@ proptest! {
             let account = book.account(b.draft.category).unwrap();
             let is_income = account.kind == AccountKind::Income;
             // The ticket categories forecast what is booked, whatever the estimate.
-            let follows_the_tickets = matches!(
-                account.role,
-                Some(Role::Tickets | Role::TicketFees | Role::TicketRefunds)
-            );
+            let follows_the_tickets = account.role.is_some();
             let expected = match (b.draft.complete || follows_the_tickets, is_income) {
                 (true, _) => f.actual,
                 (false, true) => f.estimate.min(f.actual),

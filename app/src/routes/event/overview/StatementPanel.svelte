@@ -1,8 +1,8 @@
 <script lang="ts">
-	// Checking an asset account against its statement (R-ACC-4). For the Verein account that is the
+	// Checking an asset account against its statement (R-ACC-4). On a net-movement account that is the
 	// event's net movement, since its real balance is never entered (R-ISO-2). A mismatch stays open
 	// until the books or the checkpoint change.
-	import { api, ApiError } from '#lib/api/index.ts';
+	import { api, errorMessage } from '#lib/api/index.ts';
 	import type { OpenEvent } from '#lib/api/generated/OpenEvent.ts';
 	import type { ReconciliationStatus } from '#lib/api/generated/ReconciliationStatus.ts';
 	import AmountField from '#lib/components/AmountField.svelte';
@@ -17,7 +17,7 @@
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
 	const details = $derived(snapshot.accounts.find((a) => a.id === account));
-	const movement = $derived(details?.role === 'verein');
+	const movement = $derived(details?.netMovement ?? false);
 	const checkpoints = $derived(snapshot.reconciliations.filter((r) => r.account === account));
 
 	const initialDate = () =>
@@ -54,7 +54,7 @@
 			await session.change(f);
 			reset();
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : String(e);
+			error = errorMessage(e);
 		}
 	}
 
@@ -87,7 +87,7 @@
 
 <Panel title={details?.name ?? ''} {onclose}>
 	{#key form}
-		<div class="pair">
+		<div class="form-pair">
 			<DateField
 				label="Date"
 				value={date}
@@ -106,7 +106,7 @@
 			/>
 		</div>
 	{/key}
-	{#if error}<p class="error">{error}</p>{/if}
+	{#if error}<p class="form-error">{error}</p>{/if}
 
 	{#if checkpoints.length}
 		<ul>
@@ -121,6 +121,12 @@
 							<span>In the books</span>
 							<span>{formatAmount(r.computed, format)}</span>
 						</span>
+						{#if r.fromSheet}
+							<span class="line note">
+								<span>Tickets in the sheet by then</span>
+								<span>{formatAmount(r.fromSheet, format)}</span>
+							</span>
+						{/if}
 						{#if r.difference}
 							<span class="note minus">{differenceText(r.difference, format)}</span>
 						{:else}
@@ -149,12 +155,6 @@
 </Panel>
 
 <style>
-	.pair {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-3);
-	}
-
 	ul {
 		margin: 0;
 		padding: 0;
@@ -212,11 +212,5 @@
 
 	.note.plus {
 		color: var(--color-plus);
-	}
-
-	.error {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-minus);
 	}
 </style>

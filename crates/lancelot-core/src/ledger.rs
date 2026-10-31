@@ -3,14 +3,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use ts_rs::TS;
 
 use time::Date;
 
 use crate::model::{
-    Account, AccountId, AccountKind, AssetType, ClosingCount, Origin, Reconciliation,
-    ReconciliationId, Role, Txn, TxnId, TxnKind,
+    Account, AccountId, AccountKind, AssetType, ClosingCount, OpenItem, Origin, Reconciliation,
+    ReconciliationId, Txn, TxnId, TxnKind,
 };
 use crate::money::{Cents, MoneyError};
 
@@ -96,44 +96,70 @@ pub struct OpeningCount {
 /// A statement against the books on its date (R-ACC-4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct ReconciliationStatus {
     pub id: ReconciliationId,
     pub account: AccountId,
     #[ts(type = "string")]
     pub date: Date,
     pub amount: Cents,
-    /// The account's lines up to and including the date.
+    /// What the books say by the date: see [`book_figure`].
     pub computed: Cents,
+    /// The part of `computed` that the ticket sheets known by the date brought in.
+    pub from_sheet: Cents,
     /// `amount − computed`: positive when the statement shows more than the books.
     pub difference: Cents,
-    /// The Verein account: `amount` and `computed` are net movements, without opening counts.
+    /// A net-movement account: `amount` and `computed` leave out opening counts (R-ISO-2).
     pub movement: bool,
 }
 
-/// Something that keeps the event from being closed (R-SET-5).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
-#[ts(export)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum OpenItem {
-    /// A person the event owes money to, or who owes the event.
-    PersonBalance { person: AccountId, net: Cents },
-    /// An expense without an attachment (R-ATT-4).
-    MissingReceipt { txn: TxnId },
-    /// A cash account has no closing count yet.
-    ClosingCountMissing { account: AccountId },
-    /// The closing count differs from the computed balance.
-    CashDifference {
-        account: AccountId,
-        difference: Cents,
-    },
-    /// A statement differs from the books on its date (R-ACC-4).
-    ReconciliationMismatch {
-        checkpoint: ReconciliationId,
-        account: AccountId,
-        difference: Cents,
-    },
-    /// Tickets removed from the sheet that have no resolution yet (R-TKT-16), per order and tier.
-    TicketConflicts { count: u32 },
+/// What the books say an asset account should show.
+#[derive(Clone, Copy)]
+struct BookFigure {
+    total: Cents,
+    from_sheet: Cents,
+}
+
+/// What a closing count or a statement is compared with, up to and including `until`.
+///
+/// A net-movement account shows only the event's net movement, without opening counts (R-ISO-2).
+/// The ticket account takes the ticket income from the sheets known by then: the generated entry
+/// stands for income that came in over time but carries the date of the latest import, so its date
+/// says nothing about when the money arrived.
+fn book_figure(
+    account: &Account,
+    txns: &BTreeMap<TxnId, Txn>,
+    until: Option<Date>,
+    tickets: &TicketIncome<'_>,
+) -> Result<BookFigure, MoneyError> {
+    let movement = account.net_movement;
+    let sheet = tickets.account == Some(account.id);
+    let from_sheet = if sheet {
+        tickets
+            .sheet_income
+            .iter()
+            .rfind(|(date, _)| until.is_none_or(|d| *date <= d))
+            .map_or(Cents::ZERO, |(_, income)| *income)
+    } else {
+        Cents::ZERO
+    };
+    let total = txns
+        .values()
+        .filter(|t| until.is_none_or(|d| t.date <= d))
+        .filter(|t| !(movement && t.kind == TxnKind::Opening))
+        .filter(|t| !(sheet && matches!(t.origin, Origin::TicketImport { .. })))
+        .flat_map(|t| &t.lines)
+        .filter(|l| l.account == account.id)
+        .try_fold(from_sheet, |acc, l| acc.checked_add(l.amount))?;
+    Ok(BookFigure { total, from_sheet })
+}
+
+/// Where the sheets' money arrives, and how much they had brought in by each import's date, oldest
+/// first.
+#[derive(Clone, Copy)]
+pub struct TicketIncome<'a> {
+    pub account: Option<AccountId>,
+    pub sheet_income: &'a [(Date, Cents)],
 }
 
 /// What [`Ledger::compute`] needs from the book.
@@ -144,16 +170,7 @@ pub struct LedgerInput<'a> {
     pub reconciliations: &'a BTreeMap<ReconciliationId, Reconciliation>,
     /// Transactions that have at least one attachment.
     pub with_attachments: &'a BTreeSet<TxnId>,
-    /// Unresolved ticket conflicts.
-    pub ticket_conflicts: u32,
-}
-
-/// An open item explicitly accepted when closing the event (R-SET-7).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
-#[ts(export)]
-pub struct BlockerOverride {
-    pub item: OpenItem,
-    pub note: String,
+    pub tickets: TicketIncome<'a>,
 }
 
 /// All derived figures of an event.
@@ -172,7 +189,6 @@ pub struct Ledger {
     missing_receipts: Vec<TxnId>,
     person_entries: BTreeMap<AccountId, Vec<PersonEntry>>,
     person_totals: PersonTotals,
-    ticket_conflicts: u32,
 }
 
 /// One line of a person's running balance (R-PER-3).
@@ -206,226 +222,31 @@ impl Ledger {
             closing_counts,
             reconciliations,
             with_attachments,
-            ticket_conflicts,
+            tickets,
         } = input;
-        let mut raw: BTreeMap<AccountId, Cents> =
-            accounts.keys().map(|id| (*id, Cents::ZERO)).collect();
-        let mut persons: BTreeMap<AccountId, PersonSummary> = accounts
-            .values()
-            .filter(|a| a.kind == AccountKind::Person)
-            .map(|a| (a.id, PersonSummary::default()))
-            .collect();
-        let mut refunded: BTreeMap<AccountId, Cents> = BTreeMap::new();
-
-        for txn in txns.values() {
-            for line in &txn.lines {
-                let balance = raw.entry(line.account).or_default();
-                *balance = balance.checked_add(line.amount)?;
-
-                if let Some(p) = persons.get_mut(&line.account) {
-                    if let Origin::TicketRefund { .. } = txn.origin {
-                        let sum = refunded.entry(line.account).or_default();
-                        *sum = sum.checked_sub(line.amount)?;
-                        continue;
-                    }
-                    let (field, amount) = match (txn.kind, line.amount.is_positive()) {
-                        (TxnKind::Settle, true) => (&mut p.reimbursed, line.amount),
-                        (TxnKind::Settle, false) => (&mut p.repaid, -line.amount),
-                        (_, true) => (&mut p.held, line.amount),
-                        (_, false) => (&mut p.advanced, -line.amount),
-                    };
-                    *field = field.checked_add(amount)?;
-                }
-            }
-        }
-
-        // A refund comes out of the ticket money a person holds (R-TKT-15); beyond that it is
-        // their own money, an advance.
-        for (id, refund) in refunded {
-            if let Some(p) = persons.get_mut(&id) {
-                let from_held = refund.min(p.held);
-                p.held = p.held.checked_sub(from_held)?;
-                p.advanced = p.advanced.checked_add(refund.checked_sub(from_held)?)?;
-            }
-        }
-
-        for p in persons.values_mut() {
-            p.settled = p.reimbursed.checked_add(p.repaid)?;
-            p.net = p
-                .advanced
-                .checked_sub(p.held)?
-                .checked_sub(p.reimbursed)?
-                .checked_add(p.repaid)?;
-            p.status = match p.net.signum() {
-                1 => PersonStatus::Owed,
-                -1 => PersonStatus::Owes,
-                _ => PersonStatus::Settled,
-            };
-        }
-
-        // Running balances, in date order (then by id), and the totals row.
-        let mut ordered: Vec<&Txn> = txns.values().collect();
-        ordered.sort_by_key(|t| (t.date, t.id));
-        let mut person_entries: BTreeMap<AccountId, Vec<PersonEntry>> = BTreeMap::new();
-        for txn in ordered {
-            for line in txn
-                .lines
-                .iter()
-                .filter(|l| persons.contains_key(&l.account))
-            {
-                let entries = person_entries.entry(line.account).or_default();
-                let before = entries.last().map(|e| e.balance).unwrap_or_default();
-                let effect = -line.amount;
-                entries.push(PersonEntry {
-                    txn: txn.id,
-                    effect,
-                    balance: before.checked_add(effect)?,
-                });
-            }
-        }
-        let mut person_totals = PersonTotals::default();
-        for p in persons.values() {
-            person_totals.advanced = person_totals.advanced.checked_add(p.advanced)?;
-            person_totals.held = person_totals.held.checked_add(p.held)?;
-            person_totals.settled = person_totals.settled.checked_add(p.settled)?;
-            person_totals.net = person_totals.net.checked_add(p.net)?;
-        }
-
-        let kind_of = |id: &AccountId| accounts.get(id).map(|a| a.kind);
-        let mut displayed = BTreeMap::new();
-        for (id, c) in &raw {
-            if let Some(kind) = kind_of(id) {
-                displayed.insert(*id, c.checked_mul(kind.display_sign())?);
-            }
-        }
-
-        let total_of = |kind: AccountKind| -> Result<Cents, MoneyError> {
-            displayed
-                .iter()
-                .filter(|(id, _)| kind_of(id) == Some(kind))
-                .try_fold(Cents::ZERO, |acc, (_, c)| acc.checked_add(*c))
-        };
+        let raw = raw_balances(accounts, txns)?;
+        let persons = person_summaries(accounts, txns)?;
+        let displayed = displayed_balances(accounts, &raw)?;
+        let total_of = |kind: AccountKind| total_of(kind, accounts, &displayed);
         let income_total = total_of(AccountKind::Income)?;
         let expense_total = total_of(AccountKind::Expense)?;
-        let result = income_total.checked_sub(expense_total)?;
-
-        let assets: Vec<AccountBalance> = displayed
-            .iter()
-            .filter(|(id, _)| kind_of(id) == Some(AccountKind::Asset))
-            .map(|(id, c)| AccountBalance {
-                account: *id,
-                balance: *c,
-            })
-            .collect();
-        let mut held_by_people = Cents::ZERO;
-        let mut owed_to_people = Cents::ZERO;
-        for p in persons.values() {
-            if p.net.is_negative() {
-                held_by_people = held_by_people.checked_sub(p.net)?;
-            } else {
-                owed_to_people = owed_to_people.checked_add(p.net)?;
-            }
-        }
-        let opening = total_of(AccountKind::Opening)?;
-        let total = assets
-            .iter()
-            .try_fold(Cents::ZERO, |acc, a| acc.checked_add(a.balance))?
-            .checked_add(held_by_people)?
-            .checked_sub(owed_to_people)?
-            .checked_sub(opening)?;
-
-        let mut openings: BTreeMap<AccountId, OpeningCount> = BTreeMap::new();
-        for t in txns.values().filter(|t| t.kind == TxnKind::Opening) {
-            for l in t
-                .lines
-                .iter()
-                .filter(|l| kind_of(&l.account) == Some(AccountKind::Asset))
-            {
-                match openings.get_mut(&l.account) {
-                    Some(o) => o.amount = o.amount.checked_add(l.amount)?,
-                    None => {
-                        openings.insert(
-                            l.account,
-                            OpeningCount {
-                                txn: t.id,
-                                date: t.date,
-                                amount: l.amount,
-                            },
-                        );
-                    }
-                }
-            }
-        }
-
-        let mut cash = Vec::new();
-        for a in accounts.values() {
-            let Some(asset_type) = a.asset_type.filter(|_| a.kind == AccountKind::Asset) else {
-                continue;
-            };
-            let counted = closing_counts.get(&a.id).map(|c| c.amount);
-            let opening = openings.get(&a.id).copied();
-            if asset_type == AssetType::Bank && counted.is_none() && opening.is_none() {
-                continue;
-            }
-            let computed = displayed.get(&a.id).copied().unwrap_or_default();
-            let difference = counted.map(|c| c.checked_sub(computed)).transpose()?;
-            cash.push(CashStatus {
-                account: a.id,
-                asset_type,
-                opening,
-                computed,
-                counted,
-                difference,
-            });
-        }
-
-        let mut checkpoints = Vec::new();
-        for r in reconciliations.values() {
-            let movement = accounts.get(&r.account).and_then(|a| a.role) == Some(Role::Verein);
-            let computed = txns
-                .values()
-                .filter(|t| t.date <= r.date && !(movement && t.kind == TxnKind::Opening))
-                .flat_map(|t| &t.lines)
-                .filter(|l| l.account == r.account)
-                .try_fold(Cents::ZERO, |acc, l| acc.checked_add(l.amount))?;
-            checkpoints.push(ReconciliationStatus {
-                id: r.id,
-                account: r.account,
-                date: r.date,
-                amount: r.amount,
-                computed,
-                difference: r.amount.checked_sub(computed)?,
-                movement,
-            });
-        }
-        checkpoints.sort_by_key(|c| (c.date, c.id));
-
-        let missing_receipts = txns
-            .values()
-            .filter(|t| t.kind == TxnKind::Expense && !with_attachments.contains(&t.id))
-            .map(|t| t.id)
-            .collect();
-
         Ok(Ledger {
+            money: money_location(accounts, &displayed, &persons)?,
+            cash: cash_statuses(accounts, txns, closing_counts, &tickets)?,
+            reconciliations: checkpoints(accounts, txns, reconciliations, &tickets)?,
+            missing_receipts: txns
+                .values()
+                .filter(|t| t.kind.needs_receipt() && !with_attachments.contains(&t.id))
+                .map(|t| t.id)
+                .collect(),
+            person_entries: person_entries(&persons, txns)?,
+            person_totals: person_totals(&persons)?,
             raw,
             displayed,
             persons,
             income_total,
             expense_total,
-            result,
-            money: MoneyLocation {
-                assets,
-                held_by_people,
-                owed_to_people,
-                opening,
-                total,
-            },
-            cash,
-            reconciliations: checkpoints,
-            missing_receipts,
-            person_entries,
-            person_totals,
-            ticket_conflicts,
+            result: income_total.checked_sub(expense_total)?,
         })
     }
 
@@ -492,7 +313,7 @@ impl Ledger {
         &self.missing_receipts
     }
 
-    /// People first, then receipts, then cash, then statements, then tickets.
+    /// People first, then receipts, then cash, then statements.
     pub fn open_items(&self) -> Vec<OpenItem> {
         let people = self
             .persons
@@ -526,14 +347,268 @@ impl Ledger {
                 account: r.account,
                 difference: r.difference,
             });
-        let tickets = (self.ticket_conflicts > 0).then_some(OpenItem::TicketConflicts {
-            count: self.ticket_conflicts,
-        });
         people
             .chain(receipts)
             .chain(cash)
             .chain(statements)
-            .chain(tickets)
             .collect()
     }
+}
+
+fn raw_balances(
+    accounts: &BTreeMap<AccountId, Account>,
+    txns: &BTreeMap<TxnId, Txn>,
+) -> Result<BTreeMap<AccountId, Cents>, MoneyError> {
+    let mut raw: BTreeMap<AccountId, Cents> =
+        accounts.keys().map(|id| (*id, Cents::ZERO)).collect();
+    for line in txns.values().flat_map(|t| &t.lines) {
+        let balance = raw.entry(line.account).or_default();
+        *balance = balance.checked_add(line.amount)?;
+    }
+    Ok(raw)
+}
+
+fn person_summaries(
+    accounts: &BTreeMap<AccountId, Account>,
+    txns: &BTreeMap<TxnId, Txn>,
+) -> Result<BTreeMap<AccountId, PersonSummary>, MoneyError> {
+    let mut persons: BTreeMap<AccountId, PersonSummary> = accounts
+        .values()
+        .filter(|a| a.kind == AccountKind::Person)
+        .map(|a| (a.id, PersonSummary::default()))
+        .collect();
+    let mut refunded: BTreeMap<AccountId, Cents> = BTreeMap::new();
+
+    for txn in txns.values() {
+        for line in &txn.lines {
+            let Some(p) = persons.get_mut(&line.account) else {
+                continue;
+            };
+            if txn.kind == TxnKind::Refund {
+                let sum = refunded.entry(line.account).or_default();
+                *sum = sum.checked_sub(line.amount)?;
+                continue;
+            }
+            let (field, amount) = match (txn.kind, line.amount.is_positive()) {
+                (TxnKind::Settle, true) => (&mut p.reimbursed, line.amount),
+                (TxnKind::Settle, false) => (&mut p.repaid, -line.amount),
+                (_, true) => (&mut p.held, line.amount),
+                (_, false) => (&mut p.advanced, -line.amount),
+            };
+            *field = field.checked_add(amount)?;
+        }
+    }
+
+    // A refund comes out of the ticket money a person holds (R-TKT-15); beyond that it is
+    // their own money, an advance.
+    for (id, refund) in refunded {
+        if let Some(p) = persons.get_mut(&id) {
+            let from_held = refund.min(p.held);
+            p.held = p.held.checked_sub(from_held)?;
+            p.advanced = p.advanced.checked_add(refund.checked_sub(from_held)?)?;
+        }
+    }
+
+    for p in persons.values_mut() {
+        p.settled = p.reimbursed.checked_add(p.repaid)?;
+        p.net = p
+            .advanced
+            .checked_sub(p.held)?
+            .checked_sub(p.reimbursed)?
+            .checked_add(p.repaid)?;
+        p.status = match p.net.signum() {
+            1 => PersonStatus::Owed,
+            -1 => PersonStatus::Owes,
+            _ => PersonStatus::Settled,
+        };
+    }
+    Ok(persons)
+}
+
+/// Running balances, in date order (then by id).
+fn person_entries(
+    persons: &BTreeMap<AccountId, PersonSummary>,
+    txns: &BTreeMap<TxnId, Txn>,
+) -> Result<BTreeMap<AccountId, Vec<PersonEntry>>, MoneyError> {
+    let mut ordered: Vec<&Txn> = txns.values().collect();
+    ordered.sort_by_key(|t| (t.date, t.id));
+    let mut person_entries: BTreeMap<AccountId, Vec<PersonEntry>> = BTreeMap::new();
+    for txn in ordered {
+        for line in txn
+            .lines
+            .iter()
+            .filter(|l| persons.contains_key(&l.account))
+        {
+            let entries = person_entries.entry(line.account).or_default();
+            let before = entries.last().map(|e| e.balance).unwrap_or_default();
+            let effect = -line.amount;
+            entries.push(PersonEntry {
+                txn: txn.id,
+                effect,
+                balance: before.checked_add(effect)?,
+            });
+        }
+    }
+    Ok(person_entries)
+}
+
+fn person_totals(persons: &BTreeMap<AccountId, PersonSummary>) -> Result<PersonTotals, MoneyError> {
+    let mut totals = PersonTotals::default();
+    for p in persons.values() {
+        totals.advanced = totals.advanced.checked_add(p.advanced)?;
+        totals.held = totals.held.checked_add(p.held)?;
+        totals.settled = totals.settled.checked_add(p.settled)?;
+        totals.net = totals.net.checked_add(p.net)?;
+    }
+    Ok(totals)
+}
+
+fn displayed_balances(
+    accounts: &BTreeMap<AccountId, Account>,
+    raw: &BTreeMap<AccountId, Cents>,
+) -> Result<BTreeMap<AccountId, Cents>, MoneyError> {
+    let mut displayed = BTreeMap::new();
+    for (id, c) in raw {
+        if let Some(account) = accounts.get(id) {
+            displayed.insert(*id, c.checked_mul(account.kind.display_sign())?);
+        }
+    }
+    Ok(displayed)
+}
+
+fn total_of(
+    kind: AccountKind,
+    accounts: &BTreeMap<AccountId, Account>,
+    displayed: &BTreeMap<AccountId, Cents>,
+) -> Result<Cents, MoneyError> {
+    displayed
+        .iter()
+        .filter(|(id, _)| accounts.get(id).map(|a| a.kind) == Some(kind))
+        .try_fold(Cents::ZERO, |acc, (_, c)| acc.checked_add(*c))
+}
+
+fn money_location(
+    accounts: &BTreeMap<AccountId, Account>,
+    displayed: &BTreeMap<AccountId, Cents>,
+    persons: &BTreeMap<AccountId, PersonSummary>,
+) -> Result<MoneyLocation, MoneyError> {
+    let assets: Vec<AccountBalance> = displayed
+        .iter()
+        .filter(|(id, _)| accounts.get(id).map(|a| a.kind) == Some(AccountKind::Asset))
+        .map(|(id, c)| AccountBalance {
+            account: *id,
+            balance: *c,
+        })
+        .collect();
+    let mut held_by_people = Cents::ZERO;
+    let mut owed_to_people = Cents::ZERO;
+    for p in persons.values() {
+        if p.net.is_negative() {
+            held_by_people = held_by_people.checked_sub(p.net)?;
+        } else {
+            owed_to_people = owed_to_people.checked_add(p.net)?;
+        }
+    }
+    let opening = total_of(AccountKind::Opening, accounts, displayed)?;
+    let total = assets
+        .iter()
+        .try_fold(Cents::ZERO, |acc, a| acc.checked_add(a.balance))?
+        .checked_add(held_by_people)?
+        .checked_sub(owed_to_people)?
+        .checked_sub(opening)?;
+    Ok(MoneyLocation {
+        assets,
+        held_by_people,
+        owed_to_people,
+        opening,
+        total,
+    })
+}
+
+/// What was counted at the start of each asset account: its opening transactions.
+fn opening_counts(
+    accounts: &BTreeMap<AccountId, Account>,
+    txns: &BTreeMap<TxnId, Txn>,
+) -> Result<BTreeMap<AccountId, OpeningCount>, MoneyError> {
+    let mut openings: BTreeMap<AccountId, OpeningCount> = BTreeMap::new();
+    for t in txns.values().filter(|t| t.kind == TxnKind::Opening) {
+        for l in t
+            .lines
+            .iter()
+            .filter(|l| accounts.get(&l.account).map(|a| a.kind) == Some(AccountKind::Asset))
+        {
+            match openings.get_mut(&l.account) {
+                Some(o) => o.amount = o.amount.checked_add(l.amount)?,
+                None => {
+                    openings.insert(
+                        l.account,
+                        OpeningCount {
+                            txn: t.id,
+                            date: t.date,
+                            amount: l.amount,
+                        },
+                    );
+                }
+            }
+        }
+    }
+    Ok(openings)
+}
+
+fn cash_statuses(
+    accounts: &BTreeMap<AccountId, Account>,
+    txns: &BTreeMap<TxnId, Txn>,
+    closing_counts: &BTreeMap<AccountId, ClosingCount>,
+    tickets: &TicketIncome<'_>,
+) -> Result<Vec<CashStatus>, MoneyError> {
+    let openings = opening_counts(accounts, txns)?;
+    let mut cash = Vec::new();
+    for a in accounts.values() {
+        let Some(asset_type) = a.asset_type.filter(|_| a.kind == AccountKind::Asset) else {
+            continue;
+        };
+        let counted = closing_counts.get(&a.id).map(|c| c.amount);
+        let opening = openings.get(&a.id).copied();
+        if asset_type == AssetType::Bank && counted.is_none() && opening.is_none() {
+            continue;
+        }
+        let computed = book_figure(a, txns, None, tickets)?.total;
+        let difference = counted.map(|c| c.checked_sub(computed)).transpose()?;
+        cash.push(CashStatus {
+            account: a.id,
+            asset_type,
+            opening,
+            computed,
+            counted,
+            difference,
+        });
+    }
+    Ok(cash)
+}
+
+fn checkpoints(
+    accounts: &BTreeMap<AccountId, Account>,
+    txns: &BTreeMap<TxnId, Txn>,
+    reconciliations: &BTreeMap<ReconciliationId, Reconciliation>,
+    tickets: &TicketIncome<'_>,
+) -> Result<Vec<ReconciliationStatus>, MoneyError> {
+    let mut checkpoints = Vec::new();
+    for r in reconciliations.values() {
+        let Some(account) = accounts.get(&r.account) else {
+            continue;
+        };
+        let figure = book_figure(account, txns, Some(r.date), tickets)?;
+        checkpoints.push(ReconciliationStatus {
+            id: r.id,
+            account: r.account,
+            date: r.date,
+            amount: r.amount,
+            computed: figure.total,
+            from_sheet: figure.from_sheet,
+            difference: r.amount.checked_sub(figure.total)?,
+            movement: account.net_movement,
+        });
+    }
+    checkpoints.sort_by_key(|c| (c.date, c.id));
+    Ok(checkpoints)
 }

@@ -16,7 +16,8 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, formatFee, parseCount, parseFee, refundPerTicket } from '#lib/tickets.ts';
+	import { feeInput, formatFee, parseCount, parseFee } from '#lib/tickets.ts';
+	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let { conflict, removed }: { conflict: OrderConflict; removed: RemovedTickets } = $props();
 
@@ -26,7 +27,7 @@
 	const tier = $derived(tickets.tiers.find((t) => t.id === removed.tier));
 	const tierName = (id: number) => tickets.tiers.find((t) => t.id === id)?.name ?? '';
 	const since = $derived(tickets.imports.findIndex((i) => i.id === removed.since) + 1);
-	const verein = $derived(snapshot.accounts.find((a) => a.role === 'verein')?.id ?? null);
+	const ticketAccount = $derived(snapshot.ticketSettings.account);
 	const payers = $derived(
 		snapshot.accounts
 			.filter((a) => a.kind === 'asset' || a.kind === 'person')
@@ -54,18 +55,17 @@
 		count = String(removed.count);
 		percent = feeInput(10_000, format);
 		date = tickets.imports.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
-		payer = verein;
+		payer = ticketAccount;
 	});
 
 	const n = $derived(parseCount(count));
 	const bp = $derived(percent.trim() ? parseFee(percent) : null);
 	const price = $derived(tier?.price ?? 0);
-	const refund = $derived(
-		bp !== null && n !== null && !Number.isNaN(n) ? refundPerTicket(price, bp) * n : null
+	const share = ticketShare(() =>
+		bp !== null && n !== null && !Number.isNaN(n) ? { price, bp, count: n } : null
 	);
-	const keep = $derived(
-		n !== null && !Number.isNaN(n) && refund !== null ? price * n - refund : null
-	);
+	const refund = $derived(share.current?.part ?? null);
+	const keep = $derived(share.current?.rest ?? null);
 
 	async function resolve(resolution: Resolution) {
 		error = null;
@@ -89,7 +89,7 @@
 		return resolve({
 			type: 'refund',
 			count: n,
-			terms: { refundBp: bp, date, payer: payer === verein ? null : payer },
+			terms: { refundBp: bp, date, payer: payer === ticketAccount ? null : payer },
 			note
 		});
 	}

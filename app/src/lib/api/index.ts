@@ -30,6 +30,7 @@ import type { CancellationId } from './generated/CancellationId';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
+import type { ImportDeletion } from './generated/ImportDeletion';
 import type { ImportId } from './generated/ImportId';
 import type { ImportPreview } from './generated/ImportPreview';
 import type { ManualSaleDraft } from './generated/ManualSaleDraft';
@@ -43,6 +44,7 @@ import type { Report } from './generated/Report';
 import type { Resolution } from './generated/Resolution';
 import type { SavedTxn } from './generated/SavedTxn';
 import type { TicketColumns } from './generated/TicketColumns';
+import type { TicketShare } from './generated/TicketShare';
 import type { TierDraft } from './generated/TierDraft';
 import type { TierId } from './generated/TierId';
 import type { TxnDraft } from './generated/TxnDraft';
@@ -63,16 +65,21 @@ export class ApiError extends Error {
 	}
 }
 
+/** What to show for a failure of any kind. */
+export function errorMessage(e: unknown): string {
+	return e instanceof ApiError ? e.message : String(e);
+}
+
 function isErrorData(value: unknown): value is ApiErrorData {
 	return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
 }
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
-/** Tauri's invoke in the app; in a plain browser during development, the mock backend. */
+/** Tauri's invoke in the app; in a plain browser during development, the dev bridge. */
 async function backend(): Promise<Invoke> {
 	if (isTauri()) return tauriInvoke;
-	if (import.meta.env.DEV) return (await import('./mock')).invoke;
+	if (import.meta.env.DEV) return (await import('./dev')).invoke;
 	throw new ApiError({
 		code: 'internal',
 		message: 'not running in Lancelot',
@@ -122,6 +129,9 @@ export const api = {
 	restoreBackup: (event: string, backup: string, target: string) =>
 		call<OpenEvent>('backup_restore', { event, backup, target }),
 
+	/** A percentage of `count` tickets by the core's rule; changes nothing. */
+	ticketShare: (price: Cents, bp: number, count: number) =>
+		call<TicketShare>('ticket_share', { price, bp, count }),
 	parseAmount: (input: string, allowNegative: boolean) =>
 		call<Parsed>('amount_parse', { input, allowNegative }),
 	parseDate: (input: string) => call<ParsedDate>('date_parse', { input }),
@@ -135,13 +145,18 @@ export const api = {
 	deleteTxn: (id: TxnId) => call<OpenEvent>('txn_delete', { id }),
 	addAccount: (kind: AccountKind, name: string) => call<Added>('account_add', { kind, name }),
 	renameAccount: (id: AccountId, name: string) => call<OpenEvent>('account_rename', { id, name }),
+	/** Only an account or person nothing refers to. */
+	deleteAccount: (id: AccountId) => call<OpenEvent>('account_delete', { id }),
 	addAsset: (name: string, assetType: AssetType) => call<Added>('asset_add', { name, assetType }),
 	setAssetType: (id: AccountId, assetType: AssetType) =>
 		call<OpenEvent>('asset_set_type', { id, assetType }),
+	/** Its counts and statements leave out opening counts (R-ISO-2). */
+	setNetMovement: (id: AccountId, netMovement: boolean) =>
+		call<OpenEvent>('asset_set_net_movement', { id, netMovement }),
 	/** Replaces both counts of an asset account; `null` removes one. */
 	setCounts: (account: AccountId, opening: CountInput | null, closing: CountInput | null) =>
 		call<OpenEvent>('counts_set', { account, opening, closing }),
-	/** What a statement shows on a date (R-ACC-4). For the Verein account: the net movement. */
+	/** What a statement shows on a date (R-ACC-4). On a net-movement account: the net movement. */
 	addReconciliation: (account: AccountId, date: string, amount: Cents) =>
 		call<OpenEvent>('reconciliation_add', { account, date, amount }),
 	updateReconciliation: (id: ReconciliationId, date: string, amount: Cents) =>
@@ -178,6 +193,10 @@ export const api = {
 	/** Only a tier that no import and no manual sale uses. */
 	deleteTier: (id: TierId) => call<OpenEvent>('tier_delete', { id }),
 	setTicketColumns: (columns: TicketColumns) => call<OpenEvent>('ticket_columns_set', { columns }),
+	/** Off is refused while there are tiers. */
+	setTicketsEnabled: (enabled: boolean) => call<OpenEvent>('tickets_set_enabled', { enabled }),
+	setTicketAccount: (account: AccountId | null) =>
+		call<OpenEvent>('ticket_account_set', { account }),
 	/** Reads a ticket sheet (path) with the event's columns; changes nothing. */
 	previewTickets: (path: string, date: string) =>
 		call<ImportPreview>('tickets_preview', { path, date }),
@@ -185,6 +204,10 @@ export const api = {
 	importTickets: (path: string, date: string, sha256: string) =>
 		call<OpenEvent>('tickets_import', { path, date, sha256 }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
+	/** What deleting an import would change; changes nothing. */
+	previewDeleteImport: (id: ImportId) => call<ImportDeletion>('import_delete_preview', { id }),
+	/** Everything goes back to the sheets that are left. Refused while a cancellation needs it. */
+	deleteImport: (id: ImportId) => call<OpenEvent>('import_delete', { id }),
 	addManualSale: (draft: ManualSaleDraft) => call<OpenEvent>('manual_sale_add', { draft }),
 	updateManualSale: (id: ManualSaleId, draft: ManualSaleDraft) =>
 		call<OpenEvent>('manual_sale_update', { id, draft }),
@@ -211,5 +234,5 @@ export const api = {
 /** Where the webview loads an attachment from, for previews (`lancelot://` in the app). */
 export async function attachmentUrl(attachment: Attachment): Promise<string> {
 	if (isTauri()) return convertFileSrc(`attachment/${attachment.id}`, 'lancelot');
-	return (await import('./mock')).attachmentUrl(attachment);
+	return (await import('./dev')).attachmentUrl(attachment.id);
 }
