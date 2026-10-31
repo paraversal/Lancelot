@@ -4,6 +4,6 @@ import type { TierId } from "./TierId";
 
 export type ManualSaleDraft = { tier: TierId, count: number, 
 /**
- * The person who received the money.
+ * The account or person who received the money.
  */
-person: AccountId, date: string, reference: string | null, };
+destination: AccountId, date: string, reference: string | null, };

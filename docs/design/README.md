@@ -4,7 +4,7 @@ Source of truth: `UI.fig` (OpenPencil, local only and gitignored). Tokens: [`tok
 
 ## Character
 
-The app should feel like a well-kept paper ledger at a community event. It is calm and warm, with a few hand-made touches: a highlighter for selection, tally marks for Striche, and a type face with a single-storey *a*. It is functional without feeling corporate.
+The app should feel like a well-kept paper ledger at a community event. It is calm and warm, with a few hand-made touches: a highlighter for selection, tally marks for Striche, and a type face with a single-storey _a_. It is functional without feeling corporate.
 
 ## Ground rules
 
@@ -17,16 +17,16 @@ The app should feel like a well-kept paper ledger at a community event. It is ca
 
 ## Colour semantics
 
-| Token | Use |
-|---|---|
-| `paper` / `paper-sunk` | Content background / sidebar and segmented-control track |
-| `ink` / `ink-muted` | Primary text and primary buttons / labels and secondary values |
-| `rule` | All dividers and input borders |
-| `marker` | **The one thing that is selected or active.** Nothing else. |
-| `plus` / `minus` | Gains and losses only (results, income) |
-| `attention` | Anything that needs doing (owes, missing receipt, conflicts) |
-| `tier-1…5` | Data series: expense categories and ticket tiers. Fills only, never text. Income categories use `plus` for their dot. |
-| `field` | Input fill |
+| Token                  | Use                                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `paper` / `paper-sunk` | Content background / sidebar and segmented-control track                                                              |
+| `ink` / `ink-muted`    | Primary text and primary buttons / labels and secondary values                                                        |
+| `rule`                 | All dividers and input borders                                                                                        |
+| `marker`               | **The one thing that is selected or active.** Nothing else.                                                           |
+| `plus` / `minus`       | Gains and losses only (results, income)                                                                               |
+| `attention`            | Anything that needs doing (owes, missing receipt, conflicts)                                                          |
+| `tier-1…5`             | Data series: expense categories and ticket tiers. Fills only, never text. Income categories use `plus` for their dot. |
+| `field`                | Input fill                                                                                                            |
 
 Expenses are shown in ink with a leading `−`, income in `plus` with a leading `+`, and transfers in `ink-muted` without a sign.
 
@@ -43,47 +43,47 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 ## Components
 
-| Component | Notes |
-|---|---|
-| Button | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`) |
-| Filter chip | Pill; active is an ink fill |
-| Segmented control | Sunk track; active segment uses `marker` |
-| Amount input | Lenient parsing with a live `= …` preview. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
-| Balance cell | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled` |
-| Receipt indicator | Paperclip when present, `attention` warning when missing |
-| Tally | Groups of four strokes crossed by a fifth (Strichliste) |
-| Stacked bar | In vs. out composition, and ticket snapshots per import |
+| Component         | Notes                                                                                                                                                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button            | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`)                                                                              |
+| Filter chip       | Pill; active is an ink fill                                                                                                                                      |
+| Segmented control | Sunk track; active segment uses `marker`                                                                                                                         |
+| Amount input      | Lenient parsing with a live `= …` preview. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
+| Balance cell      | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled`                                                                                                      |
+| Receipt indicator | Paperclip when present, `attention` warning when missing                                                                                                         |
+| Tally             | Groups of four strokes crossed by a fifth (Strichliste)                                                                                                          |
+| Stacked bar       | In vs. out composition, and ticket snapshots per import                                                                                                          |
 
 ## Screens in UI.fig
 
-| Screen | Content |
-|---|---|
-| System | Tokens, type scale, controls, input states, value styles, rules |
-| Overview | Result, forecast and tickets; in/out composition; where the money is (reconciles to the result); open items |
-| Ledger | Transactions grouped by day, with filters, plus the entry panel (type switch, amount, payer with live balance, split lines, receipt) |
-| Ledger / Entry panels | Income (with a category being added), Transfer (delete confirmation), Settle (direction and amount from the person's balance) |
-| Ledger / Empty | The first entry, with its payer added on the spot |
-| Ledger / Receipt preview | A receipt in place of the table, with Open and Export; the panel stays |
-| Ledger / Drop | Dragging a file over the window: a new expense, or attach to the open entry |
-| Ledger / By category | The same list grouped by category with a total per category; a split transaction appears under each of its categories, tagged `SPLIT` |
-| People | Advanced / holds / settled / net balance per person, payout list export, person panel with a running balance and the settle action |
-| People / Payouts | The payout list (IBAN, reference, amount, total) and the repayment list with Repaid; PDF, CSV, Mark as paid |
-| People / Mark as paid | The reimbursements to record, people without an IBAN, the account and the date |
-| People / Edit person | The person's details in the panel; the IBAN previews its grouped form while typing |
-| Tickets | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot |
-| Tickets / Statistics | The states of Break-even (too few places, no tiers, only free tiers, reached), Sales by revenue, and both under the tiers while a panel is open |
-| Tickets / Import | The sheet in the right-hand panel: file and hash, the columns read, the snapshot date, an unknown tier to map or add, the changes per tier (removals lead to conflicts) and the rows not read; Import stays blocked while a tier is unmapped |
-| Tickets / Edit tier | Name, price, fee (`= 0,80 € per ticket`), quota and the sheet's names for the tier; sold, fees and net; a tier in use cannot be deleted |
-| Tickets / Manual sale | Tier, count, the amount, who received the money (with their balance before and after), date and reference; the earlier manual sales |
-| Tickets / Empty | No tiers yet: Import sheet and `+ Tier`; Manual sale is disabled |
-| Drinks | Drinks result, per-product commission records, Strichliste with tallies and unpaid amounts |
-| Start | Recent events (name, dates, path, last opened; `Not found` for moved files), New event and Open |
-| Start / New event | Name, dates (with the `= 06.12.2026` preview) and location in the right-hand panel |
-| Start / States | An event open in another window, and a damaged file with its issues and backups to restore |
-| Settings | Event details and the reimbursement account; number and date format; file path and integrity check; backups with Restore |
-| Event / Integrity banner | One line per issue above the page, with Check again |
+| Screen                   | Content                                                                                                                                                                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| System                   | Tokens, type scale, controls, input states, value styles, rules                                                                                                                                                                              |
+| Overview                 | Result, forecast and tickets; in/out composition; where the money is (reconciles to the result); open items                                                                                                                                  |
+| Ledger                   | Transactions grouped by day, with filters, plus the entry panel (type switch, amount, payer with live balance, split lines, receipt)                                                                                                         |
+| Ledger / Entry panels    | Income (with a category being added), Transfer (delete confirmation), Settle (direction and amount from the person's balance)                                                                                                                |
+| Ledger / Empty           | The first entry, with its payer added on the spot                                                                                                                                                                                            |
+| Ledger / Receipt preview | A receipt in place of the table, with Open and Export; the panel stays                                                                                                                                                                       |
+| Ledger / Drop            | Dragging a file over the window: a new expense, or attach to the open entry                                                                                                                                                                  |
+| Ledger / By category     | The same list grouped by category with a total per category; a split transaction appears under each of its categories, tagged `SPLIT`                                                                                                        |
+| People                   | Advanced / holds / settled / net balance per person, payout list export, person panel with a running balance and the settle action                                                                                                           |
+| People / Payouts         | The payout list (IBAN, reference, amount, total) and the repayment list with Repaid; PDF, CSV, Mark as paid                                                                                                                                  |
+| People / Mark as paid    | The reimbursements to record, people without an IBAN, the account and the date                                                                                                                                                               |
+| People / Edit person     | The person's details in the panel; the IBAN previews its grouped form while typing                                                                                                                                                           |
+| Tickets                  | Conflict resolution (refund %, match, correction), tiers with quota and fee, break-even, sales per import snapshot                                                                                                                           |
+| Tickets / Statistics     | The states of Break-even (too few places, no tiers, only free tiers, reached), Sales by revenue, and both under the tiers while a panel is open                                                                                              |
+| Tickets / Import         | The sheet in the right-hand panel: file and hash, the columns read, the snapshot date, an unknown tier to map or add, the changes per tier (removals lead to conflicts) and the rows not read; Import stays blocked while a tier is unmapped |
+| Tickets / Edit tier      | Name, price, fee (`= 0,80 € per ticket`), quota and the sheet's names for the tier; sold, fees and net; a tier in use cannot be deleted                                                                                                      |
+| Tickets / Manual sale    | Tier, count, the amount, who received the money (with their balance before and after), date and reference; the earlier manual sales                                                                                                          |
+| Tickets / Empty          | No tiers yet: Import sheet and `+ Tier`; Manual sale is disabled                                                                                                                                                                             |
+| Drinks                   | Drinks result, per-product commission records, Strichliste with tallies and unpaid amounts                                                                                                                                                   |
+| Start                    | Recent events (name, dates, path, last opened; `Not found` for moved files), New event and Open                                                                                                                                              |
+| Start / New event        | Name, dates (with the `= 06.12.2026` preview) and location in the right-hand panel                                                                                                                                                           |
+| Start / States           | An event open in another window, and a damaged file with its issues and backups to restore                                                                                                                                                   |
+| Settings                 | Event details and the reimbursement account; number and date format; file path and integrity check; backups with Restore                                                                                                                     |
+| Event / Integrity banner | One line per issue above the page, with Check again                                                                                                                                                                                          |
 
-In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says *Note*.
+In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says _Note_.
 
 The app's Tickets page follows the Tickets frames. Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees.
 
@@ -93,7 +93,7 @@ The conflict card has more fields than the frame, which only shows the refund an
 
 The app's Overview follows the Overview frame, whose hero has the result, the forecast and the tickets. Where it differs: Income and Expenses stay in the hero unless both the forecast and the tickets are there; the Tickets figure counts places, like the Tickets page, without a quota or bar when a tier has none; the forecast's note is the plan once there is no gap to close, and the break-even reads `~9 tickets to break even`, with the places left in `attention` when they fall short.
 
-The app's Drinks page follows the Drinks frame without the Strichliste, its Sync button and the `% of Striche` under Donations, which come with M11; the records take the full width. Where it differs: `+ Product` beside Supplier invoice, a panel per product and a panel for the supplier and the price per Strich, opened from the caption, a row with the kept units and their cost, the cost per drink beside the price per Strich, and category names in the Cost note as they are in the event. A difference on the invoice reads `11,50 € more than the records` in `attention`. Not in any frame: the entry panel's and the budget panel's Cost centre field, Cost centres on the Budget page and in the report, and the Cost centres section in Settings.
+The sidebar's Cost centres section, with a separator, a label and one item per centre, is in no frame. Each centre's page reuses the Drinks hero and table rows for its result, costs, income and tagged lines. The drinks centre's page follows the Drinks frame without the Strichliste, its Sync button and the `% of Striche` under Donations, which come with M11; the records take the full width. Where it differs: `+ Product` beside Supplier invoice, a panel per product and a panel for the supplier and the price per Strich, opened from the caption, a row with the kept units and their cost, the cost per drink beside the price per Strich, and category names in the Cost note as they are in the event. A difference on the invoice reads `11,50 € more than the records` in `attention`. Not in any frame: the entry panel's Notes and free Transfer fields, the import panel's account, the Sells tickets, Net movement, Drinks are in and Pfand category settings, the entry panel's and the budget panel's Cost centre field, Cost centres on the Budget page and in the report, and the Cost centres section in Settings.
 
 Reconciliation and templates are in no frame. **Statement** on each account in Where the money is opens a right-hand panel like Count: date and amount (`Net movement` for the Verein account, `Statement shows` otherwise) over the account's checkpoints with the books' figure and any difference. The note beside the account shows its latest mismatch, else its latest checkpoint. The New event panel has a **Template** field, with the counts of what comes along once an event is chosen, and Settings has a **Copy from another event** section with what is new and what is already here.
 

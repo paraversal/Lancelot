@@ -57,10 +57,9 @@ impl Report {
 
     /// Whether the file itself is harmed, as opposed to its contents failing the rules.
     pub fn is_damaged(&self) -> bool {
-        const PHYSICAL: [&str; 5] = [
+        const PHYSICAL: [&str; 4] = [
             "sqlite_integrity",
             "foreign_key",
-            "unsealed",
             "unbalanced",
             "attachment_hash",
         ];
@@ -116,11 +115,7 @@ pub(crate) fn inspect(conn: &Connection) -> Result<(Report, Loaded), StoreError>
         );
     }
 
-    // R-COR-2: every transaction sealed, with at least two lines summing to zero.
-    let mut stmt = conn.prepare("SELECT id FROM txn WHERE sealed = 0 ORDER BY id")?;
-    for id in stmt.query_map([], |r| r.get::<_, i64>(0))? {
-        report.error("unsealed", format!("transaction {} is not sealed", id?));
-    }
+    // R-COR-2: every transaction has at least two lines summing to zero.
     let mut stmt = conn.prepare(
         "SELECT t.id FROM txn t LEFT JOIN line l ON l.txn_id = t.id
          GROUP BY t.id HAVING COALESCE(SUM(l.amount), 0) <> 0 OR COUNT(l.id) < 2 ORDER BY t.id",
@@ -132,16 +127,13 @@ pub(crate) fn inspect(conn: &Connection) -> Result<(Report, Loaded), StoreError>
         );
     }
 
-    // Every transaction has the shape its kind requires (docs/technical-design.md §3.3).
+    // Every transaction follows the rules (docs/technical-design.md §3.3).
     match (read::accounts(conn), read::txns(conn)) {
         (Ok(accounts), Ok(txns)) => {
             for t in txns.iter().filter(|t| !txn_follows_rules(t, &accounts)) {
                 report.error(
                     "malformed_txn",
-                    format!(
-                        "transaction {} does not follow the rules for its kind",
-                        t.id.0
-                    ),
+                    format!("transaction {} does not follow the rules", t.id.0),
                 );
             }
         }

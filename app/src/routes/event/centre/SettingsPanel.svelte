@@ -27,7 +27,7 @@
 	async function save() {
 		error = null;
 		try {
-			await session.change(() => api.setDrinkSettings({ supplier, pricePerStrich }));
+			await session.change(() => api.setDrinkSettings({ ...settings, supplier, pricePerStrich }));
 			onclose();
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;

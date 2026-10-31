@@ -45,10 +45,13 @@ pub fn split(account: AccountId, amount: &str) -> SplitLine {
     SplitLine {
         account,
         amount: eur(amount),
-        memo: None,
         budget_line: None,
         cost_centre: None,
     }
+}
+
+pub fn asset(book: &Book, name: &str) -> AccountId {
+    book.account_by_name(AccountKind::Asset, name).unwrap().id
 }
 
 pub fn role(book: &Book, role: Role) -> AccountId {

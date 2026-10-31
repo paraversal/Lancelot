@@ -11,6 +11,6 @@ export type ManualSaleView = { gross: Cents,
  */
 txn: TxnId | null, id: ManualSaleId, tier: TierId, count: number, 
 /**
- * The person who received the money.
+ * The account or person who received the money.
  */
-person: AccountId, date: string, reference: string | null, };
+destination: AccountId, date: string, reference: string | null, };

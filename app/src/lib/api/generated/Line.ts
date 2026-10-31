@@ -7,7 +7,7 @@ import type { CostCentreId } from "./CostCentreId";
 /**
  * One leg of a transaction. Money leaving an account is negative, money arriving positive.
  */
-export type Line = { account: AccountId, amount: Cents, memo: string | null, 
+export type Line = { account: AccountId, amount: Cents, 
 /**
  * The budget line this category line counts towards (R-BUD-2). Only income and expense
  * lines of the budget line's own category can have one.

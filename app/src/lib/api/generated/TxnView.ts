@@ -19,7 +19,7 @@ amount: Cents, attachments: Array<Attachment>,
  */
 entry: Entry | null, 
 /**
- * Who paid or received: the payer, the destination, the person settling.
+ * Who paid or received: the payer, the destination, the source, the person settling.
  */
 who: AccountId | null, flow: Flow, needsReceipt: boolean, id: TxnId, kind: TxnKind, date: string, description: string, counterparty: string | null, notes: string | null, lines: Array<Line>, 
 /**

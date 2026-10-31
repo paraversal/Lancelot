@@ -94,6 +94,7 @@
 	let date = $state<string | null>(null);
 	let counterparty = $state<string | null>(null);
 	let description = $state<string | null>(null);
+	let notes = $state<string | null>(null);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 	let confirming = $state(false);
 	let generation = $state(0); // remounts the fields after "Save & next"
@@ -110,6 +111,7 @@
 			date = lastDate ?? snapshot.event.startsOn ?? new Date().toISOString().slice(0, 10);
 			counterparty = null;
 			description = null;
+			notes = null;
 			return;
 		}
 		const e = t.entry;
@@ -118,6 +120,7 @@
 		date = t.date;
 		counterparty = t.counterparty;
 		description = t.description || null;
+		notes = t.notes;
 		lines = [{ account: null, amount: null }];
 		if (e?.type === 'expense' || e?.type === 'income') {
 			party = e.type === 'expense' ? e.payer : e.destination;
@@ -152,6 +155,16 @@
 			.filter((a) => a.kind === (kind === 'income' ? 'income' : 'expense'))
 			.map((a) => ({ value: a.id, label: a.name }))
 	);
+	// A transfer goes from any account to any other (not the opening account).
+	const everywhere = $derived([
+		...sources,
+		...snapshot.accounts
+			.filter((a) => a.kind === 'income')
+			.map((a) => ({ value: a.id, label: a.name, group: 'Income' })),
+		...snapshot.accounts
+			.filter((a) => a.kind === 'expense')
+			.map((a) => ({ value: a.id, label: a.name, group: 'Expenses' }))
+	]);
 	const personOptions = $derived(people.map((a) => ({ value: a.id, label: a.name })));
 	const assetOptions = $derived(assets.map((a) => ({ value: a.id, label: a.name })));
 
@@ -182,12 +195,12 @@
 		generation++;
 	}
 
-	// The supplier's invoice: the kept drinks at their price, in the Drinks cost centre's first
+	// The supplier's invoice: the kept drinks at their price, in the drinks cost centre's first
 	// expense category that is not Pfand. Pfand is added as a line if there is any (R-DRK-2).
 	function fillInvoice() {
-		const centre = snapshot.costCentres.find((c) => c.role === 'drinks')?.id;
+		const { costCentre: centre, pfand } = snapshot.drinkSettings;
 		const category = snapshot.accounts.find(
-			(a) => a.kind === 'expense' && a.costCentre === centre && a.role !== 'pfand'
+			(a) => a.kind === 'expense' && a.costCentre === centre && a.id !== pfand
 		);
 		counterparty = snapshot.drinkSettings.supplier;
 		party = snapshot.event.defaultReimbursementAccount;
@@ -227,7 +240,6 @@
 			const splits = lines.map((l) => ({
 				account: l.account!,
 				amount: split ? (l.amount ?? 0) : amount!,
-				memo: null,
 				budgetLine: l.budgetLine ?? null,
 				costCentre: l.costCentre ?? null
 			}));
@@ -256,7 +268,7 @@
 						date: date!,
 						description: description ?? '',
 						counterparty,
-						notes: txn?.notes ?? null,
+						notes,
 						entry,
 						total
 					},
@@ -286,6 +298,15 @@
 						: e.field;
 			error = { field, message: e.message };
 		}
+	}
+
+	// A category chosen for a transfer means nothing to the other forms.
+	function changeKind() {
+		error = null;
+		lines = [{ account: null, amount: null }];
+		if (kind === 'transfer') return;
+		if (!sources.some((o) => o.value === party)) party = null;
+		if (!assetOptions.some((o) => o.value === other)) other = null;
 	}
 
 	async function remove() {
@@ -329,7 +350,7 @@
 			<Segmented
 				label="Kind"
 				bind:value={kind}
-				onchange={() => ((error = null), (lines = [{ account: null, amount: null }]))}
+				onchange={changeKind}
 				options={[
 					{ value: 'expense', label: 'Expense' },
 					{ value: 'income', label: 'Income' },
@@ -393,7 +414,7 @@
 						<ChoiceField
 							label={partyLabel}
 							value={party}
-							options={sources}
+							options={kind === 'transfer' ? everywhere : sources}
 							addLabel="New person…"
 							error={fieldError('party')}
 							onchange={(v) => (party = v)}
@@ -403,9 +424,21 @@
 						</ChoiceField>
 					{/if}
 
-					{#if kind === 'transfer' || kind === 'settle'}
+					{#if kind === 'transfer'}
 						<ChoiceField
-							label={kind === 'transfer' ? 'To' : direction === 'reimburse' ? 'From' : 'To'}
+							label="To"
+							value={other}
+							options={everywhere}
+							addLabel="New person…"
+							error={fieldError('other')}
+							onchange={(v) => (other = v)}
+							onadd={addPerson}
+						>
+							{#snippet hint()}{balanceHint(other) ?? ''}{/snippet}
+						</ChoiceField>
+					{:else if kind === 'settle'}
+						<ChoiceField
+							label={direction === 'reimburse' ? 'From' : 'To'}
 							value={other}
 							options={assetOptions}
 							addLabel="New account…"
@@ -549,6 +582,13 @@
 						value={description}
 						oninput={(t) => (description = t.trim() || null)}
 						oncommit={(v) => (description = v)}
+					/>
+					<TextField
+						label="Notes"
+						value={notes}
+						multiline
+						oninput={(t) => (notes = t.trim() || null)}
+						oncommit={(v) => (notes = v)}
 					/>
 					{#if origin.type === 'manual'}
 						<Receipts

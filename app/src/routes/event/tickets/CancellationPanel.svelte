@@ -37,11 +37,11 @@
 	const sales = $derived(tickets.manualSales);
 	const current = $derived(tickets.cancellations.find((c) => c.id === id) ?? null);
 	const correction = $derived(!!current && current.terms === null);
-	const verein = $derived(snapshot.accounts.find((a) => a.role === 'verein')?.id ?? 0);
+	const ticketAccount = $derived(snapshot.ticketSettings.account ?? 0);
 	const tierName = (t: TierId) => tiers.find((x) => x.id === t)?.name ?? '';
 	const accountName = (a: AccountId) => snapshot.accounts.find((x) => x.id === a)?.name ?? '';
 	const saleLabel = (s: (typeof sales)[number]) =>
-		`${s.count} × ${tierName(s.tier)} · ${accountName(s.person)}`;
+		`${s.count} × ${tierName(s.tier)} · ${accountName(s.destination)}`;
 	const payers = $derived(
 		snapshot.accounts
 			.filter((a) => a.kind === 'asset' || a.kind === 'person')
@@ -74,17 +74,17 @@
 			tickets.imports.at(-1)?.date ??
 			snapshot.event.startsOn ??
 			new Date().toISOString().slice(0, 10);
-		payer = current?.payer ?? verein;
+		payer = current?.payer ?? ticketAccount;
 		note = current?.note ?? null;
 	});
 
 	const chosenSale = $derived(source === 'sale' ? sales.find((s) => s.id === sale) : undefined);
 	const tierId = $derived(chosenSale?.tier ?? tier);
 	// Whoever received the money, unless another payer is chosen (R-TKT-15).
-	const receiver = $derived(chosenSale?.person ?? verein);
-	// A sale's person pays by default: picking a new sale follows it.
+	const receiver = $derived(chosenSale?.destination ?? ticketAccount);
+	// A sale's destination pays by default: picking a new sale follows it.
 	$effect(() => {
-		if (!current && chosenSale) payer = chosenSale.person;
+		if (!current && chosenSale) payer = chosenSale.destination;
 	});
 
 	const n = $derived(parseCount(count));

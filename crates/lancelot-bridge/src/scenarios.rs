@@ -94,8 +94,7 @@ fn close(store: &mut Store) -> Result<(), ApiError> {
 fn damage(path: &Path) -> rusqlite::Result<()> {
     let conn = Connection::open(path)?;
     conn.execute_batch(
-        "UPDATE txn SET sealed = 0 WHERE id = (SELECT MIN(id) FROM txn);
-         UPDATE line SET amount = amount + 1
+        "UPDATE line SET amount = amount + 1
            WHERE id = (SELECT MIN(id) FROM line WHERE txn_id = (SELECT MIN(id) FROM txn));",
     )
 }

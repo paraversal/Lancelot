@@ -15,7 +15,7 @@ export interface Row {
 	txn: TxnView;
 	/** What the row says: the description, else the counterparty. */
 	title: string;
-	/** Who paid or received: the payer, the destination, the person settling. */
+	/** Who paid or received: the payer, the destination, the source, the person settling. */
 	who: string;
 	/** The income or expense categories the transaction books to. */
 	categories: AccountView[];

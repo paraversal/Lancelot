@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A manual ticket sale (R-TKT-7): tickets sold outside the sheet, e.g. at the door. The money
-	// is income held by the person who took it, so their balance moves by the amount. Below, the
+	// is income in the account or with the person who took it; a person's balance moves by the
+	// amount. Below, the
 	// earlier manual sales, each opening here.
 	import { untrack } from 'svelte';
 	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
@@ -36,23 +37,26 @@
 	const tiers = $derived(snapshot.tickets.tiers);
 	const sales = $derived(snapshot.tickets.manualSales);
 	const sale = $derived(sales.find((s) => s.id === id) ?? null);
-	const people = $derived(
-		snapshot.accounts
+	const destinations = $derived([
+		...snapshot.accounts
+			.filter((a) => a.kind === 'asset')
+			.map((a) => ({ value: a.id, label: a.name })),
+		...snapshot.accounts
 			.filter((a) => a.kind === 'person')
-			.map((a) => ({ value: a.id, label: a.name }))
-	);
+			.map((a) => ({ value: a.id, label: a.name, group: 'People' }))
+	]);
 
 	// --- form state, filled once: the page remounts the panel ---------------------------
 	let tier = $state<TierId | null>(null);
 	let count = $state('');
-	let person = $state<AccountId | null>(null);
+	let destination = $state<AccountId | null>(null);
 	let date = $state<string | null>(null);
 	let reference = $state<string | null>(null);
 	untrack(() => {
 		const last = sales.at(-1);
 		tier = sale?.tier ?? last?.tier ?? tiers.at(-1)?.id ?? null;
 		count = sale ? String(sale.count) : '';
-		person = sale?.person ?? last?.person ?? null;
+		destination = sale?.destination ?? last?.destination ?? null;
 		date =
 			sale?.date ?? last?.date ?? snapshot.event.startsOn ?? new Date().toISOString().slice(0, 10);
 		reference = sale?.reference ?? null;
@@ -65,11 +69,12 @@
 	const gross = $derived(price !== null && n !== null && !Number.isNaN(n) ? price * n : null);
 	const fieldError = (field: string) => (error?.field === field ? error.message : null);
 
-	// The person's balance without this sale, and with it: they hold the money.
+	// A person's balance without this sale, and with it: they hold the money.
 	const before = $derived.by(() => {
-		if (person === null) return null;
-		const net = snapshot.persons.find((p) => p.account === person)?.summary.net ?? 0;
-		return sale && sale.person === person ? net + sale.gross : net;
+		const holder = snapshot.persons.find((p) => p.account === destination);
+		if (!holder) return null;
+		const net = holder.summary.net;
+		return sale && sale.destination === destination ? net + sale.gross : net;
 	});
 	const after = $derived(before !== null && gross !== null ? before - gross : null);
 	const balance = (net: number) =>
@@ -80,16 +85,16 @@
 				: 'settled';
 
 	const tierName = (id: TierId) => tiers.find((t) => t.id === id)?.name ?? '';
-	const personName = (id: AccountId) => snapshot.accounts.find((a) => a.id === id)?.name ?? '';
+	const accountName = (id: AccountId) => snapshot.accounts.find((a) => a.id === id)?.name ?? '';
 	const tickets = $derived(sales.reduce((t, s) => t + s.count, 0));
 
 	function draft(): ManualSaleDraft | null {
 		const missing = (field: string, message: string) => ((error = { field, message }), null);
 		if (tier === null) return missing('tier', 'choose a tier');
 		if (n === null || Number.isNaN(n)) return missing('count', 'enter a whole number');
-		if (person === null) return missing('person', 'choose who received the money');
+		if (destination === null) return missing('destination', 'choose who received the money');
 		if (date === null) return missing('date', 'enter a date');
-		return { tier, count: n, person, date, reference };
+		return { tier, count: n, destination, date, reference };
 	}
 
 	async function save() {
@@ -115,7 +120,7 @@
 		try {
 			return (await session.change(() => api.addPerson(name))).id;
 		} catch (e) {
-			error = { field: 'person', message: errorMessage(e) };
+			error = { field: 'destination', message: errorMessage(e) };
 			return null;
 		}
 	}
@@ -176,11 +181,11 @@
 
 		<ChoiceField
 			label="Received by"
-			value={person}
-			options={people}
+			value={destination}
+			options={destinations}
 			addLabel="New person…"
-			error={fieldError('person')}
-			onchange={(v) => ((person = v), (error = null))}
+			error={fieldError('destination')}
+			onchange={(v) => ((destination = v), (error = null))}
 			onadd={addPerson}
 		>
 			{#snippet hint()}
@@ -211,7 +216,7 @@
 		</div>
 	</fieldset>
 
-	{#if error && !['tier', 'count', 'person', 'date'].includes(error.field ?? '')}
+	{#if error && !['tier', 'count', 'destination', 'date'].includes(error.field ?? '')}
 		<p class="form-error">{error.message}</p>
 	{/if}
 
@@ -223,7 +228,7 @@
 			{#each sales as s (s.id)}
 				<button type="button" class="sale" class:current={s.id === id} onclick={() => onopen(s.id)}>
 					<span class="day">{formatDate(s.date, format).slice(0, format === 'de' ? 6 : 10)}</span>
-					<span class="what">{s.count} × {tierName(s.tier)} · {personName(s.person)}</span>
+					<span class="what">{s.count} × {tierName(s.tier)} · {accountName(s.destination)}</span>
 					<span class="num">{formatAmount(s.gross, format)}</span>
 				</button>
 			{/each}

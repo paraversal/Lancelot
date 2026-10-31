@@ -150,10 +150,13 @@ export const api = {
 	addAsset: (name: string, assetType: AssetType) => call<Added>('asset_add', { name, assetType }),
 	setAssetType: (id: AccountId, assetType: AssetType) =>
 		call<OpenEvent>('asset_set_type', { id, assetType }),
+	/** Its counts and statements leave out opening counts (R-ISO-2). */
+	setNetMovement: (id: AccountId, netMovement: boolean) =>
+		call<OpenEvent>('asset_set_net_movement', { id, netMovement }),
 	/** Replaces both counts of an asset account; `null` removes one. */
 	setCounts: (account: AccountId, opening: CountInput | null, closing: CountInput | null) =>
 		call<OpenEvent>('counts_set', { account, opening, closing }),
-	/** What a statement shows on a date (R-ACC-4). For the Verein account: the net movement. */
+	/** What a statement shows on a date (R-ACC-4). On a net-movement account: the net movement. */
 	addReconciliation: (account: AccountId, date: string, amount: Cents) =>
 		call<OpenEvent>('reconciliation_add', { account, date, amount }),
 	updateReconciliation: (id: ReconciliationId, date: string, amount: Cents) =>
@@ -190,6 +193,10 @@ export const api = {
 	/** Only a tier that no import and no manual sale uses. */
 	deleteTier: (id: TierId) => call<OpenEvent>('tier_delete', { id }),
 	setTicketColumns: (columns: TicketColumns) => call<OpenEvent>('ticket_columns_set', { columns }),
+	/** Off is refused while there are tiers. */
+	setTicketsEnabled: (enabled: boolean) => call<OpenEvent>('tickets_set_enabled', { enabled }),
+	setTicketAccount: (account: AccountId | null) =>
+		call<OpenEvent>('ticket_account_set', { account }),
 	/** Reads a ticket sheet (path) with the event's columns; changes nothing. */
 	previewTickets: (path: string, date: string) =>
 		call<ImportPreview>('tickets_preview', { path, date }),

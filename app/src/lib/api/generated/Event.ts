@@ -8,7 +8,7 @@ export type Event = {
  */
 closedAt: string | null, 
 /**
- * Where reimbursements come from by default. Initially the Verein account.
+ * Where reimbursements come from by default. Initially the first asset account.
  */
 defaultReimbursementAccount: AccountId, 
 /**

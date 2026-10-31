@@ -7,10 +7,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::model::{
-    Account, AccountId, CostCentre, CostCentreId, CostCentreRole, DrinkProductId, Role, Txn, TxnId,
-    TxnKind,
-};
+use crate::model::{AccountId, CostCentreId, DrinkProductId, Txn, TxnId, TxnKind};
 use crate::money::{Cents, MoneyError, try_sum};
 
 /// The event's settings for drinks.
@@ -22,6 +19,10 @@ pub struct DrinkSettings {
     pub supplier: Option<String>,
     /// One price for all drinks (R-DRK-6).
     pub price_per_strich: Option<Cents>,
+    /// The cost centre the drinks are in. Its page has the records; without one there are none.
+    pub cost_centre: Option<CostCentreId>,
+    /// The expense category of Pfand on crates that could not be returned (R-DRK-2).
+    pub pfand: Option<AccountId>,
 }
 
 /// One product taken on commission (R-DRK-5).
@@ -92,8 +93,6 @@ impl Drinks {
     pub fn compute(
         products: &BTreeMap<DrinkProductId, DrinkProduct>,
         settings: &DrinkSettings,
-        accounts: &BTreeMap<AccountId, Account>,
-        cost_centres: &BTreeMap<CostCentreId, CostCentre>,
         txns: &BTreeMap<TxnId, Txn>,
     ) -> Result<Drinks, MoneyError> {
         let mut figures = Vec::new();
@@ -116,11 +115,7 @@ impl Drinks {
             Cents::new(rounded as i64)
         });
 
-        let drinks_centre = cost_centres
-            .values()
-            .find(|c| c.role == Some(CostCentreRole::Drinks))
-            .map(|c| c.id);
-        let invoice = match (settings.supplier.as_deref(), drinks_centre) {
+        let invoice = match (settings.supplier.as_deref(), settings.cost_centre) {
             (Some(supplier), Some(centre)) => {
                 let lines: Vec<_> = txns
                     .values()
@@ -140,9 +135,7 @@ impl Drinks {
                     let pfand = try_sum(
                         lines
                             .iter()
-                            .filter(|l| {
-                                accounts.get(&l.account).and_then(|a| a.role) == Some(Role::Pfand)
-                            })
+                            .filter(|l| Some(l.account) == settings.pfand)
                             .map(|l| l.amount),
                     )?;
                     Some(InvoiceCheck {

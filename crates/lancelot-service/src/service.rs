@@ -766,7 +766,7 @@ mod tests {
         s.create_event(&path, details("Winterfest")).unwrap();
         s.close_file();
 
-        // Break the file behind Lancelot's back: an empty transaction that is sealed.
+        // Break the file behind Lancelot's back: a line of a transaction that does not exist.
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.execute_batch(
             "PRAGMA foreign_keys = OFF; INSERT INTO line (txn_id, position, account_id, amount) VALUES (99, 0, 1, 5);",
@@ -832,14 +832,12 @@ mod tests {
                     SplitLine {
                         account: kitchen,
                         amount: cents(24_890),
-                        memo: None,
                         budget_line: None,
                         cost_centre: None,
                     },
                     SplitLine {
                         account: mobility,
                         amount: cents(6_350),
-                        memo: None,
                         budget_line: None,
                         cost_centre: None,
                     },
@@ -893,7 +891,6 @@ mod tests {
                 lines: vec![SplitLine {
                     account: id_of("Kitchen"),
                     amount: lancelot_core::Cents::new(500).unwrap(),
-                    memo: None,
                     budget_line: None,
                     cost_centre: None,
                 }],
@@ -1074,7 +1071,7 @@ mod tests {
         let sale = |count| ManualSaleDraft {
             tier: regular,
             count,
-            person: bob,
+            destination: bob,
             date: june(13),
             reference: Some(" Abendkasse ".into()),
         };
@@ -1290,7 +1287,6 @@ mod tests {
                 lines: vec![lancelot_core::SplitLine {
                     account: kitchen,
                     amount: lancelot_core::Cents::new(21_240).unwrap(),
-                    memo: None,
                     budget_line: None,
                     cost_centre: None,
                 }],

@@ -20,10 +20,10 @@
 	const status = $derived(snapshot.cash.find((c) => c.account === account) ?? null);
 	const details = $derived(snapshot.accounts.find((a) => a.id === account));
 	const balance = $derived(details?.balance ?? 0);
-	// A bank account can end below zero, and the Verein account holds only the event's net movement
+	// A bank account can end below zero, and a net-movement account holds only the event's movement
 	// (R-ISO-2), so it has no opening count to enter.
 	const bank = $derived(details?.assetType === 'bank');
-	const movement = $derived(details?.role === 'verein');
+	const movement = $derived(details?.netMovement ?? false);
 	const today = new Date().toISOString().slice(0, 10);
 
 	// Read once: the panel edits its own copy until Save.

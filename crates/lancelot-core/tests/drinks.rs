@@ -19,7 +19,7 @@ fn tagged(account: AccountId, value: &str, centre: CostCentreId) -> SplitLine {
 }
 
 fn spend(book: &mut Book, supplier: Option<&str>, lines: Vec<SplitLine>) -> TxnId {
-    let payer = role(book, Role::Verein);
+    let payer = asset(book, "Verein account");
     let draft = TxnDraft {
         counterparty: supplier.map(str::to_owned),
         ..draft("Receipt", Entry::Expense { payer, lines })
@@ -28,7 +28,7 @@ fn spend(book: &mut Book, supplier: Option<&str>, lines: Vec<SplitLine>) -> TxnI
 }
 
 fn earn(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
-    let destination = role(book, Role::CashBox);
+    let destination = asset(book, "Cash box");
     let draft = draft("Takings", Entry::Income { destination, lines });
     book.save_txn(&draft, None).unwrap().id
 }
@@ -71,6 +71,7 @@ fn the_frame() -> Book {
     book.set_drink_settings(DrinkSettings {
         supplier: Some(" Hoffmann ".into()),
         price_per_strich: Some(eur("1,00")),
+        ..book.drink_settings().clone()
     })
     .unwrap();
     let (drinks, pfand) = (expense(&book, "Drinks"), expense(&book, "Pfand"));
@@ -102,7 +103,12 @@ fn a_new_event_has_the_drinks_cost_centre_and_its_categories() {
         book.account(expense(&book, "Kitchen")).unwrap().cost_centre,
         None
     );
-    assert_eq!(book.account_by_role(Role::Pfand).unwrap().name, "Pfand");
+    assert_eq!(
+        book.account_by_name(AccountKind::Expense, "Pfand")
+            .unwrap()
+            .name,
+        "Pfand"
+    );
 }
 
 #[test]
@@ -170,6 +176,7 @@ fn only_the_suppliers_tagged_expenses_are_the_invoice() {
     book.set_drink_settings(DrinkSettings {
         supplier: Some("Hoffmann".into()),
         price_per_strich: None,
+        ..book.drink_settings().clone()
     })
     .unwrap();
     assert_eq!(book.drinks().invoice.unwrap().amount, eur("10"));
@@ -203,7 +210,7 @@ fn products_are_checked() {
 fn a_tag_must_exist() {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
-    let payer = role(&book, Role::Verein);
+    let payer = asset(&book, "Verein account");
     let lines = vec![tagged(kitchen, "1", CostCentreId(99))];
     let err = book
         .save_txn(&draft("x", Entry::Expense { payer, lines }), None)
@@ -221,7 +228,7 @@ fn a_linked_line_has_the_cost_centre_of_its_budget_line() {
     let centre = drinks_centre(&book);
     let kitchen = expense(&book, "Kitchen");
     let food = book.add_budget_line(plan(kitchen, "100", None)).unwrap();
-    let payer = role(&book, Role::Verein);
+    let payer = asset(&book, "Verein account");
 
     let lines = vec![SplitLine {
         budget_line: Some(food),
@@ -279,26 +286,67 @@ fn deleting_a_cost_centre_leaves_everything_untagged() {
 }
 
 #[test]
-fn drinks_stays_and_names_stay_unique() {
+fn the_drinks_centre_stays_while_it_holds_records_and_names_stay_unique() {
     let mut book = new_book();
     let centre = drinks_centre(&book);
+    let product = book
+        .add_drink_product(product("Mate", 10, 0, "1,00"))
+        .unwrap();
     assert_eq!(
         book.delete_cost_centre(centre).unwrap_err().code(),
-        "cost_centre_protected"
+        "cost_centre_has_products"
     );
+    assert_eq!(
+        book.set_drink_settings(DrinkSettings {
+            cost_centre: None,
+            ..book.drink_settings().clone()
+        })
+        .unwrap_err()
+        .code(),
+        "cost_centre_has_products"
+    );
+    book.delete_drink_product(product).unwrap();
     assert_eq!(
         book.add_cost_centre("drinks").unwrap_err().code(),
         "duplicate_name"
     );
     book.rename_cost_centre(centre, "Getränke").unwrap();
     assert_eq!(book.drinks_cost_centre().unwrap().name, "Getränke");
+
+    book.delete_cost_centre(centre).unwrap();
+    assert_eq!(book.drinks_cost_centre(), None);
+    assert_eq!(book.drink_settings().cost_centre, None);
+}
+
+#[test]
+fn the_pfand_category_can_go_and_another_can_take_its_place() {
+    let mut book = new_book();
+    let pfand = expense(&book, "Pfand");
+    assert_eq!(book.drink_settings().pfand, Some(pfand));
+    book.delete_account(pfand).unwrap();
+    assert_eq!(book.drink_settings().pfand, None);
+
+    let crates = book.add_account(AccountKind::Expense, "Crates").unwrap();
+    book.set_drink_settings(DrinkSettings {
+        pfand: Some(crates),
+        ..book.drink_settings().clone()
+    })
+    .unwrap();
+    assert_eq!(book.drink_settings().pfand, Some(crates));
+
+    let verein = asset(&book, "Verein account");
+    let not_expense = book.set_drink_settings(DrinkSettings {
+        pfand: Some(verein),
+        ..book.drink_settings().clone()
+    });
+    assert_eq!(not_expense.unwrap_err().field(), Some("pfand"));
 }
 
 #[test]
 fn only_categories_start_with_a_cost_centre() {
     let mut book = new_book();
     let centre = drinks_centre(&book);
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     assert_eq!(
         book.set_category_cost_centre(verein, Some(centre))
             .unwrap_err()
@@ -318,7 +366,7 @@ fn everything_survives_saving_and_reopening() {
     let crew = store.change(|book| book.add_cost_centre("Crew")).unwrap();
     let gone = store.change(|book| book.add_cost_centre("Gone")).unwrap();
     let kitchen = expense(store.book(), "Kitchen");
-    let verein = role(store.book(), Role::Verein);
+    let verein = asset(store.book(), "Verein account");
     store
         .change(|book| book.set_category_cost_centre(kitchen, Some(crew)))
         .unwrap();
@@ -342,6 +390,7 @@ fn everything_survives_saving_and_reopening() {
             book.set_drink_settings(DrinkSettings {
                 supplier: Some("Hoffmann".into()),
                 price_per_strich: Some(eur("1,50")),
+                ..book.drink_settings().clone()
             })
         })
         .unwrap();
@@ -448,7 +497,6 @@ proptest! {
             let line = SplitLine {
                 account: category,
                 amount: Cents::new(*cents).unwrap(),
-                memo: None,
                 budget_line: linked.map(|(id, _, _)| *id),
                 cost_centre: linked.map_or(Some(centres[*centre]), |(_, _, c)| *c),
             };
@@ -487,6 +535,7 @@ proptest! {
         book.set_drink_settings(DrinkSettings {
             supplier: Some("Hoffmann".into()),
             price_per_strich: None,
+            ..book.drink_settings().clone()
         }).unwrap();
         let mut cost = 0i64;
         for (taken, returned, unit) in &products {

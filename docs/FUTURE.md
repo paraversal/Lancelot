@@ -4,7 +4,7 @@ Longer-term ideas and larger changes that are not planned yet. Nothing here is c
 
 ## Ticket sources other than a sheet
 
-Today tickets come from a sheet (`.ods`, `.xlsx` or `.csv`) with one row per ticket. Other groups may sell through a platform with an API, or have only totals. Stage 5 of the refactoring makes tickets optional and removes the fixed Verein account, so no group is stuck with this workflow. Other sources can then follow without a redesign.
+Today tickets come from a sheet (`.ods`, `.xlsx` or `.csv`) with one row per ticket. Other groups may sell through a platform with an API, or have only totals. The refactoring made tickets optional and removed the fixed Verein account, so no group is stuck with this workflow. Other sources can then follow without a redesign.
 
 **The seam already exists.** `Book::preview_import` and `Book::import_tickets` take a `Sheet`, which is a label, a hash and rows of tier and order ID. Everything after that (conflicts, generated income, statistics) knows nothing about files. A new source only has to build a `Sheet`.
 
@@ -26,7 +26,7 @@ Today tickets come from a sheet (`.ods`, `.xlsx` or `.csv`) with one row per tic
 
 ## New entry forms
 
-Once Stage 5 is done, a new form is one `Entry` variant, with no change to the load path. Candidates, each only when needed: a supplier credit note, a second payer on one receipt, and income net of a fee.
+A new form is one `Entry` variant, with no change to the load path. Candidates, each only when needed: a supplier credit note, a second payer on one receipt, and income net of a fee.
 
 ## Decided against
 

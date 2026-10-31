@@ -20,6 +20,6 @@ fromSheet: Cents,
  */
 difference: Cents, 
 /**
- * The Verein account: `amount` and `computed` are net movements, without opening counts.
+ * A net-movement account: `amount` and `computed` leave out opening counts (R-ISO-2).
  */
 movement: boolean, };

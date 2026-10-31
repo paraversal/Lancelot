@@ -10,7 +10,7 @@ use time::Date;
 
 use crate::model::{
     Account, AccountId, AccountKind, AssetType, ClosingCount, OpenItem, Origin, Reconciliation,
-    ReconciliationId, Role, Txn, TxnId, TxnKind,
+    ReconciliationId, Txn, TxnId, TxnKind,
 };
 use crate::money::{Cents, MoneyError};
 
@@ -109,7 +109,7 @@ pub struct ReconciliationStatus {
     pub from_sheet: Cents,
     /// `amount − computed`: positive when the statement shows more than the books.
     pub difference: Cents,
-    /// The Verein account: `amount` and `computed` are net movements, without opening counts.
+    /// A net-movement account: `amount` and `computed` leave out opening counts (R-ISO-2).
     pub movement: bool,
 }
 
@@ -122,19 +122,21 @@ struct BookFigure {
 
 /// What a closing count or a statement is compared with, up to and including `until`.
 ///
-/// The Verein account shows only the event's net movement, without opening counts (R-ISO-2).
-/// It also takes the ticket income from the sheets known by then: the generated entry stands for
-/// income that came in over time but carries the date of the latest import, so its date says
-/// nothing about when the money arrived.
+/// A net-movement account shows only the event's net movement, without opening counts (R-ISO-2).
+/// The ticket account takes the ticket income from the sheets known by then: the generated entry
+/// stands for income that came in over time but carries the date of the latest import, so its date
+/// says nothing about when the money arrived.
 fn book_figure(
     account: &Account,
     txns: &BTreeMap<TxnId, Txn>,
     until: Option<Date>,
-    sheet_income: &[(Date, Cents)],
+    tickets: &TicketIncome<'_>,
 ) -> Result<BookFigure, MoneyError> {
-    let movement = account.role == Some(Role::Verein);
-    let from_sheet = if movement {
-        sheet_income
+    let movement = account.net_movement;
+    let sheet = tickets.account == Some(account.id);
+    let from_sheet = if sheet {
+        tickets
+            .sheet_income
             .iter()
             .rfind(|(date, _)| until.is_none_or(|d| *date <= d))
             .map_or(Cents::ZERO, |(_, income)| *income)
@@ -144,14 +146,20 @@ fn book_figure(
     let total = txns
         .values()
         .filter(|t| until.is_none_or(|d| t.date <= d))
-        .filter(|t| {
-            !(movement
-                && (t.kind == TxnKind::Opening || matches!(t.origin, Origin::TicketImport { .. })))
-        })
+        .filter(|t| !(movement && t.kind == TxnKind::Opening))
+        .filter(|t| !(sheet && matches!(t.origin, Origin::TicketImport { .. })))
         .flat_map(|t| &t.lines)
         .filter(|l| l.account == account.id)
         .try_fold(from_sheet, |acc, l| acc.checked_add(l.amount))?;
     Ok(BookFigure { total, from_sheet })
+}
+
+/// Where the sheets' money arrives, and how much they had brought in by each import's date, oldest
+/// first.
+#[derive(Clone, Copy)]
+pub struct TicketIncome<'a> {
+    pub account: Option<AccountId>,
+    pub sheet_income: &'a [(Date, Cents)],
 }
 
 /// What [`Ledger::compute`] needs from the book.
@@ -162,8 +170,7 @@ pub struct LedgerInput<'a> {
     pub reconciliations: &'a BTreeMap<ReconciliationId, Reconciliation>,
     /// Transactions that have at least one attachment.
     pub with_attachments: &'a BTreeSet<TxnId>,
-    /// What the sheets had brought in by each import's date, oldest first.
-    pub sheet_income: &'a [(Date, Cents)],
+    pub tickets: TicketIncome<'a>,
 }
 
 /// All derived figures of an event.
@@ -215,7 +222,7 @@ impl Ledger {
             closing_counts,
             reconciliations,
             with_attachments,
-            sheet_income,
+            tickets,
         } = input;
         let raw = raw_balances(accounts, txns)?;
         let persons = person_summaries(accounts, txns)?;
@@ -225,8 +232,8 @@ impl Ledger {
         let expense_total = total_of(AccountKind::Expense)?;
         Ok(Ledger {
             money: money_location(accounts, &displayed, &persons)?,
-            cash: cash_statuses(accounts, txns, closing_counts, sheet_income)?,
-            reconciliations: checkpoints(accounts, txns, reconciliations, sheet_income)?,
+            cash: cash_statuses(accounts, txns, closing_counts, &tickets)?,
+            reconciliations: checkpoints(accounts, txns, reconciliations, &tickets)?,
             missing_receipts: txns
                 .values()
                 .filter(|t| t.kind.needs_receipt() && !with_attachments.contains(&t.id))
@@ -552,7 +559,7 @@ fn cash_statuses(
     accounts: &BTreeMap<AccountId, Account>,
     txns: &BTreeMap<TxnId, Txn>,
     closing_counts: &BTreeMap<AccountId, ClosingCount>,
-    sheet_income: &[(Date, Cents)],
+    tickets: &TicketIncome<'_>,
 ) -> Result<Vec<CashStatus>, MoneyError> {
     let openings = opening_counts(accounts, txns)?;
     let mut cash = Vec::new();
@@ -565,7 +572,7 @@ fn cash_statuses(
         if asset_type == AssetType::Bank && counted.is_none() && opening.is_none() {
             continue;
         }
-        let computed = book_figure(a, txns, None, sheet_income)?.total;
+        let computed = book_figure(a, txns, None, tickets)?.total;
         let difference = counted.map(|c| c.checked_sub(computed)).transpose()?;
         cash.push(CashStatus {
             account: a.id,
@@ -583,14 +590,14 @@ fn checkpoints(
     accounts: &BTreeMap<AccountId, Account>,
     txns: &BTreeMap<TxnId, Txn>,
     reconciliations: &BTreeMap<ReconciliationId, Reconciliation>,
-    sheet_income: &[(Date, Cents)],
+    tickets: &TicketIncome<'_>,
 ) -> Result<Vec<ReconciliationStatus>, MoneyError> {
     let mut checkpoints = Vec::new();
     for r in reconciliations.values() {
         let Some(account) = accounts.get(&r.account) else {
             continue;
         };
-        let figure = book_figure(account, txns, Some(r.date), sheet_income)?;
+        let figure = book_figure(account, txns, Some(r.date), tickets)?;
         checkpoints.push(ReconciliationStatus {
             id: r.id,
             account: r.account,
@@ -599,7 +606,7 @@ fn checkpoints(
             computed: figure.total,
             from_sheet: figure.from_sheet,
             difference: r.amount.checked_sub(figure.total)?,
-            movement: account.role == Some(Role::Verein),
+            movement: account.net_movement,
         });
     }
     checkpoints.sort_by_key(|c| (c.date, c.id));

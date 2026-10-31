@@ -47,8 +47,8 @@ fn result_and_totals_match_the_mockups() {
 fn accounts_and_people_match_the_mockups() {
     let (book, m) = mock_event();
     let l = book.ledger();
-    assert_eq!(l.balance(role(&book, Role::Verein)), eur("1.757"));
-    assert_eq!(l.balance(role(&book, Role::CashBox)), eur("412,90"));
+    assert_eq!(l.balance(asset(&book, "Verein account")), eur("1.757"));
+    assert_eq!(l.balance(asset(&book, "Cash box")), eur("412,90"));
 
     let person = |id| *l.person(id).unwrap();
     assert_eq!(
@@ -100,7 +100,7 @@ fn open_items_are_the_unsettled_people_a_receipt_and_the_cash_box() {
             },
             OpenItem::MissingReceipt { txn: m.cups },
             OpenItem::CashDifference {
-                account: role(&book, Role::CashBox),
+                account: asset(&book, "Cash box"),
                 difference: eur("-2,90")
             },
         ]
@@ -240,7 +240,6 @@ fn the_transactions_csv_has_one_row_per_line() {
             "Account",
             "Account type",
             "Amount",
-            "Memo",
             "Receipt",
             "Notes",
             "Cost centre"
@@ -254,7 +253,7 @@ fn the_transactions_csv_has_one_row_per_line() {
     assert_eq!(
         groceries
             .iter()
-            .map(|r| (r[5], r[6], r[7], r[9]))
+            .map(|r| (r[5], r[6], r[7], r[8]))
             .collect::<Vec<_>>(),
         [
             ("Anna", "Person", "-312,40", "yes"),
@@ -262,9 +261,9 @@ fn the_transactions_csv_has_one_row_per_line() {
         ]
     );
     let cups = rows.iter().find(|r| r[3] == "Cups and ice").unwrap();
-    assert_eq!(cups[9], "no");
+    assert_eq!(cups[8], "no");
     let reimbursed = rows.iter().find(|r| r[3] == "Reimbursement Anna").unwrap();
-    assert_eq!((reimbursed[2], reimbursed[9]), ("Reimbursement", ""));
+    assert_eq!((reimbursed[2], reimbursed[8]), ("Reimbursement", ""));
 
     let en = transactions_csv(&book, NumberFormat::En);
     assert!(en.contains(",Kitchen,Expense,312.40,"), "{en}");

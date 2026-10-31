@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Importing the ticket sheet (R-TKT-3 to R-TKT-5): the file and its hash, the columns read,
-	// the day the counts stand for, tier names to map, what changes per tier since the last
+	// the account the money arrives in, the day the counts stand for, tier names to map, what changes per tier since the last
 	// import, and the rows that could not be read. Import stays blocked while a tier name matches
 	// no tier. Without a file, the earlier imports and their dates.
 	import { untrack } from 'svelte';
@@ -16,6 +16,7 @@
 	import DateField from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
+	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -37,6 +38,10 @@
 	const tiers = $derived(snapshot.tickets.tiers);
 	const imports = $derived(snapshot.tickets.imports);
 	const columns = $derived(snapshot.ticketColumns);
+	const ticketAccount = $derived(snapshot.ticketSettings.account);
+	const assets = $derived(
+		snapshot.accounts.filter((a) => a.kind === 'asset').map((a) => ({ value: a.id, label: a.name }))
+	);
 
 	let path = $state<string | null>(null);
 	const today = new Date().toISOString().slice(0, 10);
@@ -90,6 +95,16 @@
 		await read();
 	}
 
+	async function setAccount(account: number) {
+		error = null;
+		try {
+			await session.change(() => api.setTicketAccount(account === 0 ? null : account));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			error = { field: null, message: e.message };
+		}
+	}
+
 	async function mapTo(name: string, id: TierId) {
 		const tier = tiers.find((t) => t.id === id);
 		if (!tier) return;
@@ -113,7 +128,7 @@
 	}
 
 	async function doImport() {
-		if (!path || !preview || preview.unknown.length || !date) return;
+		if (!path || !preview || preview.unknown.length || !date || ticketAccount === null) return;
 		error = null;
 		try {
 			await session.change(() => api.importTickets(path!, date!, preview!.sha256));
@@ -200,12 +215,12 @@
 			<div class="labelled">
 				<span class="form-label">Columns read</span>
 				<div class="columns">
-					{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }, { key: 'saleDate', label: 'sale date' }] as const as c (c.key)}
+					{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }] as const as c (c.key)}
 						<div class="column">
 							<TextField
 								label={c.label}
 								value={columns[c.key] ?? ''}
-								oncommit={(v) => setColumn(c.key, c.key === 'saleDate' ? v : (v ?? ''))}
+								oncommit={(v) => setColumn(c.key, v ?? '')}
 							/>
 						</div>
 					{/each}
@@ -213,6 +228,15 @@
 				{#if error?.field?.startsWith('columns.')}<span class="form-error">{error.message}</span
 					>{/if}
 			</div>
+
+			<Select
+				label="Money arrives in"
+				value={ticketAccount ?? 0}
+				options={ticketAccount === null
+					? [{ value: 0, label: 'Choose an account' }, ...assets]
+					: assets}
+				onchange={setAccount}
+			/>
 
 			<div class="date">
 				<DateField
@@ -369,7 +393,7 @@
 			<Button
 				kind="primary"
 				shortcut="⌘↵"
-				disabled={!preview || !!preview.unknown.length || !date}
+				disabled={!preview || !!preview.unknown.length || !date || ticketAccount === null}
 				onclick={doImport}>Import</Button
 			>
 			{#if preview?.unknown.length}

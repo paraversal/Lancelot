@@ -19,7 +19,6 @@ pub fn transactions_csv(book: &Book, format: NumberFormat) -> String {
         "Account",
         "Account type",
         "Amount",
-        "Memo",
         "Receipt",
         "Notes",
         "Cost centre",
@@ -43,7 +42,6 @@ pub fn transactions_csv(book: &Book, format: NumberFormat) -> String {
                 csv.text(account.map(|a| a.name.as_str()).unwrap_or("")),
                 csv.text(account.map(|a| kind_label(a.kind)).unwrap_or("")),
                 csv.amount(line.amount),
-                csv.text(line.memo.as_deref().unwrap_or("")),
                 receipt.to_owned(),
                 csv.text(t.notes.as_deref().unwrap_or("")),
                 csv.text(

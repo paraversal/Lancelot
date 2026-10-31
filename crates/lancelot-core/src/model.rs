@@ -100,30 +100,18 @@ impl AccountKind {
     }
 }
 
-/// System accounts that exist in every event and that the app refers to directly.
+/// The ticket categories, which the app books to directly (R-TKT-6). Everything else it needs to
+/// find is named by a setting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
-    Verein,
-    CashBox,
-    Opening,
     /// The income category of ticket sales (R-TKT-6).
     Tickets,
     /// The expense category of platform fees, made when a tier first has a fee (R-TKT-6).
     TicketFees,
     /// The income category of refunds, made with the first refund (R-TKT-15).
     TicketRefunds,
-    /// The expense category of Pfand on crates that could not be returned (R-DRK-2).
-    Pfand,
-}
-
-/// Cost centres that exist in every event and that the app refers to directly.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-pub enum CostCentreRole {
-    Drinks,
 }
 
 /// A sub-area of an event with its own profit and loss (R-CC-1).
@@ -132,7 +120,6 @@ pub enum CostCentreRole {
 pub struct CostCentre {
     pub id: CostCentreId,
     pub name: String,
-    pub role: Option<CostCentreRole>,
 }
 
 /// What an asset account holds. Cash accounts are counted at the start and the end (R-ISO-3).
@@ -154,6 +141,9 @@ pub struct Account {
     pub role: Option<Role>,
     /// Set exactly for asset accounts.
     pub asset_type: Option<AssetType>,
+    /// An asset account of which only the event's net movement is entered, not its real balance:
+    /// its counts and statements leave out opening counts (R-ISO-2).
+    pub net_movement: bool,
     /// For a category: the cost centre a new line of it starts with.
     pub cost_centre: Option<CostCentreId>,
 }
@@ -185,26 +175,18 @@ pub enum TxnKind {
     Refund,
 }
 
-/// Which way a transaction moves the event's money.
+/// Which way a transaction moves the event's result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum Flow {
     In,
     Out,
-    /// Between the event's own accounts and people.
+    /// Between accounts and people, or between categories: the result stays.
     Moved,
 }
 
 impl TxnKind {
-    pub fn flow(self) -> Flow {
-        match self {
-            TxnKind::Income => Flow::In,
-            TxnKind::Expense | TxnKind::Refund => Flow::Out,
-            TxnKind::Transfer | TxnKind::Settle | TxnKind::Opening => Flow::Moved,
-        }
-    }
-
     /// Whether the transaction should have a receipt attached (R-ATT-4).
     pub fn needs_receipt(self) -> bool {
         self == TxnKind::Expense
@@ -217,7 +199,6 @@ impl TxnKind {
 pub struct Line {
     pub account: AccountId,
     pub amount: Cents,
-    pub memo: Option<String>,
     /// The budget line this category line counts towards (R-BUD-2). Only income and expense
     /// lines of the budget line's own category can have one.
     #[serde(rename = "budgetLine", default)]
@@ -298,7 +279,7 @@ pub struct Event {
     #[serde(with = "time::serde::rfc3339::option")]
     #[ts(type = "string | null")]
     pub closed_at: Option<OffsetDateTime>,
-    /// Where reimbursements come from by default. Initially the Verein account.
+    /// Where reimbursements come from by default. Initially the first asset account.
     pub default_reimbursement_account: AccountId,
     /// Open items that were explicitly accepted when the event was closed (R-SET-7).
     pub closing_overrides: Vec<BlockerOverride>,
@@ -367,7 +348,7 @@ pub struct ClosingCount {
     pub amount: Cents,
 }
 
-/// "The statement shows this on this date" for an asset account (R-ACC-4). For the Verein account
+/// "The statement shows this on this date" for an asset account (R-ACC-4). On a net-movement account
 /// the amount is the event's net movement up to the date, since its real balance is never entered
 /// (R-ISO-2). Either can be negative.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]

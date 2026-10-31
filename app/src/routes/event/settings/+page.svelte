@@ -230,6 +230,12 @@
 			source = null;
 		});
 
+	// Which cost centre and category the drink records use; either can be none.
+	const drinks = $derived(open.snapshot.drinkSettings);
+	const expenses = $derived(categories.filter((a) => a.kind === 'expense'));
+	const setDrinks = (patch: Partial<typeof drinks>) =>
+		run(() => session.change(() => api.setDrinkSettings({ ...drinks, ...patch })));
+
 	const issues = $derived(open.integrity.issues.length);
 	const shortPath = $derived(open.path.replace(/^\/Users\/[^/]+/, '~'));
 	const checked = $derived(
@@ -240,7 +246,7 @@
 </script>
 
 {#snippet deleteAccount(a: { id: number; role: unknown; balance: number })}
-	{#if !a.role && !closed && !a.balance}
+	{#if !a.role && !closed && !a.balance && a.id !== event.defaultReimbursementAccount && a.id !== open.snapshot.ticketSettings.account}
 		{#if deletingAccount === a.id}
 			<Button
 				size="sm"
@@ -303,6 +309,25 @@
 						onchange={(account) =>
 							run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
 					/>
+					<label class="toggle">
+						<input
+							type="checkbox"
+							checked={open.snapshot.ticketSettings.enabled}
+							onchange={(e) => {
+								const { checked } = e.currentTarget;
+								const box = e.currentTarget;
+								run(async () => {
+									try {
+										await session.change(() => api.setTicketsEnabled(checked));
+									} catch (err) {
+										box.checked = !checked;
+										throw err;
+									}
+								});
+							}}
+						/>
+						Sells tickets
+					</label>
 				</section>
 
 				<section>
@@ -331,6 +356,17 @@
 									options={TYPES}
 									onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
 								/>
+								<label class="toggle" title="Counts and statements leave out opening counts">
+									<input
+										type="checkbox"
+										checked={a.netMovement}
+										onchange={(e) => {
+											const { checked } = e.currentTarget;
+											run(() => session.change(() => api.setNetMovement(a.id, checked)));
+										}}
+									/>
+									Net movement
+								</label>
 								<span class="balance">{formatAmount(a.balance, format)}</span>
 								{@render deleteAccount(a)}
 							</li>
@@ -360,13 +396,15 @@
 										}
 									}}
 								/>
-								{#if !c.role && !closed}
+								{#if !closed}
 									{#if deletingCentre === c.id}
 										<Button
 											size="sm"
 											kind="primary"
-											onclick={() => run(() => session.change(() => api.deleteCostCentre(c.id)))}
-											>Delete</Button
+											onclick={() => {
+												deletingCentre = null;
+												return run(() => session.change(() => api.deleteCostCentre(c.id)));
+											}}>Delete</Button
 										>
 										<Button size="sm" onclick={() => (deletingCentre = null)}>Keep</Button>
 									{:else}
@@ -379,6 +417,23 @@
 					{#if !closed}
 						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
 					{/if}
+					<div class="form-pair">
+						<Select
+							label="Drinks are in"
+							value={drinks.costCentre ?? 0}
+							options={centreOptions}
+							onchange={(v) => setDrinks({ costCentre: v === 0 ? null : v })}
+						/>
+						<Select
+							label="Pfand category"
+							value={drinks.pfand ?? 0}
+							options={[
+								{ value: 0, label: 'None' },
+								...expenses.map((a) => ({ value: a.id, label: a.name }))
+							]}
+							onchange={(v) => setDrinks({ pfand: v === 0 ? null : v })}
+						/>
+					</div>
 					<div class="labelled">
 						<span class="form-label">Categories start in</span>
 						<ul class="accounts starts">
@@ -616,6 +671,11 @@
 		color: var(--color-ink-muted);
 	}
 
+	.accounts .toggle {
+		align-self: center;
+		white-space: nowrap;
+	}
+
 	.toggle input {
 		accent-color: var(--color-ink);
 	}
@@ -674,14 +734,16 @@
 
 	.accounts li {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--spacing-4);
-		height: 44px;
+		gap: 4px var(--spacing-4);
+		min-height: 44px;
+		padding: 4px 0;
 		border-bottom: 1px solid var(--color-rule);
 	}
 
 	.accounts .name {
-		flex: 1;
+		flex: 1 1 140px;
 		min-width: 0;
 		height: 34px;
 		margin-left: -9px;
@@ -709,7 +771,12 @@
 		text-align: right;
 	}
 
+	.starts li {
+		flex-wrap: nowrap;
+	}
+
 	.starts span.name {
+		flex: 1 1 0;
 		display: flex;
 		align-items: center;
 		gap: 4px;

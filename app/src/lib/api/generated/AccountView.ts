@@ -12,6 +12,11 @@ export type AccountView = { balance: Cents, id: AccountId, kind: AccountKind, na
  */
 assetType: AssetType | null, 
 /**
+ * An asset account of which only the event's net movement is entered, not its real balance:
+ * its counts and statements leave out opening counts (R-ISO-2).
+ */
+netMovement: boolean, 
+/**
  * For a category: the cost centre a new line of it starts with.
  */
 costCentre: CostCentreId | null, };

@@ -9,7 +9,7 @@ use ts_rs::TS;
 use crate::book::Book;
 use crate::budget::Budget;
 use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
-use crate::entry::{Entry, entry_of, txn_amount};
+use crate::entry::{Entry, entry_of, flow_of, txn_amount};
 use crate::ledger::{
     CashStatus, MoneyLocation, PersonEntry, PersonSummary, PersonTotals, ReconciliationStatus,
 };
@@ -20,7 +20,7 @@ use crate::model::{
 use crate::money::Cents;
 use crate::payout::Payouts;
 use crate::sales::Profitability;
-use crate::tickets::{TicketColumns, Tickets};
+use crate::tickets::{TicketColumns, TicketSettings, Tickets};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
@@ -29,7 +29,9 @@ pub struct EventSnapshot {
     pub event: Event,
     /// The columns read from the ticket sheet (R-TKT-3).
     pub ticket_columns: TicketColumns,
-    /// The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
+    /// Whether the event sells tickets, and where the sheet's money arrives.
+    pub ticket_settings: TicketSettings,
+    /// The commission supplier, the price per Strich, and the drinks' cost centre and Pfand category.
     pub drink_settings: DrinkSettings,
     /// All accounts and categories, in creation order, each with its displayed balance.
     pub accounts: Vec<AccountView>,
@@ -55,7 +57,7 @@ pub struct EventSnapshot {
     /// The projected result and break-even (R-TKT-9), once there is a budget and while the
     /// event is open.
     pub profitability: Option<Profitability>,
-    /// In creation order; the Drinks cost centre is always there (R-CC-2).
+    /// In creation order (R-CC-2).
     pub cost_centres: Vec<CostCentre>,
     /// The commission records, in creation order (R-DRK-5).
     pub drink_products: Vec<DrinkProduct>,
@@ -94,7 +96,7 @@ pub struct TxnView {
     pub attachments: Vec<Attachment>,
     /// What the form shows. Generated entries show in the same form, read-only.
     pub entry: Option<Entry>,
-    /// Who paid or received: the payer, the destination, the person settling.
+    /// Who paid or received: the payer, the destination, the source, the person settling.
     pub who: Option<AccountId>,
     pub flow: Flow,
     pub needs_receipt: bool,
@@ -138,7 +140,7 @@ impl EventSnapshot {
                     attachments: book.attachments_of(t.id).cloned().collect(),
                     who: entry.as_ref().map(Entry::who),
                     entry,
-                    flow: t.kind.flow(),
+                    flow: flow_of(&t.lines, book.account_map()),
                     needs_receipt: t.kind.needs_receipt(),
                 }
             })
@@ -148,6 +150,7 @@ impl EventSnapshot {
         EventSnapshot {
             event: book.event().clone(),
             ticket_columns: book.ticket_columns().clone(),
+            ticket_settings: book.ticket_settings(),
             drink_settings: book.drink_settings().clone(),
             accounts,
             persons,

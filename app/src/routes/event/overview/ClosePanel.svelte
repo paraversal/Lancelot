@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Closing the event (R-SET-7): every open item is either fixed or accepted with a note.
 	// After closing the event is read-only until it is reopened in Settings (R-EVT-2).
+	import { untrack } from 'svelte';
 	import { api, errorMessage } from '#lib/api/index.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Field from '#lib/components/Field.svelte';
@@ -23,6 +24,10 @@
 	let notes = $state<Record<string, string>>({});
 	let error = $state<string | null>(null);
 	const key = (i: unknown) => JSON.stringify(i);
+	// After reopening, what was accepted before stands while the item is unchanged.
+	untrack(() => {
+		for (const o of snapshot.event.closingOverrides) notes[key(o.item)] = o.note;
+	});
 	const missing = $derived(items.filter((i) => !notes[key(i)]?.trim()).length);
 
 	let confirmButton = $state<HTMLElement>();

@@ -42,7 +42,7 @@ pub enum DomainError {
     UnknownAttachment,
     #[error("an attachment can have at most 50 MB")]
     AttachmentTooLarge,
-    #[error("transaction {txn:?} does not follow the rules for its kind")]
+    #[error("transaction {txn:?} does not follow the rules")]
     MalformedTxn { txn: crate::model::TxnId },
     #[error("unknown budget line")]
     UnknownBudgetLine,
@@ -54,8 +54,8 @@ pub enum DomainError {
     UnknownCostCentre { field: String },
     #[error("this line has the cost centre of its budget line")]
     WrongCostCentre { field: String },
-    #[error("the Drinks cost centre cannot be deleted")]
-    CostCentreProtected,
+    #[error("this cost centre holds the drink records: delete them first")]
+    CostCentreHasProducts,
     #[error("unknown product")]
     UnknownDrinkProduct,
     #[error("unknown checkpoint")]
@@ -76,6 +76,12 @@ pub enum DomainError {
     NegativeCashCount,
     #[error("the fee must be lower than the price")]
     FeeTooHigh,
+    #[error("choose the account the ticket money arrives in")]
+    NoTicketAccount,
+    #[error("tickets are switched off for this event")]
+    TicketsOff,
+    #[error("this event has tiers or sales: delete them before switching tickets off")]
+    TicketsInUse,
     #[error("unknown ticket import")]
     UnknownImport,
     #[error("unknown manual sale")]
@@ -133,7 +139,7 @@ impl DomainError {
             DomainError::BudgetLineInUse => "budget_line_in_use",
             DomainError::UnknownCostCentre { .. } => "unknown_cost_centre",
             DomainError::WrongCostCentre { .. } => "wrong_cost_centre",
-            DomainError::CostCentreProtected => "cost_centre_protected",
+            DomainError::CostCentreHasProducts => "cost_centre_has_products",
             DomainError::UnknownDrinkProduct => "unknown_drink_product",
             DomainError::UnknownReconciliation => "unknown_reconciliation",
             DomainError::DuplicateCheckpoint { .. } => "duplicate_checkpoint",
@@ -144,6 +150,9 @@ impl DomainError {
             DomainError::AccountInUse => "account_in_use",
             DomainError::NegativeCashCount => "negative_cash_count",
             DomainError::FeeTooHigh => "fee_too_high",
+            DomainError::NoTicketAccount => "no_ticket_account",
+            DomainError::TicketsOff => "tickets_off",
+            DomainError::TicketsInUse => "tickets_in_use",
             DomainError::UnknownImport => "unknown_import",
             DomainError::UnknownManualSale => "unknown_manual_sale",
             DomainError::UnknownCancellation => "unknown_cancellation",

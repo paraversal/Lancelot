@@ -7,7 +7,7 @@ export type RefundTerms = {
  */
 refundBp: number, date: string, 
 /**
- * Who pays. `None`: whoever received the money, the Verein account for the sheet and the
- * person on a manual sale (R-TKT-15).
+ * Who pays. `None`: whoever received the money, the ticket account for the sheet and the
+ * destination of a manual sale (R-TKT-15).
  */
 payer: AccountId | null, };

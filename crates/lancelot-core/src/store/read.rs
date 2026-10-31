@@ -18,7 +18,7 @@ use crate::model::{
 use crate::money::Cents;
 use crate::tickets::{
     Cancellation, ManualSale, ManualSaleDraft, OrderCount, RefundTerms, TicketColumns,
-    TicketImport, Tier, TierDraft,
+    TicketImport, TicketSettings, Tier, TierDraft,
 };
 
 pub(crate) fn cents(value: i64) -> Result<Cents, StoreError> {
@@ -49,7 +49,7 @@ fn next_id(conn: &Connection, key: &str) -> Result<i64, StoreError> {
 
 pub(crate) fn accounts(conn: &Connection) -> Result<BTreeMap<AccountId, Account>, StoreError> {
     let mut stmt = conn.prepare(
-        "SELECT id, kind, name, role, asset_type, cost_centre_id FROM account ORDER BY id",
+        "SELECT id, kind, name, role, asset_type, net_movement, cost_centre_id FROM account ORDER BY id",
     )?;
     let rows = stmt.query_map([], |r| {
         Ok((
@@ -58,12 +58,13 @@ pub(crate) fn accounts(conn: &Connection) -> Result<BTreeMap<AccountId, Account>
             r.get::<_, String>(2)?,
             r.get::<_, Option<String>>(3)?,
             r.get::<_, Option<String>>(4)?,
-            r.get::<_, Option<i64>>(5)?,
+            r.get::<_, bool>(5)?,
+            r.get::<_, Option<i64>>(6)?,
         ))
     })?;
     let mut out = BTreeMap::new();
     for row in rows {
-        let (id, kind, name, role, asset_type, cost_centre) = row?;
+        let (id, kind, name, role, asset_type, net_movement, cost_centre) = row?;
         let id = AccountId(id);
         let role = role.as_deref().map(text_enum).transpose()?;
         let asset_type = asset_type.as_deref().map(text_enum).transpose()?;
@@ -75,6 +76,7 @@ pub(crate) fn accounts(conn: &Connection) -> Result<BTreeMap<AccountId, Account>
                 name,
                 role,
                 asset_type,
+                net_movement,
                 cost_centre: cost_centre.map(CostCentreId),
             },
         );
@@ -134,26 +136,24 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
     }
 
     let mut stmt = conn
-        .prepare("SELECT txn_id, account_id, amount, memo, budget_line_id, cost_centre_id FROM line ORDER BY txn_id, position")?;
+        .prepare("SELECT txn_id, account_id, amount, budget_line_id, cost_centre_id FROM line ORDER BY txn_id, position")?;
     let rows = stmt.query_map([], |r| {
         Ok((
             r.get::<_, i64>(0)?,
             r.get::<_, i64>(1)?,
             r.get::<_, i64>(2)?,
-            r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<i64>>(3)?,
             r.get::<_, Option<i64>>(4)?,
-            r.get::<_, Option<i64>>(5)?,
         ))
     })?;
     for row in rows {
-        let (txn, account, amount, memo, budget_line, cost_centre) = row?;
+        let (txn, account, amount, budget_line, cost_centre) = row?;
         let txn = txns
             .get_mut(&TxnId(txn))
             .ok_or_else(|| StoreError::corrupt(format!("line of unknown transaction {txn}")))?;
         txn.lines.push(Line {
             account: AccountId(account),
             amount: cents(amount)?,
-            memo,
             budget_line: budget_line.map(BudgetLineId),
             cost_centre: cost_centre.map(CostCentreId),
         });
@@ -165,7 +165,8 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let event = conn.query_row(
         "SELECT name, starts_on, ends_on, location, notes, closed_at, default_reimbursement_account_id, closing_overrides,
                 ticket_tier_column, ticket_order_column, ticket_date_column,
-                drink_supplier, price_per_strich
+                tickets_enabled, ticket_account_id,
+                drink_supplier, price_per_strich, drink_cost_centre_id, pfand_category_id
          FROM event WHERE id = 1",
         [],
         |r| {
@@ -183,8 +184,14 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                     order: r.get(9)?,
                     sale_date: r.get(10)?,
                 },
-                r.get::<_, Option<String>>(11)?,
-                r.get::<_, Option<i64>>(12)?,
+                TicketSettings {
+                    enabled: r.get(11)?,
+                    account: r.get::<_, Option<i64>>(12)?.map(AccountId),
+                },
+                r.get::<_, Option<String>>(13)?,
+                r.get::<_, Option<i64>>(14)?,
+                r.get::<_, Option<i64>>(15)?,
+                r.get::<_, Option<i64>>(16)?,
             ))
         },
     )?;
@@ -198,8 +205,11 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         default_account,
         overrides,
         columns,
+        ticket_settings,
         supplier,
         price_per_strich,
+        drink_centre,
+        pfand,
     ) = event;
     let event = Event {
         details: EventDetails {
@@ -216,6 +226,8 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let drink_settings = DrinkSettings {
         supplier,
         price_per_strich: price_per_strich.map(cents).transpose()?,
+        cost_centre: drink_centre.map(CostCentreId),
+        pfand: pfand.map(AccountId),
     };
 
     let mut stmt = conn.prepare(
@@ -351,6 +363,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let cancellations = cancellations(conn)?;
 
     Ok(BookParts {
+        ticket_settings,
         ticket_columns: columns,
         drink_settings,
         event,
@@ -384,21 +397,14 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
 }
 
 fn cost_centres(conn: &Connection) -> Result<Vec<CostCentre>, StoreError> {
-    let mut stmt = conn.prepare("SELECT id, name, role FROM cost_centre ORDER BY id")?;
-    let rows = stmt.query_map([], |r| {
-        Ok((
-            r.get::<_, i64>(0)?,
-            r.get::<_, String>(1)?,
-            r.get::<_, Option<String>>(2)?,
-        ))
-    })?;
+    let mut stmt = conn.prepare("SELECT id, name FROM cost_centre ORDER BY id")?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
     let mut out = Vec::new();
     for row in rows {
-        let (id, name, role) = row?;
+        let (id, name) = row?;
         out.push(CostCentre {
             id: CostCentreId(id),
             name,
-            role: role.as_deref().map(text_enum).transpose()?,
         });
     }
     Ok(out)
@@ -546,7 +552,7 @@ fn tickets(conn: &Connection) -> Result<TicketParts, StoreError> {
     }
 
     let mut stmt = conn.prepare(
-        "SELECT id, tier_id, count, person_id, date, reference FROM ticket_manual_sale ORDER BY id",
+        "SELECT id, tier_id, count, destination_id, date, reference FROM ticket_manual_sale ORDER BY id",
     )?;
     let rows = stmt.query_map([], |r| {
         Ok((
@@ -560,13 +566,13 @@ fn tickets(conn: &Connection) -> Result<TicketParts, StoreError> {
     })?;
     let mut sales = Vec::new();
     for row in rows {
-        let (id, tier, n, person, date, reference) = row?;
+        let (id, tier, n, destination, date, reference) = row?;
         sales.push(ManualSale {
             id: ManualSaleId(id),
             draft: ManualSaleDraft {
                 tier: TierId(tier),
                 count: count(n)?,
-                person: AccountId(person),
+                destination: AccountId(destination),
                 date: text_date(&date)?,
                 reference,
             },

@@ -122,6 +122,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         }
 
         "asset_set_type" => two(s, a, ("id", "assetType"), Book::set_asset_type),
+        "asset_set_net_movement" => two(s, a, ("id", "netMovement"), Book::set_net_movement),
 
         "counts_set" => {
             json(s.set_counts(arg(a, "account")?, arg(a, "opening")?, arg(a, "closing")?))
@@ -201,6 +202,8 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "tier_delete" => one(s, a, "id", Book::delete_tier),
 
         "ticket_columns_set" => one(s, a, "columns", Book::set_ticket_columns),
+        "tickets_set_enabled" => one(s, a, "enabled", Book::set_tickets_enabled),
+        "ticket_account_set" => one(s, a, "account", Book::set_ticket_account),
 
         "tickets_preview" => json(s.preview_tickets(&arg::<PathBuf>(a, "path")?, date(a)?)),
         "tickets_import" => json(s.import_tickets(

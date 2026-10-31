@@ -27,7 +27,7 @@
 	const tier = $derived(tickets.tiers.find((t) => t.id === removed.tier));
 	const tierName = (id: number) => tickets.tiers.find((t) => t.id === id)?.name ?? '';
 	const since = $derived(tickets.imports.findIndex((i) => i.id === removed.since) + 1);
-	const verein = $derived(snapshot.accounts.find((a) => a.role === 'verein')?.id ?? null);
+	const ticketAccount = $derived(snapshot.ticketSettings.account);
 	const payers = $derived(
 		snapshot.accounts
 			.filter((a) => a.kind === 'asset' || a.kind === 'person')
@@ -55,7 +55,7 @@
 		count = String(removed.count);
 		percent = feeInput(10_000, format);
 		date = tickets.imports.at(-1)?.date ?? new Date().toISOString().slice(0, 10);
-		payer = verein;
+		payer = ticketAccount;
 	});
 
 	const n = $derived(parseCount(count));
@@ -89,7 +89,7 @@
 		return resolve({
 			type: 'refund',
 			count: n,
-			terms: { refundBp: bp, date, payer: payer === verein ? null : payer },
+			terms: { refundBp: bp, date, payer: payer === ticketAccount ? null : payer },
 			note
 		});
 	}

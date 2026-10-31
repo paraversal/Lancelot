@@ -46,9 +46,9 @@ pub use ledger::{
 pub use model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
     BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre,
-    CostCentreId, CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, Flow, ImportId,
-    Line, ManualSaleId, OpenItem, Origin, Person, Reconciliation, ReconciliationId, Role, TierId,
-    Txn, TxnId, TxnKind,
+    CostCentreId, DrinkProductId, Estimate, Event, EventDetails, Flow, ImportId, Line,
+    ManualSaleId, OpenItem, Origin, Person, Reconciliation, ReconciliationId, Role, TierId, Txn,
+    TxnId, TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
@@ -62,8 +62,8 @@ pub use store::{
 pub use tickets::{
     Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
     ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict,
-    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketShare,
-    TicketTotals, Tickets, Tier, TierDraft, ticket_share,
+    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketSettings,
+    TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

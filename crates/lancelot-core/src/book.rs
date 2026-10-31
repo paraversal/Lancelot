@@ -13,18 +13,20 @@ use crate::drinks::{DrinkProduct, DrinkSettings, Drinks};
 use crate::entry::{Entry, SettleDirection, TxnDraft, build_lines, txn_amount, txn_follows_rules};
 use crate::error::DomainError;
 use crate::iban::validate_bic;
-use crate::ledger::{Ledger, LedgerInput};
+use crate::ledger::{Ledger, LedgerInput, TicketIncome};
 use crate::model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
     BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId,
-    CostCentreRole, DrinkProductId, Estimate, Event, EventDetails, Line, OpenItem, Person,
-    Reconciliation, ReconciliationId, Role, Txn, TxnId, TxnKind,
+    DrinkProductId, Estimate, Event, EventDetails, Line, OpenItem, Person, Reconciliation,
+    ReconciliationId, Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
 use crate::payout::{Payouts, payouts};
 use crate::sales::Profitability;
-use crate::tickets::{Cancellation, ManualSale, TicketColumns, TicketImport, Tickets, Tier};
+use crate::tickets::{
+    Cancellation, ManualSale, TicketColumns, TicketImport, TicketSettings, Tickets, Tier,
+};
 
 mod drinks;
 mod template;
@@ -52,6 +54,7 @@ const OPENING_DESCRIPTION: &str = "Opening count";
 pub struct Book {
     event: Event,
     ticket_columns: TicketColumns,
+    ticket_settings: TicketSettings,
     drink_settings: DrinkSettings,
     accounts: BTreeMap<AccountId, Account>,
     persons: BTreeMap<AccountId, Person>,
@@ -98,6 +101,7 @@ pub struct NextIds {
 pub struct BookParts {
     pub event: Event,
     pub ticket_columns: TicketColumns,
+    pub ticket_settings: TicketSettings,
     pub drink_settings: DrinkSettings,
     pub accounts: Vec<Account>,
     pub persons: Vec<(AccountId, Person)>,
@@ -144,6 +148,10 @@ impl Book {
                 closing_overrides: Vec::new(),
             },
             ticket_columns: TicketColumns::default(),
+            ticket_settings: TicketSettings {
+                enabled: true,
+                account: None,
+            },
             drink_settings: DrinkSettings::default(),
             accounts: BTreeMap::new(),
             persons: BTreeMap::new(),
@@ -178,30 +186,40 @@ impl Book {
             payouts: Payouts::default(),
             profitability: None,
         };
-        let drinks = book.insert_cost_centre("Drinks", Some(CostCentreRole::Drinks));
-        let verein = book.insert_account(AccountKind::Asset, "Verein account", Some(Role::Verein));
-        book.insert_account(AccountKind::Asset, "Cash box", Some(Role::CashBox));
-        book.insert_account(AccountKind::Opening, "Opening balance", Some(Role::Opening));
+        let drinks = book.insert_cost_centre("Drinks");
+        let verein = book.insert_account(AccountKind::Asset, "Verein account", None);
+        let cash = book.insert_account(AccountKind::Asset, "Cash box", None);
+        book.insert_account(AccountKind::Opening, "Opening balance", None);
         for name in DEFAULT_INCOME {
             let role = (*name == "Tickets").then_some(Role::Tickets);
             book.insert_account(AccountKind::Income, name, role);
         }
         for name in DEFAULT_EXPENSE {
-            let role = (*name == "Pfand").then_some(Role::Pfand);
-            book.insert_account(AccountKind::Expense, name, role);
+            let id = book.insert_account(AccountKind::Expense, name, None);
+            if *name == "Pfand" {
+                book.drink_settings.pfand = Some(id);
+            }
         }
         for account in book.accounts.values_mut() {
             if a_category(account.kind) && DRINKS_CATEGORIES.contains(&account.name.as_str()) {
                 account.cost_centre = Some(drinks);
             }
         }
+        if let Some(a) = book.accounts.get_mut(&verein) {
+            a.net_movement = true;
+        }
+        if let Some(a) = book.accounts.get_mut(&cash) {
+            a.asset_type = Some(AssetType::Cash);
+        }
+        book.drink_settings.cost_centre = Some(drinks);
+        book.ticket_settings.account = Some(verein);
         book.event.default_reimbursement_account = verein;
         book.recompute()?;
         Ok(book)
     }
 
     /// Rebuilds a book from stored pieces, checking everything a hand-edited or damaged
-    /// file could get wrong: roles, kinds, names, transaction shapes, references and ids.
+    /// file could get wrong: settings, kinds, names, transaction rules, references and ids.
     pub fn from_parts(parts: BookParts) -> Result<Book, DomainError> {
         Ok(Book::load(parts)?.1)
     }
@@ -221,34 +239,32 @@ impl Book {
             }
             accounts.insert(a.id, a);
         }
-        for role in [Role::Verein, Role::CashBox, Role::Opening, Role::Tickets] {
-            if accounts.values().filter(|a| a.role == Some(role)).count() != 1 {
-                return Err(bad("each system account must exist exactly once"));
-            }
-        }
-        let opening_ok = accounts
+        let openings = accounts
             .values()
-            .all(|a| (a.kind == AccountKind::Opening) == (a.role == Some(Role::Opening)));
+            .filter(|a| a.kind == AccountKind::Opening)
+            .count();
+        if openings != 1 {
+            return Err(bad("the opening account must exist exactly once"));
+        }
         let roles_ok = accounts.values().all(|a| match a.role {
-            Some(Role::Verein | Role::CashBox) => a.kind == AccountKind::Asset,
             Some(Role::Tickets | Role::TicketRefunds) => a.kind == AccountKind::Income,
-            Some(Role::TicketFees | Role::Pfand) => a.kind == AccountKind::Expense,
-            Some(Role::Opening) | None => true,
+            Some(Role::TicketFees) => a.kind == AccountKind::Expense,
+            None => true,
         });
         let once = |role| accounts.values().filter(|a| a.role == Some(role)).count() <= 1;
-        let types_ok = accounts
-            .values()
-            .all(|a| a.asset_type.is_some() == (a.kind == AccountKind::Asset));
+        let types_ok = accounts.values().all(|a| {
+            a.asset_type.is_some() == (a.kind == AccountKind::Asset)
+                && (a.kind == AccountKind::Asset || !a.net_movement)
+        });
         let names: BTreeSet<(AccountKind, String)> = accounts
             .values()
             .map(|a| (a.kind, a.name.to_ascii_lowercase()))
             .collect();
-        if !opening_ok
-            || !roles_ok
+        if !roles_ok
             || !types_ok
+            || !once(Role::Tickets)
             || !once(Role::TicketFees)
             || !once(Role::TicketRefunds)
-            || !once(Role::Pfand)
             || names.len() != accounts.len()
         {
             return Err(bad("account kinds, roles or names are inconsistent"));
@@ -335,9 +351,13 @@ impl Book {
         }
 
         let drink_products = drinks::check_products(parts.drink_products, &parts.next)?;
-        if drinks::clean_settings(parts.drink_settings.clone()).as_ref()
-            != Ok(&parts.drink_settings)
-        {
+        let settings = drinks::clean_settings(
+            parts.drink_settings.clone(),
+            &accounts,
+            &cost_centres,
+            &drink_products,
+        );
+        if settings.as_ref() != Ok(&parts.drink_settings) {
             return Err(bad("drink settings are invalid"));
         }
 
@@ -349,10 +369,19 @@ impl Book {
             &parts.next,
             &accounts,
         )?;
+        let ticket_settings = parts.ticket_settings;
+        let account_ok = match ticket_settings.account {
+            Some(id) => accounts.get(&id).map(|a| a.kind) == Some(AccountKind::Asset),
+            None => imports.is_empty(),
+        };
+        if !account_ok || (!ticket_settings.enabled && !tiers.is_empty()) {
+            return Err(bad("ticket settings do not fit the tickets"));
+        }
 
         let book = Book {
             event: parts.event,
             ticket_columns: parts.ticket_columns,
+            ticket_settings,
             drink_settings: parts.drink_settings,
             accounts,
             persons,
@@ -589,8 +618,9 @@ impl Book {
         })
     }
 
-    /// Deletes an account or a person nothing refers to, such as a mistyped one (not the system
-    /// accounts). Whatever is in use stays, so no figure changes.
+    /// Deletes an account or a person nothing refers to, such as a mistyped one (not the opening
+    /// account or a ticket category). Whatever is in use stays, so no figure changes. A Pfand
+    /// category nothing is booked to can go, and the setting with it.
     pub fn delete_account(&mut self, id: AccountId) -> Result<Account, DomainError> {
         self.change(|book| {
             let account = book
@@ -598,16 +628,16 @@ impl Book {
                 .get(&id)
                 .ok_or(DomainError::UnknownAccount { field: "id".into() })?;
             let in_use = account.role.is_some()
+                || account.kind == AccountKind::Opening
                 || book.event.default_reimbursement_account == id
+                || book.ticket_settings.account == Some(id)
                 || book.closing_counts.contains_key(&id)
                 || book.reconciliations.values().any(|r| r.account == id)
-                || book.budget_lines.values().any(|b| b.draft.category == id)
+                || book.category_in_use(id)
                 || book
-                    .txns
+                    .manual_sales
                     .values()
-                    .flat_map(|t| &t.lines)
-                    .any(|l| l.account == id)
-                || book.manual_sales.values().any(|s| s.draft.person == id)
+                    .any(|s| s.draft.destination == id)
                 || book
                     .cancellations
                     .values()
@@ -615,10 +645,33 @@ impl Book {
             if in_use {
                 return Err(DomainError::AccountInUse);
             }
+            if book.drink_settings.pfand == Some(id) {
+                book.drink_settings.pfand = None;
+            }
             book.persons.remove(&id);
             book.accounts
                 .remove(&id)
                 .ok_or(DomainError::UnknownAccount { field: "id".into() })
+        })
+    }
+
+    /// Marks an asset account as holding only the event's net movement (R-ISO-2). Its counts and
+    /// checkpoints are compared without opening counts from then on.
+    pub fn set_net_movement(
+        &mut self,
+        id: AccountId,
+        net_movement: bool,
+    ) -> Result<(), DomainError> {
+        self.change(|book| {
+            let account = book
+                .accounts
+                .get_mut(&id)
+                .ok_or(DomainError::UnknownAccount { field: "id".into() })?;
+            if account.kind != AccountKind::Asset {
+                return Err(DomainError::WrongAccountKind { field: "id".into() });
+            }
+            account.net_movement = net_movement;
+            Ok(())
         })
     }
 
@@ -1088,10 +1141,10 @@ impl Book {
         Ok(())
     }
 
-    /// Makes a closed event editable again. The store records it in the change log.
+    /// Makes a closed event editable again. The store records it in the change log. The closing
+    /// notes stay, to fill in the items that still match when it is closed again (R-SET-7).
     pub fn reopen(&mut self) -> Result<(), DomainError> {
         self.event.closed_at = None;
-        self.event.closing_overrides.clear();
         Ok(())
     }
 
@@ -1185,7 +1238,7 @@ impl Book {
             &self.manual_sales,
             &self.cancellations,
             &self.generated_txns(),
-            self.account_by_role(Role::Verein).map(|a| a.id),
+            self.ticket_settings.account,
         )?;
         let with_attachments: BTreeSet<TxnId> = self.attachments.values().map(|a| a.txn).collect();
         self.ledger = Ledger::compute(LedgerInput {
@@ -1194,11 +1247,14 @@ impl Book {
             closing_counts: &self.closing_counts,
             reconciliations: &self.reconciliations,
             with_attachments: &with_attachments,
-            sheet_income: &crate::tickets::sheet_income(
-                &self.tiers,
-                &self.imports,
-                &self.cancellations,
-            )?,
+            tickets: TicketIncome {
+                account: self.ticket_settings.account,
+                sheet_income: &crate::tickets::sheet_income(
+                    &self.tiers,
+                    &self.imports,
+                    &self.cancellations,
+                )?,
+            },
         })?;
         self.budget = Budget::compute(
             &self.accounts,
@@ -1207,20 +1263,24 @@ impl Book {
             &self.txns,
             &self.ledger,
         )?;
-        self.drinks = Drinks::compute(
-            &self.drink_products,
-            &self.drink_settings,
-            &self.accounts,
-            &self.cost_centres,
-            &self.txns,
-        )?;
+        self.drinks = Drinks::compute(&self.drink_products, &self.drink_settings, &self.txns)?;
         self.payouts = payouts(self)?;
-        self.profitability = if self.budget_lines.is_empty() {
+        self.profitability = if self.budget_lines.is_empty() || !self.ticket_settings.enabled {
             None
         } else {
             Some(Profitability::compute(&self.tickets, &self.budget)?)
         };
         Ok(())
+    }
+
+    /// Whether a budget line or a transaction line books to the account.
+    fn category_in_use(&self, id: AccountId) -> bool {
+        self.budget_lines.values().any(|b| b.draft.category == id)
+            || self
+                .txns
+                .values()
+                .flat_map(|t| &t.lines)
+                .any(|l| l.account == id)
     }
 
     /// The transaction lines linked to a budget line.
@@ -1234,11 +1294,7 @@ impl Book {
     fn insert_account(&mut self, kind: AccountKind, name: &str, role: Option<Role>) -> AccountId {
         let id = AccountId(self.next.account);
         self.next.account += 1;
-        let asset_type = match (kind, role) {
-            (AccountKind::Asset, Some(Role::CashBox)) => Some(AssetType::Cash),
-            (AccountKind::Asset, _) => Some(AssetType::Bank),
-            _ => None,
-        };
+        let asset_type = (kind == AccountKind::Asset).then_some(AssetType::Bank);
         self.accounts.insert(
             id,
             Account {
@@ -1247,6 +1303,7 @@ impl Book {
                 name: name.to_owned(),
                 role,
                 asset_type,
+                net_movement: false,
                 cost_centre: None,
             },
         );

@@ -3,7 +3,7 @@
 
 use lancelot_core::*;
 
-use super::{draft, eur, expense, income, june, role, split};
+use super::{asset, draft, eur, expense, income, june, split};
 
 /// Something the example event can be built in: a [`Book`] or a [`Store`].
 pub trait Target {
@@ -125,7 +125,7 @@ pub struct Mock {
 
 pub fn build(t: &mut impl Target) -> Mock {
     let b = t.book();
-    let (verein, cash) = (role(b, Role::Verein), role(b, Role::CashBox));
+    let (verein, cash) = (asset(b, "Verein account"), asset(b, "Cash box"));
     let [tickets, donations, other_in] =
         ["Tickets", "Drink donations", "General"].map(|n| income(b, n));
     let [food, venue, drinks, pfand, tech, other, mobility] = [
@@ -204,6 +204,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     t.drink_settings(DrinkSettings {
         supplier: Some("Hoffmann".into()),
         price_per_strich: Some(eur("1,00")),
+        ..t.book().drink_settings().clone()
     });
     for (name, taken, returned, unit) in [
         ("Club-Mate 0,5", 240, 96, "1,15"),
@@ -295,7 +296,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     t.count(cash, eur("410"));
 
     // The Verein account's statement agrees with the books.
-    let verein = role(t.book(), Role::Verein);
+    let verein = asset(t.book(), "Verein account");
     let movement = t.book().ledger().balance(verein);
     t.checkpoint(verein, june(30), movement);
 

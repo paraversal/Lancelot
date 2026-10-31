@@ -239,6 +239,17 @@ pub async fn asset_add(
 }
 
 #[tauri::command]
+pub async fn asset_set_net_movement(
+    state: State<'_, AppState>,
+    id: AccountId,
+    net_movement: bool,
+) -> Result<OpenEvent> {
+    with(&state, |s| {
+        s.change(|b| b.set_net_movement(id, net_movement))
+    })
+}
+
+#[tauri::command]
 pub async fn asset_set_type(
     state: State<'_, AppState>,
     id: AccountId,
@@ -419,6 +430,19 @@ pub async fn tier_update(
 #[tauri::command]
 pub async fn tier_delete(state: State<'_, AppState>, id: TierId) -> Result<OpenEvent> {
     with(&state, |s| s.change(|b| b.delete_tier(id)))
+}
+
+#[tauri::command]
+pub async fn tickets_set_enabled(state: State<'_, AppState>, enabled: bool) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.set_tickets_enabled(enabled)))
+}
+
+#[tauri::command]
+pub async fn ticket_account_set(
+    state: State<'_, AppState>,
+    account: Option<AccountId>,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.set_ticket_account(account)))
 }
 
 #[tauri::command]

@@ -39,8 +39,8 @@ describe('a ticket refund', () => {
 			flow: 'out',
 			needsReceipt: false,
 			lines: [
-				{ account: refunds, amount: 1600, memo: null, budgetLine: null, costCentre: null },
-				{ account: verein, amount: -1600, memo: null, budgetLine: null, costCentre: null }
+				{ account: refunds, amount: 1600, budgetLine: null, costCentre: null },
+				{ account: verein, amount: -1600, budgetLine: null, costCentre: null }
 			]
 		};
 		const [row] = rows({

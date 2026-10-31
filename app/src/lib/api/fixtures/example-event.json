@@ -14,17 +14,24 @@
     "order": "Order ID",
     "saleDate": null
   },
+  "ticketSettings": {
+    "enabled": true,
+    "account": 1
+  },
   "drinkSettings": {
     "supplier": "Hoffmann",
-    "pricePerStrich": 100
+    "pricePerStrich": 100,
+    "costCentre": 1,
+    "pfand": 9
   },
   "accounts": [
     {
       "id": 1,
       "kind": "asset",
       "name": "Verein account",
-      "role": "verein",
+      "role": null,
       "assetType": "bank",
+      "netMovement": true,
       "costCentre": null,
       "balance": 175700
     },
@@ -32,8 +39,9 @@
       "id": 2,
       "kind": "asset",
       "name": "Cash box",
-      "role": "cash_box",
+      "role": null,
       "assetType": "cash",
+      "netMovement": false,
       "costCentre": null,
       "balance": 41290
     },
@@ -41,8 +49,9 @@
       "id": 3,
       "kind": "opening",
       "name": "Opening balance",
-      "role": "opening",
+      "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 0
     },
@@ -52,6 +61,7 @@
       "name": "Tickets",
       "role": "tickets",
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 652750
     },
@@ -61,6 +71,7 @@
       "name": "Drink donations",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": 1,
       "balance": 81250
     },
@@ -70,6 +81,7 @@
       "name": "General",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 5000
     },
@@ -79,6 +91,7 @@
       "name": "Kitchen",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 210000
     },
@@ -88,6 +101,7 @@
       "name": "Drinks",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": 1,
       "balance": 45200
     },
@@ -95,8 +109,9 @@
       "id": 9,
       "kind": "expense",
       "name": "Pfand",
-      "role": "pfand",
+      "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": 1,
       "balance": 3200
     },
@@ -106,6 +121,7 @@
       "name": "Mobility",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 0
     },
@@ -115,6 +131,7 @@
       "name": "Venue",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 180000
     },
@@ -124,6 +141,7 @@
       "name": "Tech",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 61000
     },
@@ -133,6 +151,7 @@
       "name": "General",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 36850
     },
@@ -142,6 +161,7 @@
       "name": "Anna",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 21240
     },
@@ -151,6 +171,7 @@
       "name": "Malte",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 11000
     },
@@ -160,6 +181,7 @@
       "name": "Bob",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": -18000
     },
@@ -169,6 +191,7 @@
       "name": "Clara",
       "role": null,
       "assetType": null,
+      "netMovement": false,
       "costCentre": null,
       "balance": 0
     }
@@ -313,14 +336,12 @@
         {
           "account": 4,
           "amount": -622750,
-          "memo": null,
           "budgetLine": 1,
           "costCentre": null
         },
         {
           "account": 1,
           "amount": 622750,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -337,7 +358,6 @@
           {
             "account": 4,
             "amount": 622750,
-            "memo": null,
             "budgetLine": 1,
             "costCentre": null
           }
@@ -358,14 +378,12 @@
         {
           "account": 4,
           "amount": -30000,
-          "memo": null,
           "budgetLine": 1,
           "costCentre": null
         },
         {
           "account": 16,
           "amount": 30000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -382,7 +400,6 @@
           {
             "account": 4,
             "amount": 30000,
-            "memo": null,
             "budgetLine": 1,
             "costCentre": null
           }
@@ -403,14 +420,12 @@
         {
           "account": 5,
           "amount": -81250,
-          "memo": null,
           "budgetLine": 2,
           "costCentre": 1
         },
         {
           "account": 2,
           "amount": 81250,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -427,7 +442,6 @@
           {
             "account": 5,
             "amount": 81250,
-            "memo": null,
             "budgetLine": 2,
             "costCentre": 1
           }
@@ -448,14 +462,12 @@
         {
           "account": 6,
           "amount": -5000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 2,
           "amount": 5000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -472,7 +484,6 @@
           {
             "account": 6,
             "amount": 5000,
-            "memo": null,
             "budgetLine": null,
             "costCentre": null
           }
@@ -493,21 +504,18 @@
         {
           "account": 1,
           "amount": -45200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 8,
           "amount": 42000,
-          "memo": null,
           "budgetLine": 6,
           "costCentre": 1
         },
         {
           "account": 9,
           "amount": 3200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": 1
         }
@@ -534,14 +542,12 @@
           {
             "account": 8,
             "amount": 42000,
-            "memo": null,
             "budgetLine": 6,
             "costCentre": 1
           },
           {
             "account": 9,
             "amount": 3200,
-            "memo": null,
             "budgetLine": null,
             "costCentre": 1
           }
@@ -562,14 +568,12 @@
         {
           "account": 1,
           "amount": -180000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 11,
           "amount": 180000,
-          "memo": null,
           "budgetLine": 3,
           "costCentre": null
         }
@@ -596,7 +600,6 @@
           {
             "account": 11,
             "amount": 180000,
-            "memo": null,
             "budgetLine": 3,
             "costCentre": null
           }
@@ -617,14 +620,12 @@
         {
           "account": 1,
           "amount": -50000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 12,
           "amount": 50000,
-          "memo": null,
           "budgetLine": 7,
           "costCentre": null
         }
@@ -651,7 +652,6 @@
           {
             "account": 12,
             "amount": 50000,
-            "memo": null,
             "budgetLine": 7,
             "costCentre": null
           }
@@ -672,14 +672,12 @@
         {
           "account": 1,
           "amount": -109850,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 109850,
-          "memo": null,
           "budgetLine": 4,
           "costCentre": null
         }
@@ -706,7 +704,6 @@
           {
             "account": 7,
             "amount": 109850,
-            "memo": null,
             "budgetLine": 4,
             "costCentre": null
           }
@@ -727,14 +724,12 @@
         {
           "account": 1,
           "amount": -22500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 13,
           "amount": 22500,
-          "memo": null,
           "budgetLine": 8,
           "costCentre": null
         }
@@ -761,7 +756,6 @@
           {
             "account": 13,
             "amount": 22500,
-            "memo": null,
             "budgetLine": 8,
             "costCentre": null
           }
@@ -782,21 +776,18 @@
         {
           "account": 2,
           "amount": -39125,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 34275,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         },
         {
           "account": 13,
           "amount": 4850,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -823,14 +814,12 @@
           {
             "account": 7,
             "amount": 34275,
-            "memo": null,
             "budgetLine": 5,
             "costCentre": null
           },
           {
             "account": 13,
             "amount": 4850,
-            "memo": null,
             "budgetLine": null,
             "costCentre": null
           }
@@ -851,14 +840,12 @@
         {
           "account": 2,
           "amount": -22635,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 22635,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         }
@@ -885,7 +872,6 @@
           {
             "account": 7,
             "amount": 22635,
-            "memo": null,
             "budgetLine": 5,
             "costCentre": null
           }
@@ -906,14 +892,12 @@
         {
           "account": 14,
           "amount": -31240,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 31240,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         }
@@ -940,7 +924,6 @@
           {
             "account": 7,
             "amount": 31240,
-            "memo": null,
             "budgetLine": 5,
             "costCentre": null
           }
@@ -961,14 +944,12 @@
         {
           "account": 15,
           "amount": -11000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 12,
           "amount": 11000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -995,7 +976,6 @@
           {
             "account": 12,
             "amount": 11000,
-            "memo": null,
             "budgetLine": null,
             "costCentre": null
           }
@@ -1016,14 +996,12 @@
         {
           "account": 16,
           "amount": -12000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 7,
           "amount": 12000,
-          "memo": null,
           "budgetLine": 5,
           "costCentre": null
         }
@@ -1050,7 +1028,6 @@
           {
             "account": 7,
             "amount": 12000,
-            "memo": null,
             "budgetLine": 5,
             "costCentre": null
           }
@@ -1071,14 +1048,12 @@
         {
           "account": 17,
           "amount": -9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 13,
           "amount": 9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -1105,7 +1080,6 @@
           {
             "account": 13,
             "amount": 9500,
-            "memo": null,
             "budgetLine": null,
             "costCentre": null
           }
@@ -1126,14 +1100,12 @@
         {
           "account": 2,
           "amount": -3200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 8,
           "amount": 3200,
-          "memo": null,
           "budgetLine": null,
           "costCentre": 1
         }
@@ -1150,7 +1122,6 @@
           {
             "account": 8,
             "amount": 3200,
-            "memo": null,
             "budgetLine": null,
             "costCentre": 1
           }
@@ -1171,14 +1142,12 @@
         {
           "account": 14,
           "amount": -20000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 2,
           "amount": 20000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -1209,14 +1178,12 @@
         {
           "account": 1,
           "amount": -30000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 14,
           "amount": 30000,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -1248,14 +1215,12 @@
         {
           "account": 1,
           "amount": -9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         },
         {
           "account": 17,
           "amount": 9500,
-          "memo": null,
           "budgetLine": null,
           "costCentre": null
         }
@@ -1708,8 +1673,7 @@
   "costCentres": [
     {
       "id": 1,
-      "name": "Drinks",
-      "role": "drinks"
+      "name": "Drinks"
     }
   ],
   "drinkProducts": [

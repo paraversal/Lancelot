@@ -1,20 +1,12 @@
 // Keyboard model (R-NF-7). In the app, New, Open, Close and Settings are native menu items with
 // their shortcuts (app/src-tauri/src/lib.rs) and arrive as `menu` events; in a plain browser
-// during development the same keys are handled here. ⌘1–6 switch pages; Esc closes panels
-// (components/Panel.svelte).
+// during development the same keys are handled here. ⌘1–9 go through the sidebar's pages and cost
+// centres; Esc closes panels (components/Panel.svelte).
 import { goto } from '$app/navigation';
 import { isTauri } from '@tauri-apps/api/core';
 import { chooseAndOpen, closeFile, newEvent } from './actions';
+import { allLinks } from './nav';
 import { session } from './state/session.svelte';
-
-const PAGES = [
-	'/event/overview',
-	'/event/ledger',
-	'/event/people',
-	'/event/tickets',
-	'/event/drinks',
-	'/event/budget'
-];
 
 function run(id: string) {
 	switch (id) {
@@ -33,9 +25,10 @@ function keydown(e: KeyboardEvent) {
 	const mod = e.metaKey || e.ctrlKey;
 	if (!mod) return;
 	const page = Number(e.key);
-	if (session.event && page >= 1 && page <= PAGES.length) {
+	const link = session.event && page >= 1 ? allLinks(session.event.snapshot)[page - 1] : undefined;
+	if (link) {
 		e.preventDefault();
-		goto(PAGES[page - 1]);
+		goto(link);
 		return;
 	}
 	if (isTauri()) return;

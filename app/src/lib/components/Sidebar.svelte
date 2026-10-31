@@ -1,12 +1,13 @@
 <script lang="ts">
-	// The event's sidebar: name and dates, the pages with their counts, and the file name, which
-	// opens Settings.
+	// The event's sidebar: name and dates, the pages with their counts, the cost centres, and the
+	// file name, which opens Settings.
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { markerTravel } from '../motion/effects';
 	import { level } from '../motion/mode.svelte';
 	import type { OpenEvent } from '../api/generated/OpenEvent';
 	import { formatDateRange } from '../format';
+	import { centreLink, pageLinks } from '../nav';
 	import { session } from '../state/session.svelte';
 	import { conflictCount } from '../tickets';
 	import Icon from './Icon.svelte';
@@ -16,24 +17,37 @@
 	const snapshot = $derived(event.snapshot);
 	// Open ticket conflicts take the place of the count, as a badge (R-TKT-13).
 	const conflicts = $derived(conflictCount(snapshot.tickets));
-	const items = $derived([
-		{ href: '/event/overview', label: 'Overview', count: null },
-		{ href: '/event/ledger', label: 'Ledger', count: snapshot.txns.length || null },
-		{ href: '/event/people', label: 'People', count: snapshot.persons.length || null },
-		{
-			href: '/event/tickets',
-			label: 'Tickets',
-			count: conflicts || snapshot.tickets.tiers.length || null,
-			attention: conflicts > 0
-		},
-		{ href: '/event/drinks', label: 'Drinks', count: snapshot.drinkProducts.length || null },
-		{ href: '/event/budget', label: 'Budget', count: snapshot.budgetLines.length || null }
-	]);
+	const counts = $derived<Record<string, number>>({
+		'/event/ledger': snapshot.txns.length,
+		'/event/people': snapshot.persons.length,
+		'/event/tickets': conflicts || snapshot.tickets.tiers.length,
+		'/event/budget': snapshot.budgetLines.length
+	});
+	const pages = $derived(
+		pageLinks(snapshot).map((p) => ({
+			...p,
+			count: counts[p.href] || null,
+			attention: p.href === '/event/tickets' && conflicts > 0
+		}))
+	);
+	// A cost centre counts the lines tagged with it.
+	const centres = $derived(
+		snapshot.costCentres.map((c) => ({
+			href: centreLink(c.id),
+			label: c.name,
+			count:
+				snapshot.txns.flatMap((t) => t.lines).filter((l) => l.costCentre === c.id).length || null,
+			attention: false
+		}))
+	);
 	const dates = $derived(
 		formatDateRange(snapshot.event.startsOn, snapshot.event.endsOn, session.format)
 	);
-	const current = $derived(page.url.pathname);
-	const active = $derived(items.findIndex((i) => current.startsWith(i.href)));
+	const current = $derived(page.url.pathname + page.url.search);
+	const isCurrent = (href: string) =>
+		href.includes('?') ? current === href : page.url.pathname.startsWith(href);
+	const items = $derived([...pages, ...centres]);
+	const active = $derived(items.findIndex((i) => isCurrent(i.href)));
 
 	// The yellow highlight is one element under the list that travels to the page (A1).
 	let list: HTMLUListElement;
@@ -55,6 +69,19 @@
 	});
 </script>
 
+{#snippet link(item: { href: string; label: string; count: number | null; attention: boolean })}
+	<li>
+		<a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+			<span class="label">{item.label}</span>
+			{#if item.count}<span
+					class="count"
+					class:attention={item.attention}
+					title={item.attention ? 'Ticket conflicts' : undefined}>{item.count}</span
+				>{/if}
+		</a>
+	</li>
+{/snippet}
+
 <nav class="sidebar">
 	<div class="event">
 		<strong>{snapshot.event.name}</strong>
@@ -74,26 +101,22 @@
 			style:height="{box?.height ?? 0}px"
 			style:opacity={box ? 1 : 0}
 		></li>
-		{#each items as item (item.href)}
-			<li>
-				<a href={item.href} aria-current={current.startsWith(item.href) ? 'page' : undefined}>
-					{item.label}
-					{#if item.count}<span
-							class="count"
-							class:attention={'attention' in item && item.attention}
-							title={'attention' in item && item.attention ? 'Ticket conflicts' : undefined}
-							>{item.count}</span
-						>{/if}
-				</a>
-			</li>
+		{#each pages as item (item.href)}
+			{@render link(item)}
 		{/each}
+		{#if centres.length}
+			<li class="heading">Cost centres</li>
+			{#each centres as item (item.href)}
+				{@render link(item)}
+			{/each}
+		{/if}
 	</ul>
 
 	<a
 		class="file"
 		href="/event/settings"
 		title={event.path}
-		aria-current={current === '/event/settings' ? 'page' : undefined}
+		aria-current={page.url.pathname === '/event/settings' ? 'page' : undefined}
 	>
 		<Icon name="gear" />
 		<span>{event.fileName}</span>
@@ -169,6 +192,21 @@
 
 	li {
 		position: relative;
+	}
+
+	.heading {
+		margin-top: var(--spacing-3);
+		padding: var(--spacing-3) 10px 6px;
+		border-top: 1px solid var(--color-rule);
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+	}
+
+	.label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	a[aria-current='page'] {

@@ -2,6 +2,7 @@
 	// Budget (R-BUD-3, R-BUD-4): estimate, actual and forecast per budget line, per category and
 	// in total, for income and expenses. Every figure comes from the core; a line opens in the
 	// panel. Not designed in UI.fig yet: this follows the People page's table and panel.
+	import { centreLink } from '#lib/nav.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
@@ -197,11 +198,7 @@
 				{#each centres as c (c.centre.id)}
 					<div class="row" role="row">
 						<span class="name">
-							{#if c.centre.role === 'drinks'}
-								<a href="/event/drinks">{c.centre.name}</a>
-							{:else}
-								{c.centre.name}
-							{/if}
+							<a href={centreLink(c.centre.id)}>{c.centre.name}</a>
 						</span>
 						<span class="num">{formatAmount(c.figures.estimate, format, 'always')}</span>
 						<span class="num">{formatAmount(c.figures.actual, format, 'always')}</span>

@@ -90,7 +90,7 @@ fn an_import_generates_ticket_income_net_of_fees() {
     import(&mut book, "import-1.ods", 1);
 
     // R-TKT-6: one income per tier to the Verein account; the fee is an expense in it.
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     let tickets = role(&book, Role::Tickets);
     let fees = role(&book, Role::TicketFees);
     assert_eq!(book.account(fees).unwrap().name, "Ticket fees");
@@ -176,7 +176,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
     assert_eq!(txn_amount(&regular.lines), eur("128"));
     assert_eq!(sold(&book, t.supporter).gross, eur("90"));
     assert_eq!(
-        book.ledger().balance(role(&book, Role::Verein)),
+        book.ledger().balance(asset(&book, "Verein account")),
         eur("264,80")
     );
 
@@ -232,7 +232,7 @@ fn ticket_income_cannot_be_changed_by_hand() {
     import(&mut book, "import-1.ods", 1);
     let id = income_of(&book, t.early).unwrap().id;
     let entry = Entry::Income {
-        destination: role(&book, Role::Verein),
+        destination: asset(&book, "Verein account"),
         lines: vec![split(role(&book, Role::Tickets), "60")],
     };
     assert_eq!(
@@ -277,7 +277,7 @@ fn manual_sales_are_income_held_by_the_person() {
         .add_manual_sale(ManualSaleDraft {
             tier: reduced,
             count: 3,
-            person: bob,
+            destination: bob,
             date: june(13),
             reference: Some(" Abendkasse Sa ".into()),
         })
@@ -304,7 +304,7 @@ fn manual_sales_are_income_held_by_the_person() {
     let invalid = ManualSaleDraft {
         tier: reduced,
         count: 0,
-        person: bob,
+        destination: bob,
         date: june(13),
         reference: None,
     };
@@ -314,14 +314,14 @@ fn manual_sales_are_income_held_by_the_person() {
             .field(),
         Some("count")
     );
-    let not_a_person = ManualSaleDraft {
+    let a_category = ManualSaleDraft {
         count: 1,
-        person: role(&book, Role::Verein),
+        destination: income(&book, "General"),
         ..invalid
     };
     assert_eq!(
-        book.add_manual_sale(not_a_person).unwrap_err().field(),
-        Some("person")
+        book.add_manual_sale(a_category).unwrap_err().field(),
+        Some("destination")
     );
 
     book.delete_manual_sale(sale).unwrap();
@@ -408,7 +408,7 @@ fn tickets_survive_saving_and_reopening() {
             book.add_manual_sale(ManualSaleDraft {
                 tier: regular,
                 count: 2,
-                person: anna,
+                destination: anna,
                 date: june(12),
                 reference: None,
             })
@@ -429,8 +429,13 @@ fn tickets_survive_saving_and_reopening() {
     // The change log records the imports, but no order IDs (R-TKT-18).
     let imports: Vec<_> = log.iter().filter(|e| e.entity == "ticket_import").collect();
     assert_eq!(imports.len(), 3);
-    let text = format!("{log:?}");
-    assert!(!text.contains("4711"));
+    // As a value: the timestamps in the log can hold the same digits.
+    let values = log.iter().flat_map(|e| [&e.before, &e.after]).flatten();
+    assert!(
+        !values
+            .into_iter()
+            .any(|v| v.to_string().contains("\"4711\""))
+    );
 }
 
 fn imported_file(dir: &TempDir) -> (std::path::PathBuf, Store) {
@@ -695,7 +700,7 @@ mod properties {
             let total = book.tickets().total;
             let ledger = book.ledger();
             prop_assert_eq!(raw_sum(&book), 0);
-            prop_assert_eq!(ledger.balance(role(&book, Role::Verein)), total.net);
+            prop_assert_eq!(ledger.balance(asset(&book, "Verein account")), total.net);
             prop_assert_eq!(ledger.balance(role(&book, Role::Tickets)), total.gross);
             let fees = book.account_by_role(Role::TicketFees).map_or(Cents::ZERO, |a| ledger.balance(a.id));
             prop_assert_eq!(fees, total.fees);
@@ -704,6 +709,7 @@ mod properties {
             let parts = BookParts {
                 event: book.event().clone(),
                 ticket_columns: book.ticket_columns().clone(),
+                ticket_settings: book.ticket_settings(),
                 drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
@@ -860,7 +866,7 @@ fn a_refund_keeps_the_ticket_sold_and_books_negative_income() {
         (eur("96"), eur("2,40"), eur("32"), eur("61,60"))
     );
 
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     let refunds = role(&book, Role::TicketRefunds);
     assert_eq!(book.account(refunds).unwrap().name, "Ticket refunds");
     assert_eq!(book.account(refunds).unwrap().kind, AccountKind::Income);
@@ -898,7 +904,7 @@ fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
     assert_eq!(view.txn.kind, TxnKind::Refund);
     assert_eq!(view.flow, Flow::Out);
     assert!(!view.needs_receipt);
-    assert_eq!(view.who, Some(role(&book, Role::Verein)));
+    assert_eq!(view.who, Some(asset(&book, "Verein account")));
     // Ticket income stays income, and shows with its fee among the splits.
     let income = snapshot
         .txns
@@ -909,7 +915,7 @@ fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
     let Some(Entry::Income { destination, lines }) = &income.entry else {
         panic!("{:?}", income.entry);
     };
-    assert_eq!(*destination, role(&book, Role::Verein));
+    assert_eq!(*destination, asset(&book, "Verein account"));
     assert_eq!(lines[0].amount, income.amount);
     assert_eq!(lines.len(), 2);
 }
@@ -1096,7 +1102,7 @@ fn a_refund_on_a_manual_sale_comes_out_of_what_the_person_holds() {
         .add_manual_sale(ManualSaleDraft {
             tier: t.regular,
             count: 2,
-            person: anna,
+            destination: anna,
             date: june(1),
             reference: None,
         })
@@ -1137,7 +1143,7 @@ fn a_refund_on_a_manual_sale_comes_out_of_what_the_person_holds() {
     );
 
     // Overridden: the cash box pays, and Anna still holds the whole sale.
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     book.update_cancellation(
         id,
         CancellationEdit {
@@ -1189,7 +1195,7 @@ fn conflicts_keep_the_event_from_closing_until_accepted() {
     let (mut book, t) = with_tiers();
     import_rows(&mut book, 1, TWO_REGULAR);
     import_rows(&mut book, 2, ONE_LEFT);
-    let cash = role(&book, Role::CashBox);
+    let cash = asset(&book, "Cash box");
     book.set_closing_count(cash, june(20), Cents::ZERO).unwrap();
     let item = OpenItem::TicketConflicts { count: 1 };
     assert!(matches!(
@@ -1248,7 +1254,11 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
     store
         .change(|book| book.resolve_conflict("4711", regular, correction(1)))
         .unwrap();
-    let cash = store.book().account_by_role(Role::CashBox).unwrap().id;
+    let cash = store
+        .book()
+        .account_by_name(AccountKind::Asset, "Cash box")
+        .unwrap()
+        .id;
     store
         .change(|book| {
             book.update_cancellation(
@@ -1276,7 +1286,13 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
 
     // The change log records them, but no order IDs (R-TKT-18).
     assert!(log.iter().any(|e| e.entity == "ticket_cancellation"));
-    assert!(!format!("{log:?}").contains("4711"));
+    // As a value: the timestamps in the log can hold the same digits.
+    let values = log.iter().flat_map(|e| [&e.before, &e.after]).flatten();
+    assert!(
+        !values
+            .into_iter()
+            .any(|v| v.to_string().contains("\"4711\""))
+    );
 }
 
 #[test]
@@ -1354,7 +1370,7 @@ mod conflict_properties {
                 .account_by_role(role)
                 .map_or(Cents::ZERO, |a| ledger.balance(a.id));
             prop_assert_eq!(raw_sum(&book), 0);
-            prop_assert_eq!(of(Role::Verein), total.net);
+            prop_assert_eq!(ledger.balance(asset(&book, "Verein account")), total.net);
             prop_assert_eq!(of(Role::Tickets), total.gross);
             prop_assert_eq!(of(Role::TicketFees), total.fees);
             prop_assert_eq!(of(Role::TicketRefunds), -total.refunds);
@@ -1365,6 +1381,7 @@ mod conflict_properties {
             let parts = BookParts {
                 event: book.event().clone(),
                 ticket_columns: book.ticket_columns().clone(),
+                ticket_settings: book.ticket_settings(),
                 drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
@@ -1384,4 +1401,124 @@ mod conflict_properties {
             prop_assert_eq!(Book::from_parts(parts), Ok(book));
         }
     }
+}
+
+#[test]
+fn tickets_can_be_switched_off_while_nothing_is_sold() {
+    let mut book = new_book();
+    let tickets = income(&book, "Tickets");
+    book.set_tickets_enabled(false).unwrap();
+    assert_eq!(
+        book.ticket_settings(),
+        TicketSettings {
+            enabled: false,
+            account: None
+        }
+    );
+    assert_eq!(book.account(tickets), None);
+    assert_eq!(
+        book.add_tier(tier("Regular", "32", 0)).unwrap_err(),
+        DomainError::TicketsOff
+    );
+
+    book.set_tickets_enabled(true).unwrap();
+    assert_eq!(
+        book.ticket_settings().account,
+        Some(book.event().default_reimbursement_account)
+    );
+    let back = book.account_by_role(Role::Tickets).unwrap();
+    assert_eq!(back.name, "Tickets");
+
+    let regular = book.add_tier(tier("Regular", "32", 0)).unwrap();
+    assert_eq!(
+        book.set_tickets_enabled(false).unwrap_err(),
+        DomainError::TicketsInUse
+    );
+    book.delete_tier(regular).unwrap();
+    book.set_tickets_enabled(false).unwrap();
+}
+
+#[test]
+fn switching_tickets_off_keeps_a_category_in_use() {
+    let mut book = new_book();
+    let tickets = income(&book, "Tickets");
+    let cash = asset(&book, "Cash box");
+    save(
+        &mut book,
+        "At the door",
+        Entry::Income {
+            destination: cash,
+            lines: vec![split(tickets, "10")],
+        },
+    );
+    book.set_tickets_enabled(false).unwrap();
+    assert_eq!(book.account(tickets).unwrap().role, None);
+    assert_eq!(book.ledger().income_total(), eur("10"));
+}
+
+#[test]
+fn the_ticket_account_receives_the_sheet_and_is_needed_to_import() {
+    let (mut book, _) = with_tiers();
+    let cash = asset(&book, "Cash box");
+    book.set_ticket_account(None).unwrap();
+    let rows = sheet(&book, "import-1.ods");
+    assert_eq!(
+        book.import_tickets(&rows, june(1), now()).unwrap_err(),
+        DomainError::NoTicketAccount
+    );
+
+    book.set_ticket_account(Some(cash)).unwrap();
+    book.import_tickets(&rows, june(1), now()).unwrap();
+    let net = book.tickets().total.net;
+    assert_eq!(book.ledger().balance(cash), net);
+    assert_eq!(
+        book.set_ticket_account(None).unwrap_err(),
+        DomainError::NoTicketAccount
+    );
+    assert_eq!(
+        book.delete_account(cash).unwrap_err(),
+        DomainError::AccountInUse
+    );
+
+    // The income moves with the setting.
+    let verein = asset(&book, "Verein account");
+    book.set_ticket_account(Some(verein)).unwrap();
+    assert_eq!(book.ledger().balance(cash), Cents::ZERO);
+    assert_eq!(book.ledger().balance(verein), net);
+    let kitchen = expense(&book, "Kitchen");
+    assert_eq!(
+        book.set_ticket_account(Some(kitchen)).unwrap_err().field(),
+        Some("account")
+    );
+}
+
+#[test]
+fn a_manual_sale_can_go_into_an_account() {
+    let mut book = new_book();
+    let regular = book.add_tier(tier("Regular", "32", 0)).unwrap();
+    let cash = asset(&book, "Cash box");
+    let sale = book
+        .add_manual_sale(ManualSaleDraft {
+            tier: regular,
+            count: 2,
+            destination: cash,
+            date: june(1),
+            reference: None,
+        })
+        .unwrap();
+    assert_eq!(book.ledger().balance(cash), eur("64"));
+
+    // Its refund comes from the same place, unless someone else pays.
+    book.add_cancellation(CancellationDraft {
+        source: CancellationSource::Sale { sale },
+        count: 1,
+        terms: RefundTerms {
+            refund_bp: 10_000,
+            date: june(2),
+            payer: None,
+        },
+        note: None,
+    })
+    .unwrap();
+    assert_eq!(book.ledger().balance(cash), eur("32"));
 }

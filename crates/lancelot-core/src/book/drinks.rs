@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Book, NextIds, a_category, clean};
 use crate::drinks::{DrinkProduct, DrinkProductDraft, DrinkSettings, Drinks};
 use crate::error::DomainError;
-use crate::model::{Account, AccountId, CostCentre, CostCentreId, CostCentreRole, DrinkProductId};
+use crate::model::{Account, AccountId, AccountKind, CostCentre, CostCentreId, DrinkProductId};
 
 impl Book {
     pub fn cost_centres(&self) -> impl Iterator<Item = &CostCentre> {
@@ -16,11 +16,9 @@ impl Book {
         self.cost_centres.get(&id)
     }
 
-    /// The Drinks cost centre, which every event has (R-CC-2).
+    /// The cost centre the drinks are in, if the event has one (R-CC-2).
     pub fn drinks_cost_centre(&self) -> Option<&CostCentre> {
-        self.cost_centres
-            .values()
-            .find(|c| c.role == Some(CostCentreRole::Drinks))
+        self.cost_centres.get(&self.drink_settings.cost_centre?)
     }
 
     pub fn drink_products(&self) -> impl Iterator<Item = &DrinkProduct> {
@@ -35,7 +33,7 @@ impl Book {
     pub fn add_cost_centre(&mut self, name: &str) -> Result<CostCentreId, DomainError> {
         self.change(|book| {
             let name = book.unique_centre_name(name, None)?;
-            Ok(book.insert_cost_centre(&name, None))
+            Ok(book.insert_cost_centre(&name))
         })
     }
 
@@ -48,12 +46,15 @@ impl Book {
         })
     }
 
-    /// Deletes a cost centre. What was tagged with it stays, without a tag. Drinks stays.
+    /// Deletes a cost centre. What was tagged with it stays, without a tag. The drinks' stays while
+    /// it holds records.
     pub fn delete_cost_centre(&mut self, id: CostCentreId) -> Result<CostCentre, DomainError> {
         self.change(|book| {
-            let centre = book.cost_centres.get(&id).ok_or_else(unknown_centre)?;
-            if centre.role.is_some() {
-                return Err(DomainError::CostCentreProtected);
+            if book.drink_settings.cost_centre == Some(id) {
+                if !book.drink_products.is_empty() {
+                    return Err(DomainError::CostCentreHasProducts);
+                }
+                book.drink_settings.cost_centre = None;
             }
             for l in book.txns.values_mut().flat_map(|t| &mut t.lines) {
                 if l.cost_centre == Some(id) {
@@ -141,16 +142,17 @@ impl Book {
 
     pub fn set_drink_settings(&mut self, settings: DrinkSettings) -> Result<(), DomainError> {
         self.change(|book| {
-            book.drink_settings = clean_settings(settings)?;
+            book.drink_settings = clean_settings(
+                settings,
+                &book.accounts,
+                &book.cost_centres,
+                &book.drink_products,
+            )?;
             Ok(())
         })
     }
 
-    pub(super) fn insert_cost_centre(
-        &mut self,
-        name: &str,
-        role: Option<CostCentreRole>,
-    ) -> CostCentreId {
+    pub(super) fn insert_cost_centre(&mut self, name: &str) -> CostCentreId {
         let id = CostCentreId(self.next.cost_centre);
         self.next.cost_centre += 1;
         self.cost_centres.insert(
@@ -158,7 +160,6 @@ impl Book {
             CostCentre {
                 id,
                 name: name.to_owned(),
-                role,
             },
         );
         id
@@ -212,7 +213,34 @@ fn clean_product(d: DrinkProductDraft) -> Result<DrinkProductDraft, DomainError>
     Ok(DrinkProductDraft { name, ..d })
 }
 
-pub(super) fn clean_settings(s: DrinkSettings) -> Result<DrinkSettings, DomainError> {
+/// The drink settings, with a cost centre that exists and an expense category for Pfand. The records
+/// need the cost centre: without it they could not be seen.
+pub(super) fn clean_settings(
+    s: DrinkSettings,
+    accounts: &BTreeMap<AccountId, Account>,
+    cost_centres: &BTreeMap<CostCentreId, CostCentre>,
+    products: &BTreeMap<DrinkProductId, DrinkProduct>,
+) -> Result<DrinkSettings, DomainError> {
+    match s.cost_centre {
+        Some(c) if !cost_centres.contains_key(&c) => return Err(unknown_centre()),
+        None if !products.is_empty() => return Err(DomainError::CostCentreHasProducts),
+        _ => {}
+    }
+    if let Some(pfand) = s.pfand {
+        match accounts.get(&pfand).map(|a| a.kind) {
+            Some(AccountKind::Expense) => {}
+            None => {
+                return Err(DomainError::UnknownAccount {
+                    field: "pfand".into(),
+                });
+            }
+            Some(_) => {
+                return Err(DomainError::WrongAccountKind {
+                    field: "pfand".into(),
+                });
+            }
+        }
+    }
     if s.price_per_strich.is_some_and(|p| p.is_negative()) {
         return Err(DomainError::NegativeAmount {
             field: "pricePerStrich".into(),
@@ -243,13 +271,6 @@ pub(super) fn check_cost_centres(
             return Err(bad("cost centre with an invalid name or id"));
         }
         out.insert(c.id, c);
-    }
-    let drinks = out
-        .values()
-        .filter(|c: &&CostCentre| c.role == Some(CostCentreRole::Drinks))
-        .count();
-    if drinks != 1 {
-        return Err(bad("the Drinks cost centre must exist exactly once"));
     }
     let references_ok = accounts.values().all(|a| {
         a.cost_centre

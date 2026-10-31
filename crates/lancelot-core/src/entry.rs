@@ -12,7 +12,7 @@ use ts_rs::TS;
 
 use crate::error::DomainError;
 use crate::model::{
-    Account, AccountId, AccountKind, BudgetLineId, CostCentreId, Line, Origin, Role, Txn, TxnKind,
+    Account, AccountId, AccountKind, BudgetLineId, CostCentreId, Flow, Line, Origin, Txn, TxnKind,
 };
 use crate::money::{Cents, try_sum};
 
@@ -47,8 +47,8 @@ pub enum Entry {
         destination: AccountId,
         lines: Vec<SplitLine>,
     },
-    /// Money moving into an asset account: between asset accounts, or a person putting their
-    /// own money in (an advance). Money going *to* a person is always a [`Entry::Settle`].
+    /// Money from any account to any other: assets, people and categories (not the opening
+    /// account). From A to B: A is owed the amount and B owes it.
     Transfer {
         from: AccountId,
         to: AccountId,
@@ -72,7 +72,6 @@ pub enum Entry {
 pub struct SplitLine {
     pub account: AccountId,
     pub amount: Cents,
-    pub memo: Option<String>,
     /// Must belong to the line's category (R-BUD-2).
     #[serde(rename = "budgetLine", default)]
     pub budget_line: Option<BudgetLineId>,
@@ -115,10 +114,20 @@ impl Entry {
     }
 }
 
-/// The form a stored transaction shows in: the reverse of [`build_lines`] for typed-in entries.
-/// Generated income and refunds show as income, with their fee lines among the splits and the
-/// refund's payer as the destination; they cannot be saved. `None` for lines no form can show.
+/// The form a stored transaction shows in: the reverse of [`build_lines`] for typed-in entries,
+/// `None` for lines no form can show. Generated income and refunds show as income, with their fee
+/// lines among the splits and the refund's payer as the destination; they cannot be saved.
 pub fn entry_of(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> Option<Entry> {
+    let entry = shown_as(txn, accounts)?;
+    let same = |lines: Vec<Line>| {
+        let key = |l: &Line| (l.account, l.amount);
+        lines.iter().map(key).eq(txn.lines.iter().map(key))
+    };
+    let shows_it = txn.origin.is_generated() || build_lines(&entry, accounts).is_ok_and(same);
+    shows_it.then_some(entry)
+}
+
+fn shown_as(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> Option<Entry> {
     let kind = |l: &Line| accounts.get(&l.account).map(|a| a.kind);
     let splits = |lines: &[Line]| {
         lines
@@ -126,7 +135,6 @@ pub fn entry_of(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> Option<En
             .map(|l| SplitLine {
                 account: l.account,
                 amount: l.amount.abs(),
-                memo: l.memo.clone(),
                 budget_line: l.budget_line,
                 cost_centre: l.cost_centre,
             })
@@ -216,8 +224,8 @@ pub fn build_lines(
             out
         }
         Entry::Transfer { from, to, amount } => {
-            check(*from, "from", &[Asset, Person])?;
-            check(*to, "to", &[Asset])?;
+            check(*from, "from", &[Asset, Person, Income, Expense])?;
+            check(*to, "to", &[Asset, Person, Income, Expense])?;
             positive(*amount, "amount")?;
             if from == to {
                 return Err(DomainError::SameAccount);
@@ -245,7 +253,7 @@ pub fn build_lines(
             positive(*amount, "amount")?;
             let opening = accounts
                 .values()
-                .find(|a| a.role == Some(Role::Opening))
+                .find(|a| a.kind == AccountKind::Opening)
                 .ok_or_else(|| DomainError::UnknownAccount {
                     field: "account".to_owned(),
                 })?;
@@ -255,55 +263,22 @@ pub fn build_lines(
     Ok(lines)
 }
 
-/// Checks a stored transaction: typed-in ones follow [`lines_follow_rules`], and ticket income
-/// is an income line, optionally fee lines, and the account that received the money (R-TKT-6).
-/// A refund is the opposite: negative income, paid by one account (R-TKT-15).
+/// Checks a stored transaction. The kind is only a label: what matters is that its lines balance,
+/// refer to known accounts and keep the opening account to opening counts (R-COR-2). A refund comes
+/// only from a cancellation (R-TKT-15).
 pub fn txn_follows_rules(txn: &Txn, accounts: &BTreeMap<AccountId, Account>) -> bool {
-    if txn.origin == Origin::Manual {
-        return lines_follow_rules(txn.kind, &txn.lines, accounts);
-    }
-    let lines = &txn.lines;
-    let kind = |l: &Line| accounts.get(&l.account).map(|a| a.kind);
-    if let Origin::TicketRefund { .. } = txn.origin {
-        return match lines.as_slice() {
-            [income, payer] => {
-                txn.kind == TxnKind::Refund
-                    && kind(income) == Some(AccountKind::Income)
-                    && income.amount.is_positive()
-                    && matches!(kind(payer), Some(AccountKind::Asset | AccountKind::Person))
-                    && payer.amount == -income.amount
-            }
-            _ => false,
-        };
-    }
-    let (Some(first), Some(last)) = (lines.first(), lines.last()) else {
-        return false;
-    };
-    txn.kind == TxnKind::Income
-        && lines.len() >= 2
-        && kind(first) == Some(AccountKind::Income)
-        && first.amount.is_negative()
-        && matches!(kind(last), Some(AccountKind::Asset | AccountKind::Person))
-        && last.amount.is_positive()
-        && lines[1..lines.len() - 1]
-            .iter()
-            .all(|l| kind(l) == Some(AccountKind::Expense) && l.amount.is_positive())
-        && lines
-            .iter()
-            .map(|l| i128::from(l.amount.get()))
-            .sum::<i128>()
-            == 0
+    lines_follow_rules(txn.kind, &txn.lines, accounts)
+        && (txn.kind == TxnKind::Refund) == matches!(txn.origin, Origin::TicketRefund { .. })
 }
 
-/// Checks stored lines against the shape [`build_lines`] produces for their kind. Used when
-/// loading an event file and by the integrity check, so a file edited by hand cannot smuggle
-/// in a transaction the forms could never create.
+/// The part of [`txn_follows_rules`] that depends on the lines. Used when loading an event file and
+/// by the integrity check.
 pub fn lines_follow_rules(
     kind: TxnKind,
     lines: &[Line],
     accounts: &BTreeMap<AccountId, Account>,
 ) -> bool {
-    use AccountKind::{Asset, Expense, Income, Opening, Person};
+    use AccountKind::{Asset, Opening};
 
     let kinds: Option<Vec<AccountKind>> = lines
         .iter()
@@ -314,32 +289,27 @@ pub fn lines_follow_rules(
     if lines.len() < 2 || sum != 0 || lines.iter().any(|l| l.amount.is_zero()) {
         return false;
     }
-    if kind != TxnKind::Opening && kinds.contains(&Opening) {
-        return false;
+    if kind == TxnKind::Opening {
+        return kinds == [Opening, Asset] && lines[1].amount.is_positive();
     }
-    let is = |i: usize, allowed: &[AccountKind], positive: bool| {
-        allowed.contains(&kinds[i]) && lines[i].amount.is_positive() == positive
-    };
-    let last = lines.len() - 1;
-    match kind {
-        TxnKind::Expense => {
-            is(0, &[Asset, Person], false) && (1..=last).all(|i| is(i, &[Expense], true))
-        }
-        TxnKind::Income => {
-            is(last, &[Asset, Person], true) && (0..last).all(|i| is(i, &[Income], false))
-        }
-        TxnKind::Transfer => {
-            lines.len() == 2
-                && is(0, &[Asset, Person], false)
-                && is(1, &[Asset], true)
-                && lines[0].account != lines[1].account
-        }
-        TxnKind::Settle => {
-            lines.len() == 2 && (kinds == [Person, Asset] || kinds == [Asset, Person])
-        }
-        TxnKind::Opening => lines.len() == 2 && is(0, &[Opening], false) && is(1, &[Asset], true),
-        // Only generated: see [`txn_follows_rules`].
-        TxnKind::Refund => false,
+    !kinds.contains(&Opening)
+}
+
+/// Which way the lines move the result: what they do to the income and expense categories.
+pub fn flow_of(lines: &[Line], accounts: &BTreeMap<AccountId, Account>) -> Flow {
+    let effect: i128 = lines
+        .iter()
+        .filter(|l| {
+            accounts
+                .get(&l.account)
+                .is_some_and(|a| matches!(a.kind, AccountKind::Income | AccountKind::Expense))
+        })
+        .map(|l| -i128::from(l.amount.get()))
+        .sum();
+    match effect.signum() {
+        1 => Flow::In,
+        -1 => Flow::Out,
+        _ => Flow::Moved,
     }
 }
 
@@ -347,7 +317,6 @@ fn line(account: AccountId, amount: Cents) -> Line {
     Line {
         account,
         amount,
-        memo: None,
         budget_line: None,
         cost_centre: None,
     }
@@ -357,7 +326,6 @@ fn split(l: &SplitLine, amount: Cents) -> Line {
     Line {
         account: l.account,
         amount,
-        memo: l.memo.clone(),
         budget_line: l.budget_line,
         cost_centre: l.cost_centre,
     }
@@ -391,20 +359,20 @@ fn check_splits(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::AssetType;
+    use crate::model::{AssetType, TxnId};
 
     fn accounts() -> BTreeMap<AccountId, Account> {
         [
-            (1, AccountKind::Asset, Some(Role::Verein)),
-            (2, AccountKind::Asset, Some(Role::CashBox)),
-            (3, AccountKind::Opening, Some(Role::Opening)),
-            (4, AccountKind::Income, None),
-            (5, AccountKind::Expense, None),
-            (6, AccountKind::Expense, None),
-            (7, AccountKind::Person, None),
+            (1, AccountKind::Asset),
+            (2, AccountKind::Asset),
+            (3, AccountKind::Opening),
+            (4, AccountKind::Income),
+            (5, AccountKind::Expense),
+            (6, AccountKind::Expense),
+            (7, AccountKind::Person),
         ]
         .into_iter()
-        .map(|(id, kind, role)| {
+        .map(|(id, kind)| {
             let id = AccountId(id);
             (
                 id,
@@ -412,8 +380,9 @@ mod tests {
                     id,
                     kind,
                     name: format!("a{}", id.0),
-                    role,
+                    role: None,
                     asset_type: (kind == AccountKind::Asset).then_some(AssetType::Bank),
+                    net_movement: false,
                     cost_centre: None,
                 },
             )
@@ -436,7 +405,6 @@ mod tests {
         SplitLine {
             account,
             amount: c(cents),
-            memo: None,
             budget_line: None,
             cost_centre: None,
         }
@@ -531,7 +499,7 @@ mod tests {
         assert_eq!(
             err(Entry::Transfer {
                 from: VEREIN,
-                to: ANNA,
+                to: AccountId(3),
                 amount: c(100)
             }),
             DomainError::WrongAccountKind { field: "to".into() }
@@ -559,6 +527,86 @@ mod tests {
     }
 
     #[test]
+    fn a_transfer_goes_from_any_account_to_any_other() {
+        let a = accounts();
+        for (from, to) in [
+            (ANNA, AccountId(8)),
+            (VEREIN, ANNA),
+            (CASH, FOOD),
+            (TICKETS, FOOD),
+        ] {
+            let mut a = a.clone();
+            a.insert(
+                AccountId(8),
+                Account {
+                    id: AccountId(8),
+                    kind: AccountKind::Person,
+                    name: "a8".into(),
+                    role: None,
+                    asset_type: None,
+                    net_movement: false,
+                    cost_centre: None,
+                },
+            );
+            let entry = Entry::Transfer {
+                from,
+                to,
+                amount: c(5_000),
+            };
+            let lines = build_lines(&entry, &a).unwrap();
+            assert_eq!(
+                amounts(&lines),
+                vec![(from.0, -5_000), (to.0, 5_000)],
+                "{from:?} to {to:?}"
+            );
+            assert!(lines_follow_rules(TxnKind::Transfer, &lines, &a));
+        }
+    }
+
+    #[test]
+    fn the_flow_follows_what_the_lines_do_to_the_result() {
+        let a = accounts();
+        let flow = |from, to| {
+            let entry = Entry::Transfer {
+                from,
+                to,
+                amount: c(100),
+            };
+            flow_of(&build_lines(&entry, &a).unwrap(), &a)
+        };
+        assert_eq!(flow(CASH, ANNA), Flow::Moved);
+        assert_eq!(flow(CASH, FOOD), Flow::Out);
+        assert_eq!(flow(TICKETS, CASH), Flow::In);
+        assert_eq!(flow(FOOD, CASH), Flow::In);
+        assert_eq!(flow(TICKETS, FOOD), Flow::Moved);
+    }
+
+    #[test]
+    fn the_opening_account_stays_with_opening_counts() {
+        let a = accounts();
+        let opening = build_lines(
+            &Entry::Opening {
+                account: CASH,
+                amount: c(100),
+            },
+            &a,
+        )
+        .unwrap();
+        assert!(lines_follow_rules(TxnKind::Opening, &opening, &a));
+        assert!(!lines_follow_rules(TxnKind::Transfer, &opening, &a));
+        let transfer = build_lines(
+            &Entry::Transfer {
+                from: VEREIN,
+                to: CASH,
+                amount: c(100),
+            },
+            &a,
+        )
+        .unwrap();
+        assert!(!lines_follow_rules(TxnKind::Opening, &transfer, &a));
+    }
+
+    #[test]
     fn only_tickets_make_a_refund() {
         let lines = build_lines(
             &Entry::Income {
@@ -568,8 +616,26 @@ mod tests {
             &accounts(),
         )
         .unwrap();
-        assert!(lines_follow_rules(TxnKind::Income, &lines, &accounts()));
-        assert!(!lines_follow_rules(TxnKind::Refund, &lines, &accounts()));
+        let txn = |kind, origin| Txn {
+            id: TxnId(1),
+            kind,
+            date: time::macros::date!(2026 - 06 - 13),
+            description: String::new(),
+            counterparty: None,
+            notes: None,
+            lines: lines.clone(),
+            origin,
+        };
+        let refund = Origin::TicketRefund {
+            cancellation: crate::model::CancellationId(1),
+        };
+        let a = accounts();
+        assert!(txn_follows_rules(&txn(TxnKind::Income, Origin::Manual), &a));
+        assert!(!txn_follows_rules(
+            &txn(TxnKind::Refund, Origin::Manual),
+            &a
+        ));
+        assert!(txn_follows_rules(&txn(TxnKind::Refund, refund), &a));
     }
 
     #[test]

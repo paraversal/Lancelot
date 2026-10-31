@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Checking an asset account against its statement (R-ACC-4). For the Verein account that is the
+	// Checking an asset account against its statement (R-ACC-4). On a net-movement account that is the
 	// event's net movement, since its real balance is never entered (R-ISO-2). A mismatch stays open
 	// until the books or the checkpoint change.
 	import { api, errorMessage } from '#lib/api/index.ts';
@@ -17,7 +17,7 @@
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
 	const details = $derived(snapshot.accounts.find((a) => a.id === account));
-	const movement = $derived(details?.role === 'verein');
+	const movement = $derived(details?.netMovement ?? false);
 	const checkpoints = $derived(snapshot.reconciliations.filter((r) => r.account === account));
 
 	const initialDate = () =>

@@ -17,6 +17,7 @@ import type { PersonView } from "./PersonView";
 import type { Profitability } from "./Profitability";
 import type { ReconciliationStatus } from "./ReconciliationStatus";
 import type { TicketColumns } from "./TicketColumns";
+import type { TicketSettings } from "./TicketSettings";
 import type { Tickets } from "./Tickets";
 import type { Totals } from "./Totals";
 import type { TxnView } from "./TxnView";
@@ -27,7 +28,11 @@ export type EventSnapshot = { event: Event,
  */
 ticketColumns: TicketColumns, 
 /**
- * The commission supplier and the price per Strich (R-DRK-5, R-DRK-6).
+ * Whether the event sells tickets, and where the sheet's money arrives.
+ */
+ticketSettings: TicketSettings, 
+/**
+ * The commission supplier, the price per Strich, and the drinks' cost centre and Pfand category.
  */
 drinkSettings: DrinkSettings, 
 /**
@@ -64,7 +69,7 @@ tickets: Tickets,
  */
 profitability: Profitability | null, 
 /**
- * In creation order; the Drinks cost centre is always there (R-CC-2).
+ * In creation order (R-CC-2).
  */
 costCentres: Array<CostCentre>, 
 /**

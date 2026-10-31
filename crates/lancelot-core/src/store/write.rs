@@ -156,11 +156,10 @@ pub(crate) fn persist<'a>(
         after,
         |b| b.cost_centres().map(|c| (c.id.0, c)),
         |id, c| {
-            let role = c.role.as_ref().map(enum_text).transpose()?;
             conn.execute(
-                "INSERT INTO cost_centre (id, name, role) VALUES (?1, ?2, ?3)
-                         ON CONFLICT (id) DO UPDATE SET name = excluded.name, role = excluded.role",
-                params![id, c.name, role],
+                "INSERT INTO cost_centre (id, name) VALUES (?1, ?2)
+                         ON CONFLICT (id) DO UPDATE SET name = excluded.name",
+                params![id, c.name],
             )?;
             Ok(())
         },
@@ -178,26 +177,27 @@ pub(crate) fn persist<'a>(
                     let role = a.role.as_ref().map(enum_text).transpose()?;
                     let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                     conn.execute(
-                        "INSERT INTO account (id, kind, name, role, asset_type, cost_centre_id)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                        "INSERT INTO account (id, kind, name, role, asset_type, net_movement, cost_centre_id)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                         params![
                             id,
                             enum_text(&a.kind)?,
                             a.name,
                             role,
                             asset_type,
+                            a.net_movement,
                             a.cost_centre.map(|c| c.0)
                         ],
                     )?;
                 }
                 Change::Update(_, a) => {
-                    // The role changes only when a category becomes the ticket fee category.
+                    // The role changes only as tickets take up a category or switch off.
                     let role = a.role.as_ref().map(enum_text).transpose()?;
                     let asset_type = a.asset_type.as_ref().map(enum_text).transpose()?;
                     conn.execute(
-                        "UPDATE account SET name = ?2, role = ?3, asset_type = ?4, cost_centre_id = ?5
+                        "UPDATE account SET name = ?2, role = ?3, asset_type = ?4, net_movement = ?5, cost_centre_id = ?6
                          WHERE id = ?1",
-                        params![id, a.name, role, asset_type, a.cost_centre.map(|c| c.0)],
+                        params![id, a.name, role, asset_type, a.net_movement, a.cost_centre.map(|c| c.0)],
                     )?;
                 }
                 Change::Delete(_) => {
@@ -232,19 +232,28 @@ pub(crate) fn persist<'a>(
         },
     )?;
 
-    // The event row, which also holds the sheet's columns and the drink settings.
+    // The event row, which also holds the ticket and drink settings.
     let event = after.event();
-    let row = |b: &'a Book| (b.event(), b.ticket_columns(), b.drink_settings());
+    let row = |b: &'a Book| {
+        (
+            b.event(),
+            b.ticket_columns(),
+            b.ticket_settings(),
+            b.drink_settings(),
+        )
+    };
     if before.map(row) != Some(row(after)) {
         let d = &event.details;
         let columns = after.ticket_columns();
+        let tickets = after.ticket_settings();
         let drinks = after.drink_settings();
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
                                 default_reimbursement_account_id, closing_overrides,
                                 ticket_tier_column, ticket_order_column, ticket_date_column,
-                                drink_supplier, price_per_strich)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                                tickets_enabled, ticket_account_id,
+                                drink_supplier, price_per_strich, drink_cost_centre_id, pfand_category_id)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
                location = excluded.location, notes = excluded.notes, closed_at = excluded.closed_at,
@@ -253,8 +262,12 @@ pub(crate) fn persist<'a>(
                ticket_tier_column = excluded.ticket_tier_column,
                ticket_order_column = excluded.ticket_order_column,
                ticket_date_column = excluded.ticket_date_column,
+               tickets_enabled = excluded.tickets_enabled,
+               ticket_account_id = excluded.ticket_account_id,
                drink_supplier = excluded.drink_supplier,
-               price_per_strich = excluded.price_per_strich",
+               price_per_strich = excluded.price_per_strich,
+               drink_cost_centre_id = excluded.drink_cost_centre_id,
+               pfand_category_id = excluded.pfand_category_id",
             params![
                 d.name,
                 d.starts_on.map(date_text),
@@ -267,8 +280,12 @@ pub(crate) fn persist<'a>(
                 columns.tier,
                 columns.order,
                 columns.sale_date,
+                tickets.enabled,
+                tickets.account.map(|a| a.0),
                 drinks.supplier,
                 drinks.price_per_strich.map(|p| p.get()),
+                drinks.cost_centre.map(|c| c.0),
+                drinks.pfand.map(|a| a.0),
             ],
         )?;
         match before.map(|b| b.event()) {
@@ -286,6 +303,12 @@ pub(crate) fn persist<'a>(
             "ticket_columns",
             before.map(Book::ticket_columns),
             columns,
+        )?;
+        setting(
+            log,
+            "ticket_settings",
+            before.map(Book::ticket_settings).as_ref(),
+            &tickets,
         )?;
         setting(
             log,
@@ -435,12 +458,12 @@ pub(crate) fn persist<'a>(
         |id, s| {
             let d = &s.draft;
             conn.execute(
-                        "INSERT INTO ticket_manual_sale (id, tier_id, count, person_id, date, reference)
+                        "INSERT INTO ticket_manual_sale (id, tier_id, count, destination_id, date, reference)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                          ON CONFLICT (id) DO UPDATE SET
-                           tier_id = excluded.tier_id, count = excluded.count, person_id = excluded.person_id,
+                           tier_id = excluded.tier_id, count = excluded.count, destination_id = excluded.destination_id,
                            date = excluded.date, reference = excluded.reference",
-                        params![id, d.tier.0, d.count, d.person.0, date_text(d.date), d.reference],
+                        params![id, d.tier.0, d.count, d.destination.0, date_text(d.date), d.reference],
                     )?;
             Ok(())
         },
@@ -479,7 +502,7 @@ pub(crate) fn persist<'a>(
         },
     )?;
 
-    // Transactions: unseal, replace the lines, seal (R-COR-2).
+    // Transactions, with their lines replaced. A write is read back before it is kept.
     table(
         log,
         "txn",
@@ -491,8 +514,8 @@ pub(crate) fn persist<'a>(
                 Change::Create(t) => {
                     let (origin, origin_id) = origin_text(t.origin);
                     conn.execute(
-                        "INSERT INTO txn (id, kind, date, description, counterparty, notes, origin, origin_id, sealed)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0)",
+                        "INSERT INTO txn (id, kind, date, description, counterparty, notes, origin, origin_id)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                         params![
                             id,
                             enum_text(&t.kind)?,
@@ -508,7 +531,7 @@ pub(crate) fn persist<'a>(
                 }
                 Change::Update(_, t) => {
                     conn.execute(
-                        "UPDATE txn SET kind = ?2, date = ?3, description = ?4, counterparty = ?5, notes = ?6, sealed = 0
+                        "UPDATE txn SET kind = ?2, date = ?3, description = ?4, counterparty = ?5, notes = ?6
                          WHERE id = ?1",
                         params![id, enum_text(&t.kind)?, date_text(t.date), t.description, t.counterparty, t.notes],
                     )?;
@@ -517,7 +540,6 @@ pub(crate) fn persist<'a>(
                 }
                 // Its lines and attachments go with it.
                 Change::Delete(_) => {
-                    conn.execute("UPDATE txn SET sealed = 0 WHERE id = ?1", [id])?;
                     conn.execute("DELETE FROM txn WHERE id = ?1", [id])?;
                 }
             }
@@ -643,20 +665,18 @@ fn setting<V: Serialize + PartialEq>(
 fn write_lines(conn: &Connection, t: &Txn) -> Result<(), StoreError> {
     for (position, l) in t.lines.iter().enumerate() {
         conn.execute(
-            "INSERT INTO line (txn_id, position, account_id, amount, memo, budget_line_id, cost_centre_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO line (txn_id, position, account_id, amount, budget_line_id, cost_centre_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 t.id.0,
                 position as i64,
                 l.account.0,
                 l.amount.get(),
-                l.memo,
                 l.budget_line.map(|b| b.0),
                 l.cost_centre.map(|c| c.0)
             ],
         )?;
     }
-    conn.execute("UPDATE txn SET sealed = 1 WHERE id = ?1", [t.id.0])?;
     Ok(())
 }
 

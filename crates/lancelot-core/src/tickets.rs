@@ -43,6 +43,15 @@ impl Default for TicketColumns {
     }
 }
 
+/// Whether the event sells tickets at all, and where the sheet's money arrives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct TicketSettings {
+    pub enabled: bool,
+    /// An asset account. Needed only to import.
+    pub account: Option<AccountId>,
+}
+
 /// A kind of ticket with its price (R-TKT-1).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -178,8 +187,8 @@ pub struct ManualSale {
 pub struct ManualSaleDraft {
     pub tier: TierId,
     pub count: u32,
-    /// The person who received the money.
-    pub person: AccountId,
+    /// The account or person who received the money.
+    pub destination: AccountId,
     #[ts(type = "string")]
     pub date: Date,
     pub reference: Option<String>,
@@ -214,8 +223,8 @@ pub struct RefundTerms {
     pub refund_bp: u32,
     #[ts(type = "string")]
     pub date: Date,
-    /// Who pays. `None`: whoever received the money, the Verein account for the sheet and the
-    /// person on a manual sale (R-TKT-15).
+    /// Who pays. `None`: whoever received the money, the ticket account for the sheet and the
+    /// destination of a manual sale (R-TKT-15).
     pub payer: Option<AccountId>,
 }
 
@@ -763,7 +772,7 @@ impl Tickets {
         sales: &BTreeMap<ManualSaleId, ManualSale>,
         cancellations: &BTreeMap<CancellationId, Cancellation>,
         generated: &BTreeMap<Origin, TxnId>,
-        verein: Option<AccountId>,
+        ticket_account: Option<AccountId>,
     ) -> Result<Tickets, DomainError> {
         let imports = by_date(imports_by_id);
         let reckoning = reckon(&imports, cancellations, None);
@@ -784,7 +793,7 @@ impl Tickets {
                 payer: c
                     .terms
                     .as_ref()
-                    .and_then(|r| r.payer.or(default_payer(c, sales, verein))),
+                    .and_then(|r| r.payer.or(default_payer(c, sales, ticket_account))),
                 txn: generated
                     .get(&Origin::TicketRefund { cancellation: c.id })
                     .copied(),
@@ -949,11 +958,11 @@ pub(crate) fn sheet_income(
 pub(crate) fn default_payer(
     c: &Cancellation,
     sales: &BTreeMap<ManualSaleId, ManualSale>,
-    verein: Option<AccountId>,
+    ticket_account: Option<AccountId>,
 ) -> Option<AccountId> {
     match c.sale {
-        Some(sale) => sales.get(&sale).map(|s| s.draft.person),
-        None => verein,
+        Some(sale) => sales.get(&sale).map(|s| s.draft.destination),
+        None => ticket_account,
     }
 }
 

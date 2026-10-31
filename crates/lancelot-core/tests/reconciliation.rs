@@ -35,7 +35,7 @@ fn status(book: &Book, id: ReconciliationId) -> ReconciliationStatus {
 #[test]
 fn only_lines_up_to_the_date_count() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     income_on(&mut book, verein, 10, "100");
     income_on(&mut book, verein, 11, "20");
     income_on(&mut book, verein, 12, "3");
@@ -52,7 +52,7 @@ fn only_lines_up_to_the_date_count() {
 #[test]
 fn the_verein_account_compares_its_net_movement() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     book.set_opening_count(verein, june(1), eur("5000"))
         .unwrap();
     income_on(&mut book, verein, 10, "100");
@@ -85,7 +85,7 @@ fn another_account_compares_its_balance_with_the_opening_count() {
 #[test]
 fn a_movement_can_be_negative() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     let venue = book
         .account_by_name(AccountKind::Expense, "Venue")
         .unwrap()
@@ -108,7 +108,7 @@ fn a_movement_can_be_negative() {
 #[test]
 fn a_mismatch_is_an_open_item_until_the_books_agree() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     let id = book
         .add_reconciliation(verein, june(30), eur("100"))
         .unwrap();
@@ -132,7 +132,7 @@ fn a_mismatch_is_an_open_item_until_the_books_agree() {
 #[test]
 fn an_earlier_mismatch_stays_open_after_a_later_match() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     income_on(&mut book, verein, 20, "100");
     book.add_reconciliation(verein, june(10), eur("5")).unwrap();
     book.add_reconciliation(verein, june(30), eur("100"))
@@ -148,8 +148,8 @@ fn an_earlier_mismatch_stays_open_after_a_later_match() {
 #[test]
 fn a_mismatch_blocks_closing_unless_overridden() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
-    let cash = role(&book, Role::CashBox);
+    let verein = asset(&book, "Verein account");
+    let cash = asset(&book, "Cash box");
     book.set_closing_count(cash, june(30), Cents::ZERO).unwrap();
     book.add_reconciliation(verein, june(30), eur("1")).unwrap();
 
@@ -176,8 +176,8 @@ fn a_mismatch_blocks_closing_unless_overridden() {
 #[test]
 fn one_checkpoint_per_account_and_date() {
     let mut book = new_book();
-    let verein = role(&book, Role::Verein);
-    let cash = role(&book, Role::CashBox);
+    let verein = asset(&book, "Verein account");
+    let cash = asset(&book, "Cash box");
     let first = book.add_reconciliation(verein, june(10), eur("1")).unwrap();
     let second = book.add_reconciliation(verein, june(11), eur("2")).unwrap();
     book.add_reconciliation(cash, june(10), eur("3")).unwrap();
@@ -225,7 +225,7 @@ fn checkpoints_survive_the_file_and_are_logged() {
     let path = dir.path().join("e.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
-    let verein = role(store.book(), Role::Verein);
+    let verein = asset(store.book(), "Verein account");
 
     let a = store
         .change(|book| book.add_reconciliation(verein, june(10), eur("-1")))
@@ -295,7 +295,7 @@ fn sheet(rows: &[(u8, bool)], n: usize) -> Sheet {
 fn a_re_import_leaves_an_earlier_checkpoint_as_it_was() {
     let mut book = new_book();
     tiers(&mut book);
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     book.import_tickets(&sheet(&[(1, false), (2, false)], 1), june(1), now())
         .unwrap();
     let id = book.add_reconciliation(verein, june(5), eur("50")).unwrap();
@@ -325,7 +325,7 @@ fn a_re_import_leaves_an_earlier_checkpoint_as_it_was() {
 fn a_closing_count_and_a_statement_of_the_same_figure_agree() {
     let mut book = new_book();
     tiers(&mut book);
-    let verein = role(&book, Role::Verein);
+    let verein = asset(&book, "Verein account");
     book.set_opening_count(verein, june(1), eur("5000"))
         .unwrap();
     let kitchen = expense(&book, "Kitchen");
@@ -352,8 +352,8 @@ fn a_negative_count_survives_the_file_and_a_negative_opening_is_refused() {
     let path = dir.path().join("count.lancelot");
     let details = new_book().event().details.clone();
     let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
-    let verein = role(store.book(), Role::Verein);
-    let cash = role(store.book(), Role::CashBox);
+    let verein = asset(store.book(), "Verein account");
+    let cash = asset(store.book(), "Cash box");
     store
         .change(|book| book.set_counts(verein, None, Some((june(30), eur("-100")))))
         .unwrap();
@@ -411,7 +411,7 @@ mod properties {
                     aliases: Vec::new(),
                 })).unwrap();
             }
-            let verein = role(store.book(), Role::Verein);
+            let verein = asset(store.book(), "Verein account");
             let id = store.change(|book| book.add_reconciliation(verein, june(checkpoint_day), Cents::ZERO)).unwrap();
 
             for (n, (rows, day)) in sheets.iter().enumerate() {
@@ -451,4 +451,37 @@ mod properties {
             prop_assert_eq!(store.book(), &expected);
         }
     }
+}
+
+#[test]
+fn net_movement_is_a_setting_of_any_asset_account() {
+    let mut book = new_book();
+    let (verein, cash) = (asset(&book, "Verein account"), asset(&book, "Cash box"));
+    assert!(book.account(verein).unwrap().net_movement);
+    assert!(!book.account(cash).unwrap().net_movement);
+
+    book.set_counts(
+        cash,
+        Some((june(1), eur("80"))),
+        Some((june(30), eur("80"))),
+    )
+    .unwrap();
+    assert_eq!(book.ledger().cash()[0].computed, eur("80"));
+
+    // From then on its counts leave the opening count out.
+    book.set_net_movement(cash, true).unwrap();
+    let status = book
+        .ledger()
+        .cash()
+        .iter()
+        .find(|c| c.account == cash)
+        .unwrap();
+    assert_eq!(status.computed, Cents::ZERO);
+    assert_eq!(status.difference, Some(eur("80")));
+
+    let kitchen = expense(&book, "Kitchen");
+    assert_eq!(
+        book.set_net_movement(kitchen, true).unwrap_err().field(),
+        Some("id")
+    );
 }
