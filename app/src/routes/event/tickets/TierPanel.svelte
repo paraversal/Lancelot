@@ -7,7 +7,7 @@
 	import type { Cents } from '#lib/api/generated/Cents.ts';
 	import type { TierDraft } from '#lib/api/generated/TierDraft.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
@@ -47,6 +47,7 @@
 		quota = tier?.quota?.toString() ?? '';
 		aliases = [...(tier?.aliases ?? [])];
 	});
+	let priceInvalid = $state(false);
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
@@ -80,6 +81,8 @@
 
 	async function save() {
 		error = null;
+		await amountsRead();
+		if (priceInvalid) return;
 		const d = draft();
 		if (!d) return;
 		try {
@@ -133,6 +136,7 @@
 					value={price}
 					{format}
 					previewBelow
+					bind:invalid={priceInvalid}
 					oninput={(v) => (price = v)}
 				/>
 				{#if fieldError('price')}<span class="form-error">{fieldError('price')}</span>{/if}

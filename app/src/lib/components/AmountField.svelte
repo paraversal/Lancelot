@@ -1,8 +1,21 @@
+<script lang="ts" module>
+	const reading = new Set<Promise<void>>();
+
+	/**
+	 * Resolves once every amount typed so far has been read and reported. Reading takes a round
+	 * trip to the core, so a form calls this before saving, or a value typed just before the click
+	 * would be lost.
+	 */
+	export async function amountsRead() {
+		while (reading.size) await Promise.all(reading);
+	}
+</script>
+
 <script lang="ts">
 	// The amount input (R-NF-8). Every keystroke is parsed by the core; the field previews the
 	// result (`= 1.234,50 €`), in attention when the input was ambiguous, and turns minus with a
 	// warning when it cannot be read. Nothing is committed until the input is valid.
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { api, errorMessage } from '../api';
 	import type { Cents } from '../api/generated/Cents';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
@@ -18,6 +31,7 @@
 		previewBelow = false,
 		text: initial,
 		autofocus = false,
+		invalid = $bindable(false),
 		oninput: onvalue,
 		oncommit
 	}: {
@@ -32,6 +46,8 @@
 		/** Pre-fills the input, e.g. on the design page. */
 		text?: string;
 		autofocus?: boolean;
+		/** Whether the input cannot be read. The field shows why; a form must not save. */
+		invalid?: boolean;
 		/** The parsed value after every keystroke (null while empty or invalid). */
 		oninput?: (value: Cents | null) => void;
 		oncommit?: (value: Cents | null) => void;
@@ -42,6 +58,9 @@
 	let parsed = $state<{ cents: Cents; ambiguous: boolean } | null>(null);
 	let error = $state<string | null>(null);
 	let seq = 0;
+	// A read that returns after the field is gone must not touch the form that replaced it.
+	let gone = false;
+	onDestroy(() => (gone = true));
 
 	function canonical(c: Cents | null) {
 		return c === null ? '' : formatAmount(c, format, 'plain').replace(/\s?€/, '').replace('€', '');
@@ -59,27 +78,38 @@
 		text = initial ?? canonical(value);
 		parsed = value === null ? null : { cents: value, ambiguous: false };
 		error = null;
+		invalid = false;
 		if (initial) untrack(parse);
 	});
 
-	async function parse() {
+	function parse() {
+		const run = read();
+		reading.add(run);
+		run.finally(() => reading.delete(run));
+		return run;
+	}
+
+	async function read() {
 		const mine = ++seq;
 		if (!text.trim()) {
 			parsed = null;
 			error = null;
+			invalid = false;
 			onvalue?.(null);
 			return;
 		}
 		try {
 			const r = await api.parseAmount(text, allowNegative);
-			if (mine !== seq) return;
+			if (gone || mine !== seq) return;
 			parsed = r;
 			error = null;
+			invalid = false;
 			onvalue?.(r.cents);
 		} catch (e) {
-			if (mine !== seq) return;
+			if (gone || mine !== seq) return;
 			parsed = null;
 			error = errorMessage(e);
+			invalid = true;
 			onvalue?.(null);
 		}
 	}
@@ -95,7 +125,7 @@
 
 	async function commit() {
 		await parse();
-		if (error) return;
+		if (gone || error) return;
 		const next = parsed?.cents ?? null;
 		text = canonical(next);
 		if (next !== value) oncommit?.(next);
