@@ -1,15 +1,13 @@
 <script lang="ts">
-	// Importing the ticket sheet (R-TKT-3 to R-TKT-5): the file and its hash, the columns read,
-	// the account the money arrives in, the day the counts stand for, tier names to map, what changes per tier since the last
-	// import, and the rows that could not be read. Import stays blocked while a tier name matches
-	// no tier. Without a file, the earlier imports and their dates.
+	// Reviewing tickets a plugin read (R-TKT-3 to R-TKT-5): what they were read from and its hash,
+	// the account the money arrives in, the day the counts stand for, tier names to map and what
+	// changes per tier since the last import. Import stays blocked while a tier name matches no tier.
+	// Without tickets to review, the earlier imports and their dates.
 	import { untrack } from 'svelte';
-	import { chooseTicketSheet } from '#lib/api/dialogs.ts';
 	import { api, ApiError } from '#lib/api/index.ts';
 	import type { ImportDeletion } from '#lib/api/generated/ImportDeletion.ts';
 	import type { ImportPreview } from '#lib/api/generated/ImportPreview.ts';
-	import type { Problem } from '#lib/api/generated/Problem.ts';
-	import type { TicketColumns } from '#lib/api/generated/TicketColumns.ts';
+	import type { TicketBatch } from '#lib/api/generated/TicketBatch.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import { tierColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
@@ -17,82 +15,51 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Select from '#lib/components/Select.svelte';
-	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
-		path: initialPath,
+		batch,
 		onclose,
 		onnewtier
 	}: {
-		/** The sheet to read; null to choose one. */
-		path: string | null;
+		/** The tickets to review; null for the list of imports. */
+		batch: TicketBatch | null;
 		onclose: () => void;
-		/** "New tier" for an unknown name; the panel comes back with the same file. */
-		onnewtier: (name: string, path: string) => void;
+		/** "New tier" for an unknown name; the panel comes back with the same tickets. */
+		onnewtier: (name: string, batch: TicketBatch) => void;
 	} = $props();
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
 	const tiers = $derived(snapshot.tickets.tiers);
 	const imports = $derived(snapshot.tickets.imports);
-	const columns = $derived(snapshot.ticketColumns);
 	const ticketAccount = $derived(snapshot.ticketSettings.account);
 	const assets = $derived(
 		snapshot.accounts.filter((a) => a.kind === 'asset').map((a) => ({ value: a.id, label: a.name }))
 	);
 
-	let path = $state<string | null>(null);
 	const today = new Date().toISOString().slice(0, 10);
 	let date = $state<string | null>(today);
 	let preview = $state<ImportPreview | null>(null);
-	let reading = $state(false);
-	let error = $state<{ field: string | null; message: string } | null>(null);
+	let error = $state<string | null>(null);
 	let reads = 0;
-	untrack(() => {
-		path = initialPath;
-		if (path) read();
-	});
+	untrack(() => read());
 
 	// The changes depend on the date, so typing one reads again; only the last read counts.
 	async function read() {
-		if (!path) return;
+		if (!batch) return;
 		const mine = ++reads;
-		reading = true;
 		error = null;
 		try {
-			const read = await api.previewTickets(path, date ?? today);
+			const read = await api.previewTickets(batch, date ?? today);
 			if (mine === reads) preview = read;
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
 			if (mine !== reads) return;
 			preview = null;
-			error = { field: 'file', message: e.message };
-		} finally {
-			if (mine === reads) reading = false;
+			error = e.message;
 		}
-	}
-
-	async function choose() {
-		const picked = await chooseTicketSheet();
-		if (!picked) return;
-		path = picked;
-		preview = null;
-		await read();
-	}
-
-	async function setColumn(key: keyof TicketColumns, value: string | null) {
-		if ((columns[key] ?? '') === (value ?? '').trim()) return;
-		error = null;
-		try {
-			await session.change(() => api.setTicketColumns({ ...columns, [key]: value }));
-		} catch (e) {
-			if (!(e instanceof ApiError)) throw e;
-			error = { field: `columns.${e.field ?? key}`, message: e.message };
-			return;
-		}
-		await read();
 	}
 
 	async function setAccount(account: number) {
@@ -101,7 +68,7 @@
 			await session.change(() => api.setTicketAccount(account === 0 ? null : account));
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
-			error = { field: null, message: e.message };
+			error = e.message;
 		}
 	}
 
@@ -121,22 +88,22 @@
 			);
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
-			error = { field: null, message: e.message };
+			error = e.message;
 			return;
 		}
 		await read();
 	}
 
 	async function doImport() {
-		if (!path || !preview || preview.unknown.length || !date || ticketAccount === null) return;
+		if (!batch || !preview || preview.unknown.length || !date || ticketAccount === null) return;
 		error = null;
 		try {
-			await session.change(() => api.importTickets(path!, date!, preview!.sha256));
+			await session.change(() => api.importTickets(batch, date!));
 			onclose();
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
-			error = { field: e.code === 'file_changed' ? 'file' : null, message: e.message };
-			if (e.code === 'file_changed' || e.code === 'unknown_tiers') await read();
+			error = e.message;
+			if (e.code === 'unknown_tiers') await read();
 		}
 	}
 
@@ -154,7 +121,7 @@
 			deleting = { id, effect: await api.previewDeleteImport(id) };
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
-			error = { field: null, message: e.message };
+			error = e.message;
 		}
 	}
 
@@ -166,7 +133,7 @@
 			await session.change(() => api.deleteImport(id));
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
-			error = { field: null, message: e.message };
+			error = e.message;
 		}
 	}
 
@@ -175,11 +142,6 @@
 	const previousNumber = $derived(
 		preview?.previous ? imports.findIndex((i) => i.id === preview!.previous) + 1 : null
 	);
-	const PROBLEMS: Record<Problem, (c: TicketColumns) => string> = {
-		noTier: (c) => `no ${c.tier}`,
-		noOrder: (c) => `no ${c.order}`,
-		cellError: () => 'a cell with an error'
-	};
 	const shortHash = (h: string) => `${h.slice(0, 4)}…${h.slice(-4)}`;
 	const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 
@@ -193,42 +155,19 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={path ? 'Import sheet' : 'Imports'} {onclose}>
-	{#if path}
+<Panel title={batch ? 'Review import' : 'Imports'} {onclose}>
+	{#if batch}
 		<div class="file">
-			<div class="top">
-				<strong>{preview?.filename ?? path.split(/[\\/]/).pop()}</strong>
-				<button type="button" class="link" onclick={choose}>Choose…</button>
-			</div>
+			<strong>{batch.source}</strong>
 			{#if preview}
 				<span class="meta"
 					>{preview.tickets} tickets · sha256 {shortHash(preview.sha256)}{#if preview.sameFile}
-						· same file as import {previousNumber}{/if}</span
+						· same as import {previousNumber}{/if}</span
 				>
-			{:else if reading}
-				<span class="meta">Reading…</span>
 			{/if}
-			{#if error?.field === 'file'}<span class="form-error">{error.message}</span>{/if}
 		</div>
 
 		<fieldset disabled={session.closed}>
-			<div class="labelled">
-				<span class="form-label">Columns read</span>
-				<div class="columns">
-					{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }] as const as c (c.key)}
-						<div class="column">
-							<TextField
-								label={c.label}
-								value={columns[c.key] ?? ''}
-								oncommit={(v) => setColumn(c.key, v ?? '')}
-							/>
-						</div>
-					{/each}
-				</div>
-				{#if error?.field?.startsWith('columns.')}<span class="form-error">{error.message}</span
-					>{/if}
-			</div>
-
 			<Select
 				label="Money arrives in"
 				value={ticketAccount ?? 0}
@@ -258,7 +197,7 @@
 				<div class="unknown">
 					<div class="top">
 						<span class="name"><Icon name="warn" size={14} />„{u.name}“</span>
-						<span class="meta">{u.rows} {u.rows === 1 ? 'row' : 'rows'}</span>
+						<span class="meta">{u.rows} {u.rows === 1 ? 'ticket' : 'tickets'}</span>
 					</div>
 					<div class="map">
 						<select
@@ -275,7 +214,7 @@
 							size="sm"
 							icon="plus"
 							disabled={session.closed}
-							onclick={() => onnewtier(u.name, path!)}>New tier</Button
+							onclick={() => onnewtier(u.name, batch)}>New tier</Button
 						>
 					</div>
 				</div>
@@ -298,27 +237,19 @@
 					<div class="row">
 						<span class="dot" style:background={tierColor(tierIndex(c.tier))}></span>
 						<span class="name">{tierName(c.tier)}</span>
-						{#each removed as r (r.order)}
-							<span class="conflict">Order {r.order} · conflict</span>
-						{/each}
 						{#if c.added}<span class="delta plus">{signed(c.added)}</span>{/if}
 						{#if c.removed}<span class="delta">{signed(-c.removed)}</span>{/if}
 						{#if !c.added && !c.removed}<span class="delta muted">±0</span>{/if}
+						{#if removed.length}
+							<div class="conflicts">
+								{#each removed as r (r.order)}
+									<span class="conflict">Order {r.order} · conflict</span>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/each}
 			</div>
-
-			{#if preview.problems.length}
-				<div class="problems">
-					<strong
-						>{preview.problems.length}
-						{preview.problems.length === 1 ? 'row' : 'rows'} not read</strong
-					>
-					{#each preview.problems as p (p.row)}
-						<span>Row {p.row} · {PROBLEMS[p.problem](columns)}</span>
-					{/each}
-				</div>
-			{/if}
 
 			{#if preview.receiptsLost.length}
 				<div class="problems">
@@ -332,9 +263,7 @@
 			{/if}
 		{/if}
 
-		{#if error && error.field !== 'file' && !error.field?.startsWith('columns.')}
-			<p class="form-error">{error.message}</p>
-		{/if}
+		{#if error}<p class="form-error">{error}</p>{/if}
 	{:else}
 		<div class="imports">
 			{#each [...imports].reverse() as i, n (i.id)}
@@ -381,7 +310,7 @@
 					</div>
 				{/if}
 			{/each}
-			{#if error}<p class="form-error">{error.message}</p>{/if}
+			{#if error}<p class="form-error">{error}</p>{/if}
 			<p class="note">The import with the latest date is the current sheet.</p>
 		</div>
 	{/if}
@@ -389,7 +318,7 @@
 	{#snippet footer()}
 		{#if session.closed}
 			<span class="closed"><Icon name="lock" size={14} />Closed</span>
-		{:else if path}
+		{:else if batch}
 			<Button
 				kind="primary"
 				shortcut="⌘↵"
@@ -402,8 +331,6 @@
 					{preview.unknown.length === 1 ? 'tier' : 'tiers'} to map</span
 				>
 			{/if}
-		{:else}
-			<Button kind="primary" icon="upload" onclick={choose}>Import sheet</Button>
 		{/if}
 	{/snippet}
 </Panel>
@@ -422,54 +349,16 @@
 		gap: var(--spacing-3);
 	}
 
-	.top strong {
+	.file strong {
 		overflow: hidden;
 		font-weight: 600;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.link {
-		flex: none;
-		padding: 0;
-		border: none;
-		background: none;
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
-		cursor: pointer;
-	}
-
-	.link:hover {
-		color: var(--color-ink);
-		text-decoration: underline;
-		text-underline-offset: 3px;
-	}
-
 	.meta {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
-	}
-
-	.labelled {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-
-	.columns {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--spacing-2);
-	}
-
-	/* The column's role sits under its field, as in UI.fig. */
-	.column :global(.field) {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.column :global(.field > label) {
-		order: 2;
 	}
 
 	.date {
@@ -518,6 +407,7 @@
 
 	.changes .row {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--spacing-2);
 		min-height: 32px;
@@ -546,6 +436,15 @@
 	.changes .name {
 		flex: 1;
 		min-width: 0;
+	}
+
+	/* On their own line under the tier's name, however many orders there are. */
+	.conflicts {
+		display: flex;
+		flex-basis: 100%;
+		flex-wrap: wrap;
+		gap: 2px var(--spacing-3);
+		padding: 0 0 var(--spacing-2) var(--spacing-4);
 	}
 
 	.conflict {

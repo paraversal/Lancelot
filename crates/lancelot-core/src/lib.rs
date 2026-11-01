@@ -8,7 +8,6 @@ pub mod book;
 pub mod budget;
 mod csv;
 pub mod date;
-pub mod drinks;
 pub mod entry;
 pub mod error;
 pub mod export;
@@ -18,6 +17,7 @@ pub mod ledger;
 pub mod model;
 pub mod money;
 pub mod payout;
+pub mod plugin;
 pub mod sales;
 pub mod sheet;
 pub mod snapshot;
@@ -31,9 +31,6 @@ pub use book::{
 };
 pub use budget::{Budget, BudgetLineFigures, CategoryFigures, CostCentreFigures, Figures};
 pub use date::{DateError, format_date, parse_date};
-pub use drinks::{
-    DrinkProduct, DrinkProductDraft, DrinkProductFigures, DrinkSettings, Drinks, InvoiceCheck,
-};
 pub use entry::{Entry, SettleDirection, SplitLine, TxnDraft, build_lines, entry_of, txn_amount};
 pub use error::DomainError;
 pub use export::transactions_csv;
@@ -46,24 +43,25 @@ pub use ledger::{
 pub use model::{
     Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
     BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre,
-    CostCentreId, DrinkProductId, Estimate, Event, EventDetails, Flow, ImportId, Line,
-    ManualSaleId, OpenItem, Origin, Person, Reconciliation, ReconciliationId, Role, TierId, Txn,
-    TxnId, TxnKind,
+    CostCentreId, Estimate, Event, EventDetails, Flow, ImportId, Line, ManualSaleId, OpenItem,
+    Origin, Person, PluginRecordId, Reconciliation, ReconciliationId, Role, TierId, Txn, TxnId,
+    TxnKind,
 };
 pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
+pub use plugin::{PluginChange, PluginRecord, PluginScope};
 pub use sales::{Profitability, SalesPoint, TierBreakEven, TierSales};
-pub use sheet::{Problem, RowProblem, Sheet, SheetRow, read_sheet};
+pub use sheet::{Problem, RowProblem, Sheet, TicketColumns, read_sheet};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
     BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,
     list_backups, read_book,
 };
 pub use tickets::{
-    Cancellation, CancellationDraft, CancellationEdit, CancellationSource, CancellationView,
-    ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft, OrderConflict,
-    RefundTerms, RemovedTickets, Resolution, TicketColumns, TicketImport, TicketSettings,
-    TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
+    BatchTicket, Cancellation, CancellationDraft, CancellationEdit, CancellationSource,
+    CancellationView, ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft,
+    OrderConflict, RefundTerms, RemovedTickets, Resolution, TicketBatch, TicketImport,
+    TicketSettings, TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
 };
 
 /// Schema version written to `PRAGMA user_version` of every event file.

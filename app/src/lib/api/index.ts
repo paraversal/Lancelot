@@ -20,10 +20,7 @@ import type { Cents } from './generated/Cents';
 import type { CopyChoice } from './generated/CopyChoice';
 import type { CopySummary } from './generated/CopySummary';
 import type { TemplateSummary } from './generated/TemplateSummary';
-import type { DrinkProductDraft } from './generated/DrinkProductDraft';
 import type { ReconciliationId } from './generated/ReconciliationId';
-import type { DrinkProductId } from './generated/DrinkProductId';
-import type { DrinkSettings } from './generated/DrinkSettings';
 import type { CancellationDraft } from './generated/CancellationDraft';
 import type { CancellationEdit } from './generated/CancellationEdit';
 import type { CancellationId } from './generated/CancellationId';
@@ -36,6 +33,7 @@ import type { ImportPreview } from './generated/ImportPreview';
 import type { ManualSaleDraft } from './generated/ManualSaleDraft';
 import type { ManualSaleId } from './generated/ManualSaleId';
 import type { OpenEvent } from './generated/OpenEvent';
+import type { PluginChange } from './generated/PluginChange';
 import type { Parsed } from './generated/Parsed';
 import type { Person } from './generated/Person';
 import type { ParsedDate } from './generated/ParsedDate';
@@ -43,12 +41,19 @@ import type { RecentEvent } from './generated/RecentEvent';
 import type { Report } from './generated/Report';
 import type { Resolution } from './generated/Resolution';
 import type { SavedTxn } from './generated/SavedTxn';
+import type { DataSource } from './generated/DataSource';
+import type { DataSourceView } from './generated/DataSourceView';
+import type { Pulled } from './generated/Pulled';
+import type { Sheet } from './generated/Sheet';
+import type { TicketBatch } from './generated/TicketBatch';
 import type { TicketColumns } from './generated/TicketColumns';
 import type { TicketShare } from './generated/TicketShare';
 import type { TierDraft } from './generated/TierDraft';
 import type { TierId } from './generated/TierId';
 import type { TxnDraft } from './generated/TxnDraft';
 import type { TxnId } from './generated/TxnId';
+
+export type DataSources = { [id: string]: DataSourceView | undefined };
 
 /** A failed command. `code` is stable; `message` is for people. */
 export class ApiError extends Error {
@@ -176,33 +181,42 @@ export const api = {
 	addCostCentre: (name: string) => call<OpenEvent>('cost_centre_add', { name }),
 	renameCostCentre: (id: CostCentreId, name: string) =>
 		call<OpenEvent>('cost_centre_rename', { id, name }),
-	/** What was tagged stays, without a tag. Not for Drinks. */
+	/** What was tagged stays, without a tag. */
 	deleteCostCentre: (id: CostCentreId) => call<OpenEvent>('cost_centre_delete', { id }),
 	/** What a new line of the category starts with. */
 	setCategoryCostCentre: (category: AccountId, costCentre: CostCentreId | null) =>
 		call<OpenEvent>('category_set_cost_centre', { category, costCentre }),
-	addDrinkProduct: (draft: DrinkProductDraft) => call<OpenEvent>('drink_product_add', { draft }),
-	updateDrinkProduct: (id: DrinkProductId, draft: DrinkProductDraft) =>
-		call<OpenEvent>('drink_product_update', { id, draft }),
-	deleteDrinkProduct: (id: DrinkProductId) => call<OpenEvent>('drink_product_delete', { id }),
-	setDrinkSettings: (settings: DrinkSettings) =>
-		call<OpenEvent>('drink_settings_set', { settings }),
+	/** One plugin's changes, applied together (technical design §10). */
+	applyPluginRecords: (plugin: string, changes: PluginChange[]) =>
+		call<OpenEvent>('plugin_records_apply', { plugin, changes }),
 
 	addTier: (draft: TierDraft) => call<OpenEvent>('tier_add', { draft }),
 	updateTier: (id: TierId, draft: TierDraft) => call<OpenEvent>('tier_update', { id, draft }),
 	/** Only a tier that no import and no manual sale uses. */
 	deleteTier: (id: TierId) => call<OpenEvent>('tier_delete', { id }),
-	setTicketColumns: (columns: TicketColumns) => call<OpenEvent>('ticket_columns_set', { columns }),
 	/** Off is refused while there are tiers. */
 	setTicketsEnabled: (enabled: boolean) => call<OpenEvent>('tickets_set_enabled', { enabled }),
 	setTicketAccount: (account: AccountId | null) =>
 		call<OpenEvent>('ticket_account_set', { account }),
 	/** Reads a ticket sheet (path) with the event's columns; changes nothing. */
-	previewTickets: (path: string, date: string) =>
-		call<ImportPreview>('tickets_preview', { path, date }),
-	/** Imports the sheet the preview read: `sha256` is the preview's, so a changed file fails. */
-	importTickets: (path: string, date: string, sha256: string) =>
-		call<OpenEvent>('tickets_import', { path, date, sha256 }),
+	previewTickets: (batch: TicketBatch, date: string) =>
+		call<ImportPreview>('tickets_preview', { batch, date }),
+	importTickets: (batch: TicketBatch, date: string) =>
+		call<OpenEvent>('tickets_import', { batch, date }),
+	/** The data sources saved on this computer, by plugin. */
+	dataSources: () => call<DataSources>('data_sources_get'),
+	/** Saves a plugin's data source; null removes it and its token. */
+	setDataSource: (id: string, source: DataSource | null) =>
+		call<DataSources>('data_source_set', { id, source }),
+	/** The token is never handed back; null removes it. */
+	setDataSourceToken: (id: string, token: string | null) =>
+		call<DataSources>('data_source_set_token', { id, token }),
+	/** Asks the provider for these fields; changes nothing. */
+	pullDataSource: (id: string, fields: string[]) =>
+		call<Pulled>('data_source_pull', { id, fields }),
+	/** Reads the columns of a ticket sheet; changes nothing. */
+	readTicketSheet: (path: string, columns: TicketColumns) =>
+		call<Sheet>('ticket_sheet_read', { path, columns }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
 	/** What deleting an import would change; changes nothing. */
 	previewDeleteImport: (id: ImportId) => call<ImportDeletion>('import_delete_preview', { id }),

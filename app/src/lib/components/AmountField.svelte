@@ -1,3 +1,16 @@
+<script lang="ts" module>
+	const reading = new Set<Promise<void>>();
+
+	/**
+	 * Resolves once every amount typed so far has been read and reported. Reading takes a round
+	 * trip to the core, so a form calls this before saving, or a value typed just before the click
+	 * would be lost.
+	 */
+	export async function amountsRead() {
+		while (reading.size) await Promise.all(reading);
+	}
+</script>
+
 <script lang="ts">
 	// The amount input (R-NF-8). Every keystroke is parsed by the core; the field previews the
 	// result (`= 1.234,50 €`), in attention when the input was ambiguous, and turns minus with a
@@ -18,6 +31,7 @@
 		previewBelow = false,
 		text: initial,
 		autofocus = false,
+		invalid = $bindable(false),
 		oninput: onvalue,
 		oncommit
 	}: {
@@ -32,6 +46,8 @@
 		/** Pre-fills the input, e.g. on the design page. */
 		text?: string;
 		autofocus?: boolean;
+		/** Whether the text can't be read, as opposed to being empty. */
+		invalid?: boolean;
 		/** The parsed value after every keystroke (null while empty or invalid). */
 		oninput?: (value: Cents | null) => void;
 		oncommit?: (value: Cents | null) => void;
@@ -62,11 +78,19 @@
 		if (initial) untrack(parse);
 	});
 
-	async function parse() {
+	function parse() {
+		const run = read();
+		reading.add(run);
+		run.finally(() => reading.delete(run));
+		return run;
+	}
+
+	async function read() {
 		const mine = ++seq;
 		if (!text.trim()) {
 			parsed = null;
 			error = null;
+			invalid = false;
 			onvalue?.(null);
 			return;
 		}
@@ -75,11 +99,13 @@
 			if (mine !== seq) return;
 			parsed = r;
 			error = null;
+			invalid = false;
 			onvalue?.(r.cents);
 		} catch (e) {
 			if (mine !== seq) return;
 			parsed = null;
 			error = errorMessage(e);
+			invalid = true;
 			onvalue?.(null);
 		}
 	}

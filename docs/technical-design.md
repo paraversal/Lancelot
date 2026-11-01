@@ -1,12 +1,12 @@
 # Lancelot — Technical design
 
-Status: v0.2. It implements [requirements v0.10](requirements.md) and follows the [roadmap](roadmap.md). It records decisions and invariants that the code does not explain by itself. For module layout, signatures, the commands and the routes, read the code. The refactoring on the roadmap will change parts of §3 and §5, which are updated when that stage lands.
+Status: v0.3. It implements [requirements v0.12](requirements.md) and follows the [roadmap](roadmap.md). It records decisions and invariants that the code does not explain by itself. For module layout, signatures, the commands and the routes, read the code.
 
 ## 1. Components
 
 ```
 ┌────────────── app/ (SvelteKit SPA, Svelte 5, TypeScript) ──────────────┐
-│ screens · components · formatting for display · keyboard model         │
+│ screens · components · plugins · formatting · keyboard model           │
 └───────────────▲───────────────────────────────┬────────────────────────┘
                 │ EventSnapshot (JSON)          │ commands (invoke)
 ┌───────────────┴───────────── app/src-tauri/ ──▼────────────────────────┐
@@ -24,7 +24,7 @@ Status: v0.2. It implements [requirements v0.10](requirements.md) and follows th
 
 **Rules:**
 
-- No arithmetic on money in TypeScript. The UI receives every figure from the core, already computed, as integer cents. It only _formats_ them.
+- No arithmetic on money in TypeScript. The UI receives every figure from the core, already computed, as integer cents. It only _formats_ them. The one exception is a plugin's own figures, which never affect the ledger (§10).
 - One window holds one open event. App-wide settings live outside the event files (§6.4).
 
 ## 2. Money
@@ -104,7 +104,7 @@ Check against Bob from requirements §4.1:
 
 ### 3.2 Schema
 
-The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). The format is frozen: this file is never edited again, and every change is a new migration, added to `MIGRATIONS` with `SCHEMA_VERSION` raised. Files from development builds before the freeze don't open. [`fixtures/events/sample-v1.lancelot`](../fixtures/events/sample-v1.lancelot) proves it: a frozen file with rows in every table, kept byte for byte. [`tests/sample_file.rs`](../crates/lancelot-core/tests/sample_file.rs) opens a copy with its figures written out, keeps working on it, and fails if a new file's schema differs from the migrated sample's. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
+The schema is [`crates/lancelot-core/migrations/0001_initial.sql`](../crates/lancelot-core/migrations/0001_initial.sql). The format is **not frozen** until the first real event is entered: until then this file is edited directly, the sample is regenerated, and files from earlier development builds don't open. From that first real event on, it is never edited again, and every change is a new migration, added to `MIGRATIONS` with `SCHEMA_VERSION` raised. [`fixtures/events/sample-v1.lancelot`](../fixtures/events/sample-v1.lancelot) proves it: a file with rows in every table, its bytes pinned by a hash. [`tests/sample_file.rs`](../crates/lancelot-core/tests/sample_file.rs) opens a copy with its figures written out, keeps working on it, and fails if a new file's schema differs from the migrated sample's. Every table is `STRICT`. `PRAGMA application_id` is `0x4C4E434C` (`LNCL`), and `PRAGMA user_version` is the schema version.
 
 Dates are ISO `YYYY-MM-DD` text, timestamps RFC 3339 UTC, enums their lower-case names, and amounts integer cents. Ids are never reused, so the change log stays unambiguous.
 
@@ -144,7 +144,7 @@ SQLite can neither check an aggregate in a CHECK constraint nor defer a trigger 
 3. reads the file back inside that transaction and compares it with the copy, including the generated entries as stored, since loading regenerates them;
 4. commits, which also enforces the foreign keys, and only then keeps the copy.
 
-A command therefore lives in `Book`, whatever its size, and a new one needs a Tauri command, an API wrapper and a line in the dev bridge. `Store` has its own methods only where a command needs the clock or bytes from outside the book: closing, importing a sheet and attaching files. `Service::change` wraps `Store::change` and returns the new state; `Service::add` also returns a new account's id.
+A command therefore lives in `Book`, whatever its size, and a new one needs a Tauri command, an API wrapper and a line in the dev bridge. `Store` has its own methods only where a command needs the clock or bytes from outside the book: closing, importing tickets and attaching files. `Service::change` wraps `Store::change` and returns the new state; `Service::add` also returns a new account's id.
 
 Writing the difference, rather than having each command write its own rows, keeps the change log complete for every command. Foreign keys are deferred during the write, so each table is handled in one place and in any order. Only checkpoints keep an order of their own, because a checkpoint can take the date another one just left. Loading goes the other way: the rows become `BookParts`, and `Book::from_parts` checks everything a hand-edited file could get wrong.
 
@@ -180,7 +180,7 @@ Unit tests for every module, property tests with `proptest` for the money invari
 
 `backups(event)` lists the backups of an event file: the open one, or one that cannot be opened (the store reads its UUID without opening it). `restoreBackup(event, backup, target)` only accepts a backup of that event. It copies it to `target`, never over an existing file, and opens the copy.
 
-**Menu and keyboard.** New Event (⇧⌘N), Open (⌘O), Close (⌘W) and Settings (⌘,) are native menu items (`app/src-tauri/src/lib.rs`); they send a `menu` event that `app/src/lib/shortcuts.ts` turns into the action. ⌘1–6 switch pages and Esc closes the right-hand panel.
+**Menu and keyboard.** New Event (⇧⌘N), Open (⌘O), Close (⌘W) and Settings (⌘,) are native menu items (`app/src-tauri/src/lib.rs`); they send a `menu` event that `app/src/lib/shortcuts.ts` turns into the action. ⌘1–9 go through the sidebar's pages and cost centres, and Esc closes the right-hand panel.
 
 **Saving edits.** Fields save when they are left (blur or Enter). Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
 
@@ -230,13 +230,15 @@ Migrations are forward-only, numbered SQL files in `crates/lancelot-core/migrati
 
 The settings are stored as JSON in `<app data>/settings.json`, written atomically. A missing or damaged file gives the defaults, so it can never keep the app from starting:
 
-| Setting        | Default                                                                     |
-| -------------- | --------------------------------------------------------------------------- |
-| `numberFormat` | from the OS locale: `de` for languages with a decimal comma, `en` otherwise |
-| `backupCount`  | 20 (1–100)                                                                  |
-| `recent`       | path, name and last opened time of the last 10 events                       |
+| Setting         | Default                                                                     |
+| --------------- | --------------------------------------------------------------------------- |
+| `numberFormat`  | from the OS locale: `de` for languages with a decimal comma, `en` otherwise |
+| `backupCount`   | 20 (1–100)                                                                  |
+| `reducedMotion` | follows the system until it is set                                          |
+| `appearance`    | `system`, otherwise `light` or `dark`                                       |
+| `recent`        | path, name and last opened time of the last 10 events                       |
 
-Event settings (name, dates, default reimbursement account) live inside the event file.
+Event settings (name, dates, default reimbursement account) live inside the event file. Data sources have their own file beside the settings (§10).
 
 ## 7. UI
 
@@ -262,8 +264,36 @@ Event settings (name, dates, default reimbursement account) live inside the even
 | TS types        | **`ts-rs`**, with the generated file checked in                                                                                                                 | Stable and simple. Commands stay hand-written wrappers.                                                                                                                                                    |
 | Dates           | **`time` crate**. ISO dates as TEXT, timestamps as RFC 3339 UTC                                                                                                 | Readable without Lancelot (R-NF-4).                                                                                                                                                                        |
 | SQLite          | **`rusqlite`** with the `bundled` feature                                                                                                                       | No system SQLite dependency, and it is synchronous, which suits the small data size.                                                                                                                       |
+| HTTP client     | **`ureq`**, in `lancelot-service`                                                                                                                               | Small and synchronous, like the rest of the service, and only data source pulls use it.                                                                                                                    |
+| Tokens          | **`keyring`**, in the Tauri shell                                                                                                                               | The system's keychain holds them, so they are never in a file. The service only sees a `TokenStore`, so its tests need no keychain.                                                                        |
 | Package manager | **pnpm**                                                                                                                                                        | Strict dependency resolution and a fast install. pnpm 12 also skips packages released in the last week, which guards against compromised releases.                                                         |
 
 ## 9. Open for later milestones
 
 - **Code signing** (after v0.1.0): it needs an Apple Developer account.
+
+## 10. Plugins
+
+A plugin adds records, screens and proposals for one kind of group's workflow. Today plugins are **built in**: Svelte code in `app/src/lib/plugins/<id>/`, listed in `registry.ts` and shipped with the app. Nothing loads third-party code yet. The boundary is the one a sandboxed loader would need later, so adding that loader should not change a plugin much.
+
+**Rules**
+
+1. **The file works without plugins.** An event opens and settles correctly with any plugin missing, and its records are kept untouched. So a plugin's data never takes part in a balance, a result or a closing check.
+2. **No code in event files.** A file holds a plugin's data, never its code, so opening a shared event can't run anything.
+3. **Money moves only through what the treasurer confirms.** A plugin can propose an entry, which opens the normal form and saves through `save_txn`, or a `TicketBatch`, which opens the import's review and saves through `tickets_import`. Either way the core does the rest, and generated income stays the core's.
+4. **Plugins only use `PluginContext`.** A plugin imports `#lib/plugins/api.ts`, shared components and formatting, never the session or the command API. A test enforces this.
+5. **The core doesn't interpret records.** It checks the shape and enforces closing, and stores the value as JSON. A plugin validates its own values and tests its own figures, the exception to "every figure comes from the core", allowed because these figures never affect the ledger.
+
+**Storage.** `plugin_record` has one row per plugin and key. `Book::apply_plugin_changes` applies one plugin's changes together, so they go through `Store::change` like any command: change log, read-back and backups included. The `scope` says what a template does: `setup` is copied, `records` is not. Templates keep ids, so a `setup` value may refer to accounts and cost centres. `copy_from` doesn't copy plugin data.
+
+**Slots.** `Plugin` in `api.ts` can provide `CentreSection`, shown on a cost centre's page when `attachedTo(ctx, centre)` holds; `TicketSection`, shown on the Tickets page while the event is open; and `SettingsSection`, shown under its entry in Settings → Plugins.
+
+**Ticket sources.** The core owns tiers, imports, conflicts, cancellations, manual sales and the income they generate, and doesn't know where tickets come from. It takes a `TicketBatch`: a source name, a hash and one tier and order per ticket, so personal data can't reach it (R-TKT-17). Reading is the plugin's. `ticket-sheet` chooses the file, keeps its column names as a `setup` record and asks the host to read it through `readTicketSheet`, since parsing a spreadsheet is native code. `ticket-api` builds its batch from a data source's rows instead. With both plugins off, imports already made keep counting and manual sales still work.
+
+**Showing what is a plugin.** The app draws `PluginFrame`, a card, around a plugin's content, with its name and a "Plugin" tag, so a plugin can't leave it out. Its own panels sit outside the frame.
+
+**Switching off.** Settings has a switch per plugin and per event, on by default. Off hides the plugin's slots and keeps its records. It is stored as the app's own record, `host:off`, in the plugin's namespace, with scope `setup` so a template copies the choice. Plugins don't see it.
+
+**Data sources.** A plugin can pull figures from a provider without any provider's details being in the repository. The provider shapes its data, so a source is only names: a URL, a header for the token, a top-level list and which field of an item holds what. A plugin declares the fields it wants as `dataSource`; the app draws the form under it in Settings and hides its `TicketSection` until it is set up. The details are in `data-sources.json` in the app's data folder, by plugin id, and never in an event file, since those get shared. The token is in the system's keychain, as the header's whole value, and is never handed back to the UI. `lancelot_service::sources` makes the request in Rust, so a plugin never sees the token: only `https`, or `http` to this computer, no redirects, and a 30-second limit. The request runs outside the lock on the app state, so a slow provider doesn't hold up the app. Only the fields asked for leave it, so anything else in a response is never kept (R-TKT-17). What a pull imports records the source's label and a hash of the rows, not the URL. Without a network or a source, everything else works as ever (R-NF-3). A provider that can't serve this shape needs a small script on its side, not code here.
+
+**Not yet:** a loader and sandbox, and a report slot. Each waits for a plugin that needs it.

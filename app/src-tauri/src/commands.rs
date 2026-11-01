@@ -1,15 +1,16 @@
 //! The Tauri commands: thin wrappers that lock the service and delegate.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
-    CopySummary, CostCentreId, DrinkProductDraft, DrinkProductId, DrinkSettings, EventDetails,
-    ImportDeletion, ImportId, ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, Person,
-    ReconciliationId, Resolution, TemplateSummary, TicketColumns, TicketShare, TierDraft, TierId,
-    TxnDraft, TxnId,
+    CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
+    ManualSaleDraft, ManualSaleId, Parsed, Person, PluginChange, ReconciliationId, Resolution,
+    Sheet, TemplateSummary, TicketBatch, TicketColumns, TicketShare, TierDraft, TierId, TxnDraft,
+    TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -18,7 +19,7 @@ use lancelot_service::api::{
     Added, ApiError, AppInfo, BackupInfo, CheckedIban, CountInput, OpenEvent, ParsedDate,
     RecentEvent, SavedTxn,
 };
-use lancelot_service::{AppSettings, Service};
+use lancelot_service::{AppSettings, DataSource, DataSourceView, Pulled, Service};
 
 pub struct AppState(pub Mutex<Service>);
 
@@ -381,36 +382,14 @@ pub async fn category_set_cost_centre(
 }
 
 #[tauri::command]
-pub async fn drink_product_add(
+pub async fn plugin_records_apply(
     state: State<'_, AppState>,
-    draft: DrinkProductDraft,
+    plugin: String,
+    changes: Vec<PluginChange>,
 ) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.add_drink_product(draft)))
-}
-
-#[tauri::command]
-pub async fn drink_product_update(
-    state: State<'_, AppState>,
-    id: DrinkProductId,
-    draft: DrinkProductDraft,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.update_drink_product(id, draft)))
-}
-
-#[tauri::command]
-pub async fn drink_product_delete(
-    state: State<'_, AppState>,
-    id: DrinkProductId,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.delete_drink_product(id)))
-}
-
-#[tauri::command]
-pub async fn drink_settings_set(
-    state: State<'_, AppState>,
-    settings: DrinkSettings,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.set_drink_settings(settings)))
+    with(&state, |s| {
+        s.change(|b| b.apply_plugin_changes(plugin, changes))
+    })
 }
 
 #[tauri::command]
@@ -446,32 +425,70 @@ pub async fn ticket_account_set(
 }
 
 #[tauri::command]
-pub async fn ticket_columns_set(
+pub async fn data_sources_get(
     state: State<'_, AppState>,
+) -> Result<BTreeMap<String, DataSourceView>> {
+    with(&state, |s| Ok(s.data_sources()))
+}
+
+#[tauri::command]
+pub async fn data_source_set(
+    state: State<'_, AppState>,
+    id: String,
+    source: Option<DataSource>,
+) -> Result<BTreeMap<String, DataSourceView>> {
+    with(&state, |s| s.set_data_source(&id, source))
+}
+
+#[tauri::command]
+pub async fn data_source_set_token(
+    state: State<'_, AppState>,
+    id: String,
+    token: Option<String>,
+) -> Result<BTreeMap<String, DataSourceView>> {
+    with(&state, |s| s.set_data_source_token(&id, token.as_deref()))
+}
+
+/// The network is slow, so the service isn't locked meanwhile and the app keeps working.
+#[tauri::command]
+pub async fn data_source_pull(
+    state: State<'_, AppState>,
+    id: String,
+    fields: Vec<String>,
+) -> Result<Pulled> {
+    let request = with(&state, |s| s.pull_request(&id))?;
+    tauri::async_runtime::spawn_blocking(move || request.run(&fields))
+        .await
+        .map_err(|e| ApiError::new("internal", e.to_string()))?
+}
+
+#[tauri::command]
+pub async fn ticket_sheet_read(
+    state: State<'_, AppState>,
+    path: PathBuf,
     columns: TicketColumns,
-) -> Result<OpenEvent> {
-    with(&state, |s| s.change(|b| b.set_ticket_columns(columns)))
+) -> Result<Sheet> {
+    with(&state, |s| s.read_ticket_sheet(&path, &columns))
 }
 
 #[tauri::command]
 pub async fn tickets_preview(
     state: State<'_, AppState>,
-    path: PathBuf,
+    batch: TicketBatch,
     date: String,
 ) -> Result<ImportPreview> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.preview_tickets(&path, date))
+    with(&state, |s| s.preview_tickets(&batch, date))
 }
 
 #[tauri::command]
 pub async fn tickets_import(
     state: State<'_, AppState>,
-    path: PathBuf,
+    batch: TicketBatch,
     date: String,
-    sha256: String,
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.import_tickets(&path, date, &sha256))
+    with(&state, |s| s.import_tickets(&batch, date))
 }
 
 #[tauri::command]

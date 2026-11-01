@@ -441,6 +441,7 @@
 		padding: 20mm 18mm;
 		border: 1px solid var(--color-rule);
 		background: white;
+		color-scheme: light;
 		color: var(--color-ink);
 		font-size: 10pt;
 		line-height: 1.4;

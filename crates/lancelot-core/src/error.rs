@@ -54,16 +54,12 @@ pub enum DomainError {
     UnknownCostCentre { field: String },
     #[error("this line has the cost centre of its budget line")]
     WrongCostCentre { field: String },
-    #[error("this cost centre holds the drink records: delete them first")]
-    CostCentreHasProducts,
-    #[error("unknown product")]
-    UnknownDrinkProduct,
+    #[error("this plugin record is not valid")]
+    InvalidPluginRecord { field: String },
     #[error("unknown checkpoint")]
     UnknownReconciliation,
     #[error("this account already has a checkpoint on this date")]
     DuplicateCheckpoint { field: String },
-    #[error("more units returned than taken")]
-    TooManyReturned,
     #[error("unknown ticket tier")]
     UnknownTier,
     #[error("tickets of this tier were imported or sold, so it cannot be deleted")]
@@ -139,11 +135,9 @@ impl DomainError {
             DomainError::BudgetLineInUse => "budget_line_in_use",
             DomainError::UnknownCostCentre { .. } => "unknown_cost_centre",
             DomainError::WrongCostCentre { .. } => "wrong_cost_centre",
-            DomainError::CostCentreHasProducts => "cost_centre_has_products",
-            DomainError::UnknownDrinkProduct => "unknown_drink_product",
+            DomainError::InvalidPluginRecord { .. } => "invalid_plugin_record",
             DomainError::UnknownReconciliation => "unknown_reconciliation",
             DomainError::DuplicateCheckpoint { .. } => "duplicate_checkpoint",
-            DomainError::TooManyReturned => "too_many_returned",
             DomainError::UnknownTier => "unknown_tier",
             DomainError::TierInUse => "tier_in_use",
             DomainError::ImportInUse => "import_in_use",
@@ -182,8 +176,8 @@ impl DomainError {
             | DomainError::WrongBudgetLine { field }
             | DomainError::UnknownCostCentre { field }
             | DomainError::WrongCostCentre { field }
+            | DomainError::InvalidPluginRecord { field }
             | DomainError::DuplicateCheckpoint { field } => Some(field),
-            DomainError::TooManyReturned => Some("returned"),
             DomainError::BudgetLineInUse => Some("category"),
             DomainError::SameAccount => Some("to"),
             DomainError::InvalidBic => Some("bic"),

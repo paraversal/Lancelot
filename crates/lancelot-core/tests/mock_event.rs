@@ -30,17 +30,16 @@ fn result_and_totals_match_the_mockups() {
     assert_eq!(total(AccountKind::Expense, "Venue"), eur("1.800"));
     assert_eq!(total(AccountKind::Expense, "Tech"), eur("610"));
     assert_eq!(total(AccountKind::Expense, "General"), eur("368,50"));
-    // The Drinks figure in the mockups is drinks plus Pfand.
+    // The Drinks figure in the mockups is drinks plus deposit.
     let drinks = total(AccountKind::Expense, "Drinks")
-        .checked_add(total(AccountKind::Expense, "Pfand"))
+        .checked_add(total(AccountKind::Expense, "Deposit"))
         .unwrap();
     assert_eq!(drinks, eur("484"));
     // Drinks result: donations minus drinks cost.
     assert_eq!(eur("812,50").checked_sub(drinks).unwrap(), eur("328,50"));
-    let centre = book.drinks_cost_centre().unwrap().id;
+    let centre = book.cost_centres().next().unwrap().id;
     let pnl = book.budget().cost_centre(centre).unwrap();
     assert_eq!(pnl.result.actual, eur("328,50"));
-    assert_eq!(book.drinks().invoice.unwrap().difference, Cents::ZERO);
 }
 
 #[test]

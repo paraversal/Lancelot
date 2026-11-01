@@ -918,37 +918,21 @@ fn a_foreign_key_left_dangling_stops_the_commit() {
 fn the_settings_on_the_event_row_are_saved_and_logged() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
-    let columns = TicketColumns {
-        tier: "Kategorie".into(),
-        order: "Bestellung".into(),
-        sale_date: None,
-    };
-    let settings = DrinkSettings {
-        supplier: Some("Getränke Meyer".into()),
-        price_per_strich: Some(eur("1,50")),
-        ..store.book().drink_settings().clone()
-    };
     store
-        .change(|book| book.set_ticket_columns(columns.clone()))
-        .unwrap();
-    store
-        .change(|book| book.set_drink_settings(settings.clone()))
+        .change(|book| book.set_tickets_enabled(false))
         .unwrap();
     let log = store.change_log(10).unwrap();
     let last = |entity: &str| log.iter().find(|e| e.entity == entity).unwrap();
-    assert_eq!(last("ticket_columns").op, "update");
+    assert_eq!(last("ticket_settings").op, "update");
     assert_eq!(
-        last("ticket_columns").after.as_ref().unwrap()["tier"],
-        "Kategorie"
+        last("ticket_settings").after.as_ref().unwrap()["enabled"],
+        false
     );
-    assert_eq!(last("drink_settings").op, "update");
-    assert!(last("drink_settings").before.is_some());
     drop(store);
 
     let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
     assert!(report.is_clean(), "{report:?}");
-    assert_eq!(reopened.book().ticket_columns(), &columns);
-    assert_eq!(reopened.book().drink_settings(), &settings);
+    assert!(!reopened.book().ticket_settings().enabled);
 }
 
 #[test]
@@ -971,7 +955,7 @@ fn deleting_an_import_is_logged_once() {
     }
     let sheet = include_bytes!("../../../fixtures/tickets/import-1.ods");
     let import = store
-        .import_tickets("import-1.ods", sheet, june(1))
+        .import_tickets(&batch("import-1.ods", sheet), june(1))
         .unwrap();
     store.change(|b| b.delete_import(import)).unwrap();
     let log = store.change_log(100).unwrap();
@@ -1009,7 +993,7 @@ fn every_kind_of_transfer_and_setting_survives_reopening() {
     );
     store.change(|b| b.set_net_movement(cash, true)).unwrap();
     store.change(|b| b.set_ticket_account(Some(cash))).unwrap();
-    let centre = store.book().drink_settings().cost_centre.unwrap();
+    let centre = store.change(|b| b.add_cost_centre("Gone")).unwrap();
     store.change(|b| b.delete_cost_centre(centre)).unwrap();
     store.change(|b| b.set_tickets_enabled(false)).unwrap();
     let book = store.book().clone();

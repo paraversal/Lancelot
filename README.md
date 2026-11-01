@@ -2,6 +2,7 @@
 
 A local desktop app for settling volunteer-run events: receipts, advances, reimbursements, tickets and drinks, in one file per event.
 
+- [Features](docs/features.md)
 - [Requirements](docs/requirements.md)
 - [Roadmap](docs/roadmap.md)
 - [Future](docs/FUTURE.md)

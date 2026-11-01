@@ -185,10 +185,15 @@ fn a_chosen_sheet_and_receipt_are_real_files() {
     };
     let sheet = dialog(&mut bridge, "sheet");
     assert!(std::path::Path::new(sheet.as_str().unwrap()).exists());
+    let (_, read) = invoke(
+        &mut bridge,
+        "ticket_sheet_read",
+        json!({ "path": sheet, "columns": { "tier": "Ticket", "order": "Order ID" } }),
+    );
     let (_, preview) = invoke(
         &mut bridge,
         "tickets_preview",
-        json!({ "path": sheet, "date": "2026-06-01" }),
+        json!({ "batch": read["batch"], "date": "2026-06-01" }),
     );
     assert!(preview["sha256"].is_string(), "{preview}");
 

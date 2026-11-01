@@ -1,25 +1,28 @@
 <script lang="ts">
 	// Tickets (requirements §5.6): the tiers with sold vs quota, gross and net, from the latest
-	// import of the sheet and the manual sales. Every figure comes from the core. Tickets that left
-	// the sheet are conflicts on top, each a card to resolve (R-TKT-13). A tier, the import, a manual
-	// sale and a cancellation each open in the panel on the right. Beside the tiers, or under them
-	// when a panel leaves no room: break-even and the sales per import (R-TKT-8, R-TKT-9).
-	import { onMount } from 'svelte';
+	// import and the manual sales. Every figure comes from the core. Imports come from plugins, each
+	// in its frame under the header, and are reviewed here. Tickets that left the latest import are
+	// conflicts on top, each a card to resolve (R-TKT-13). A tier, the import, a manual sale and a
+	// cancellation each open in the panel on the right. Beside the tiers, or under them when a panel
+	// leaves no room: break-even and the sales per import (R-TKT-8, R-TKT-9).
+	import { onMount, type Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { SHEET_EXTENSIONS, chooseTicketSheet } from '#lib/api/dialogs.ts';
 	import type { CancellationId } from '#lib/api/generated/CancellationId.ts';
 	import type { CancellationView } from '#lib/api/generated/CancellationView.ts';
 	import type { ManualSaleId } from '#lib/api/generated/ManualSaleId.ts';
+	import type { TicketBatch } from '#lib/api/generated/TicketBatch.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import { tierColor } from '#lib/colors.ts';
 	import BreakEven from '#lib/components/BreakEven.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import SalesChart from '#lib/components/SalesChart.svelte';
-	import { onFileDrop } from '#lib/dragdrop.ts';
 	import { formatAmount } from '#lib/format.ts';
+	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
+	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { conflictCount, formatFee, shortDay } from '#lib/tickets.ts';
+	import { conflictCount, formatFee, otherTicketIncome, shortDay } from '#lib/tickets.ts';
 	import CancellationPanel from './CancellationPanel.svelte';
 	import ConflictCard from './ConflictCard.svelte';
 	import ImportPanel from './ImportPanel.svelte';
@@ -31,37 +34,34 @@
 	const tickets = $derived(snapshot.tickets);
 	const latest = $derived(tickets.imports.at(-1) ?? null);
 	const conflicts = $derived(conflictCount(tickets));
+	const otherIncome = $derived(otherTicketIncome(snapshot));
+	const ticketCategory = $derived(snapshot.accounts.find((a) => a.role === 'tickets')?.id);
 
 	type Open =
-		| { type: 'tier'; id: TierId | null; name?: string; then?: string | null }
-		| { type: 'import'; path: string | null }
+		| { type: 'tier'; id: TierId | null; name?: string; then?: TicketBatch | null }
+		| { type: 'import'; batch: TicketBatch | null }
 		| { type: 'sale'; id: ManualSaleId | null }
 		| { type: 'cancellation'; id: CancellationId | null };
 	let panel = $state<Open | null>(null);
 	let panelKey = $state(0);
-	let dragging = $state(false);
+	/** A plugin's own panel. It takes the place of the page's. */
+	let pluginPanel = $state<Snippet | null>(null);
 
 	function show(next: Open | null) {
 		panel = next;
+		pluginPanel = null;
 		panelKey++;
 	}
 
-	const isSheet = (path: string) =>
-		SHEET_EXTENSIONS.includes(path.split('.').pop()?.toLowerCase() ?? '');
+	function setPluginPanel(next: Snippet | null) {
+		if (next) panel = null;
+		pluginPanel = next;
+	}
 
-	// A sheet dropped onto the page opens the import (R-TKT-3).
-	$effect(() =>
-		onFileDrop({
-			over: (names) =>
-				(dragging = !session.closed && (names.some((n) => !n) || names.some(isSheet))),
-			leave: () => (dragging = false),
-			drop: (paths) => {
-				dragging = false;
-				// In a plain browser the names stand in for paths.
-				const sheet = paths.find(isSheet);
-				if (sheet && !session.closed) show({ type: 'import', path: sheet });
-			}
-		})
+	const sources = plugins.flatMap((plugin) =>
+		plugin.TicketSection
+			? [{ plugin, ctx: pluginContext(plugin.id), Section: plugin.TicketSection }]
+			: []
 	);
 
 	// Opened from elsewhere, e.g. generated income in the ledger: `?tier=2`, `?sale=3` or
@@ -82,11 +82,6 @@
 		const from = c.order !== null ? `Order ${c.order}` : 'Manual sale';
 		const how = c.terms ? `${formatFee(c.terms.refundBp, format)} refund` : 'Correction';
 		return `${from} · ${what} · ${how}`;
-	}
-
-	async function importSheet() {
-		const path = await chooseTicketSheet();
-		if (path) show({ type: 'import', path });
 	}
 
 	const selectedTier = $derived(panel?.type === 'tier' ? panel.id : null);
@@ -120,13 +115,12 @@
 						type="button"
 						class="meta"
 						title="Imports"
-						onclick={() => show({ type: 'import', path: null })}
+						onclick={() => show({ type: 'import', batch: null })}
 					>
 						Import {tickets.imports.length} · {shortDay(latest.date)} · {latest.filename}
 					</button>
 				{/if}
 				{#if !session.closed}
-					<Button kind="primary" icon="upload" onclick={importSheet}>Import sheet</Button>
 					<Button
 						icon="plus"
 						disabled={!tickets.tiers.length}
@@ -136,157 +130,171 @@
 			</div>
 		</header>
 
-		{#if dragging}
-			<div class="drop">
-				<Icon name="upload" size={20} />
-				<strong>Import sheet</strong>
-				<span>.ods · .xlsx · .csv</span>
-			</div>
-		{:else}
-			{#if tickets.conflicts.length}
-				<section class="conflicts" aria-label="Conflicts">
-					<h2>Conflicts <span class="badge">{conflicts}</span></h2>
-					{#each tickets.conflicts as conflict (conflict.order)}
-						<article class="card">
-							<strong>Order {conflict.order}</strong>
-							{#each conflict.removed as removed (removed.tier)}
-								{#key `${removed.count}|${removed.matches.length}`}
-									<ConflictCard {conflict} {removed} />
-								{/key}
-							{/each}
-						</article>
-					{/each}
-				</section>
-			{/if}
+		{#if !session.closed}
+			{#each sources as { plugin, ctx, Section } (plugin.id)}
+				{#if pluginEnabled(plugin.id) && (!plugin.dataSource || ctx.dataSource)}
+					<PluginFrame name={plugin.name}>
+						<Section
+							{ctx}
+							proposeImport={(batch) => show({ type: 'import', batch })}
+							setPanel={setPluginPanel}
+						/>
+					</PluginFrame>
+				{/if}
+			{/each}
+		{/if}
 
-			<div class="body">
-				<div class="ledger">
-					<div class="rows" role="table" aria-label="Tiers">
-						<div class="row head" role="row">
-							<span class="name"></span>
-							<span class="num price">Price</span>
-							<span class="num fee">Fee</span>
-							<span class="sold">Sold</span>
-							<span class="num gross">Gross</span>
+		{#if tickets.conflicts.length}
+			<section class="conflicts" aria-label="Conflicts">
+				<h2>Conflicts <span class="badge">{conflicts}</span></h2>
+				{#each tickets.conflicts as conflict (conflict.order)}
+					<article class="card">
+						<strong>Order {conflict.order}</strong>
+						{#each conflict.removed as removed (removed.tier)}
+							{#key `${removed.count}|${removed.matches.length}`}
+								<ConflictCard {conflict} {removed} />
+							{/key}
+						{/each}
+					</article>
+				{/each}
+			</section>
+		{/if}
+
+		<div class="body">
+			<div class="ledger">
+				<div class="rows" role="table" aria-label="Tiers">
+					<div class="row head" role="row">
+						<span class="name"></span>
+						<span class="num price">Price</span>
+						<span class="num fee">Fee</span>
+						<span class="sold">Sold</span>
+						<span class="num gross">Gross</span>
+					</div>
+					{#each tickets.tiers as t, i (t.id)}
+						<button
+							type="button"
+							class="row tier"
+							class:selected={selectedTier === t.id}
+							role="row"
+							onclick={() => show({ type: 'tier', id: t.id })}
+						>
+							<span class="name">
+								<span class="dot" style:background={tierColor(i)}></span>
+								<span class="label">{t.name}</span>
+								{#if t.manual}<span class="manual">+{t.manual} manual</span>{/if}
+								{#if t.unresolved}<span class="unresolved">−{t.unresolved} open</span>{/if}
+							</span>
+							<span class="num price">{formatAmount(t.price, format)}</span>
+							<span class="num fee">{formatFee(t.feeBp, format)}</span>
+							<span class="sold">
+								<span class="count">
+									<strong>{t.places}</strong>{#if t.quota !== null}<span class="quota">
+											/ {t.quota}</span
+										>{/if}
+								</span>
+								{#if t.quota !== null}
+									<span class="bar" class:over={t.places > t.quota}>
+										<span
+											style:width="{Math.min(100, (t.places / t.quota) * 100)}%"
+											style:background={tierColor(i)}
+										></span>
+									</span>
+								{/if}
+							</span>
+							<span class="num gross">{formatAmount(t.gross, format)}</span>
+						</button>
+					{/each}
+					{#if !session.closed}
+						<button
+							type="button"
+							class="row add"
+							class:selected={panel?.type === 'tier' && panel.id === null}
+							onclick={() => show({ type: 'tier', id: null })}
+						>
+							<Icon name="plus" size={14} />Tier
+						</button>
+					{/if}
+					{#if tickets.tiers.length || otherIncome}
+						{#if tickets.total.fees}
+							<div class="row total" role="row">
+								<span class="name">Ticket fees</span>
+								<span class="num">{formatAmount(-tickets.total.fees, format)}</span>
+							</div>
+						{/if}
+						{#if tickets.total.refunds}
+							<div class="row total" role="row">
+								<span class="name">Refunds</span>
+								<span class="num">{formatAmount(-tickets.total.refunds, format)}</span>
+							</div>
+						{/if}
+						{#if otherIncome}
+							<div class="row total" role="row">
+								<a class="name other" href="/event/ledger?category={ticketCategory}"
+									>Other income in the ledger</a
+								>
+								<span class="num">{formatAmount(otherIncome, format)}</span>
+							</div>
+						{/if}
+						<div class="row total strong" role="row">
+							<span class="name">Ticket income</span>
+							<span class="num">{formatAmount(tickets.total.net + otherIncome, format)}</span>
 						</div>
-						{#each tickets.tiers as t, i (t.id)}
+						{#if conflicts}
+							<p class="warning" role="note">
+								{tickets.total.unresolved} removed {tickets.total.unresolved === 1
+									? 'ticket is'
+									: 'tickets are'} not counted until the conflicts are resolved
+							</p>
+						{/if}
+					{/if}
+				</div>
+
+				{#if tickets.cancellations.length || (latest && !session.closed) || (tickets.manualSales.length && !session.closed)}
+					<div class="rows cancellations" aria-label="Cancellations">
+						<div class="row head"><span class="name">Cancellations</span></div>
+						{#each tickets.cancellations as c (c.id)}
 							<button
 								type="button"
-								class="row tier"
-								class:selected={selectedTier === t.id}
-								role="row"
-								onclick={() => show({ type: 'tier', id: t.id })}
+								class="row cancellation"
+								class:selected={panel?.type === 'cancellation' && panel.id === c.id}
+								onclick={() => show({ type: 'cancellation', id: c.id })}
 							>
-								<span class="name">
-									<span class="dot" style:background={tierColor(i)}></span>
-									<span class="label">{t.name}</span>
-									{#if t.manual}<span class="manual">+{t.manual} manual</span>{/if}
-									{#if t.unresolved}<span class="unresolved">−{t.unresolved} open</span>{/if}
-								</span>
-								<span class="num price">{formatAmount(t.price, format)}</span>
-								<span class="num fee">{formatFee(t.feeBp, format)}</span>
-								<span class="sold">
-									<span class="count">
-										<strong>{t.places}</strong>{#if t.quota !== null}<span class="quota">
-												/ {t.quota}</span
-											>{/if}
-									</span>
-									{#if t.quota !== null}
-										<span class="bar" class:over={t.places > t.quota}>
-											<span
-												style:width="{Math.min(100, (t.places / t.quota) * 100)}%"
-												style:background={tierColor(i)}
-											></span>
-										</span>
-									{/if}
-								</span>
-								<span class="num gross">{formatAmount(t.gross, format)}</span>
+								<span class="name"><span class="label">{cancellationText(c)}</span></span>
+								<span class="num">{c.refund ? formatAmount(-c.refund, format) : '–'}</span>
 							</button>
 						{/each}
 						{#if !session.closed}
 							<button
 								type="button"
 								class="row add"
-								class:selected={panel?.type === 'tier' && panel.id === null}
-								onclick={() => show({ type: 'tier', id: null })}
+								class:selected={panel?.type === 'cancellation' && panel.id === null}
+								onclick={() => show({ type: 'cancellation', id: null })}
 							>
-								<Icon name="plus" size={14} />Tier
+								<Icon name="plus" size={14} />Cancellation
 							</button>
-						{/if}
-						{#if tickets.tiers.length}
-							{#if tickets.total.fees}
-								<div class="row total" role="row">
-									<span class="name">Ticket fees</span>
-									<span class="num">{formatAmount(-tickets.total.fees, format)}</span>
-								</div>
-							{/if}
-							{#if tickets.total.refunds}
-								<div class="row total" role="row">
-									<span class="name">Refunds</span>
-									<span class="num">{formatAmount(-tickets.total.refunds, format)}</span>
-								</div>
-							{/if}
-							<div class="row total strong" role="row">
-								<span class="name">Ticket income</span>
-								<span class="num">{formatAmount(tickets.total.net, format)}</span>
-							</div>
-							{#if conflicts}
-								<p class="warning" role="note">
-									{tickets.total.unresolved} removed {tickets.total.unresolved === 1
-										? 'ticket is'
-										: 'tickets are'} not counted until the conflicts are resolved
-								</p>
-							{/if}
-						{/if}
-					</div>
-
-					{#if tickets.cancellations.length || (latest && !session.closed) || (tickets.manualSales.length && !session.closed)}
-						<div class="rows cancellations" aria-label="Cancellations">
-							<div class="row head"><span class="name">Cancellations</span></div>
-							{#each tickets.cancellations as c (c.id)}
-								<button
-									type="button"
-									class="row cancellation"
-									class:selected={panel?.type === 'cancellation' && panel.id === c.id}
-									onclick={() => show({ type: 'cancellation', id: c.id })}
-								>
-									<span class="name"><span class="label">{cancellationText(c)}</span></span>
-									<span class="num">{c.refund ? formatAmount(-c.refund, format) : '–'}</span>
-								</button>
-							{/each}
-							{#if !session.closed}
-								<button
-									type="button"
-									class="row add"
-									class:selected={panel?.type === 'cancellation' && panel.id === null}
-									onclick={() => show({ type: 'cancellation', id: null })}
-								>
-									<Icon name="plus" size={14} />Cancellation
-								</button>
-							{/if}
-						</div>
-					{/if}
-				</div>
-				{#if snapshot.profitability || tickets.sales.length}
-					<div class="statistics" role="group" aria-label="Statistics">
-						{#if snapshot.profitability}
-							<BreakEven
-								profitability={snapshot.profitability}
-								tiers={tickets.tiers}
-								{format}
-								onaddtier={() => show({ type: 'tier', id: null })}
-							/>
-						{/if}
-						{#if snapshot.profitability && tickets.sales.length}
-							<hr />
-						{/if}
-						{#if tickets.sales.length}
-							<SalesChart points={tickets.sales} tiers={tickets.tiers} {format} />
 						{/if}
 					</div>
 				{/if}
 			</div>
-		{/if}
+			{#if snapshot.profitability || tickets.sales.length}
+				<div class="statistics" role="group" aria-label="Statistics">
+					{#if snapshot.profitability}
+						<BreakEven
+							profitability={snapshot.profitability}
+							tiers={tickets.tiers}
+							{format}
+							onaddtier={() => show({ type: 'tier', id: null })}
+						/>
+					{/if}
+					{#if snapshot.profitability && tickets.sales.length}
+						<hr />
+					{/if}
+					{#if tickets.sales.length}
+						<SalesChart points={tickets.sales} tiers={tickets.tiers} {format} />
+					{/if}
+				</div>
+			{/if}
+		</div>
 	</section>
 
 	{#key panelKey}
@@ -295,13 +303,13 @@
 			<TierPanel
 				id={panel.id}
 				name={panel.name}
-				onclose={() => show(then !== undefined ? { type: 'import', path: then } : null)}
+				onclose={() => show(then !== undefined ? { type: 'import', batch: then } : null)}
 			/>
 		{:else if panel?.type === 'import'}
 			<ImportPanel
-				path={panel.path}
+				batch={panel.batch}
 				onclose={() => show(null)}
-				onnewtier={(name, path) => show({ type: 'tier', id: null, name, then: path })}
+				onnewtier={(name, batch) => show({ type: 'tier', id: null, name, then: batch })}
 			/>
 		{:else if panel?.type === 'sale'}
 			<SalePanel
@@ -313,6 +321,7 @@
 			<CancellationPanel id={panel.id} onclose={() => show(null)} />
 		{/if}
 	{/key}
+	{@render pluginPanel?.()}
 </div>
 
 <style>
@@ -542,6 +551,17 @@
 		padding-top: 6px;
 	}
 
+	.other {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.other:hover {
+		color: var(--color-ink);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
 	.row.total.strong {
 		font-size: var(--type-sm);
 		font-weight: 600;
@@ -637,26 +657,5 @@
 	.gross {
 		width: 110px;
 		font-weight: 600;
-	}
-
-	.drop {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: var(--spacing-2);
-		flex: 1;
-		border: 1.5px dashed var(--color-ink-muted);
-		border-radius: var(--radius-md);
-		background: color-mix(in srgb, var(--color-marker) 25%, transparent);
-	}
-
-	.drop strong {
-		font-size: var(--type-md);
-	}
-
-	.drop span {
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 </style>

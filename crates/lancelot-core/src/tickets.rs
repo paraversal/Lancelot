@@ -20,27 +20,26 @@ use crate::model::{
 };
 use crate::money::{BP_FULL, Cents, MoneyError, percent_bp, try_sum};
 use crate::sales::{SalesPoint, sales_over_time};
-use crate::sheet::{RowProblem, Sheet};
 
-/// The sheet's column names (R-TKT-3), saved in the event. Matched ignoring case.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+/// Every ticket sold at one moment, from wherever it was read: what a ticket source hands in to
+/// be imported (R-TKT-3). The core doesn't know where it came from. Only the order and the tier are
+/// here, so personal data can't reach the event (R-TKT-17).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export)]
-#[serde(rename_all = "camelCase")]
-pub struct TicketColumns {
-    pub tier: String,
-    pub order: String,
-    /// Not read yet: the sales over time switch to sale dates once the sheet has them (R-TKT-8).
-    pub sale_date: Option<String>,
+pub struct TicketBatch {
+    /// What the tickets were read from, as shown in the list of imports, e.g. a file name.
+    pub source: String,
+    /// SHA-256 of what was read, lower-case hex (R-TKT-5). The same hash means the same content.
+    pub sha256: String,
+    pub tickets: Vec<BatchTicket>,
 }
 
-impl Default for TicketColumns {
-    fn default() -> TicketColumns {
-        TicketColumns {
-            tier: "Ticket".into(),
-            order: "Order ID".into(),
-            sale_date: None,
-        }
-    }
+/// One ticket.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct BatchTicket {
+    pub tier: String,
+    pub order: String,
 }
 
 /// Whether the event sells tickets at all, and where the sheet's money arrives.
@@ -275,17 +274,17 @@ pub enum Resolution {
     Correction { count: u32, note: Option<String> },
 }
 
-/// Tickets per (order ID, tier) from a sheet, and the tier names that match no tier.
+/// Tickets per (order ID, tier) from a batch, and the tier names that match no tier.
 pub(crate) struct Orders {
     pub orders: Vec<OrderCount>,
-    /// Unknown tier names as first spelled in the sheet, with their number of rows.
+    /// Unknown tier names as first spelled in the batch, with their number of tickets.
     pub unknown: Vec<UnknownTier>,
 }
 
-pub(crate) fn orders(sheet: &Sheet, tiers: &BTreeMap<TierId, Tier>) -> Orders {
+pub(crate) fn orders(batch: &TicketBatch, tiers: &BTreeMap<TierId, Tier>) -> Orders {
     let mut counts: BTreeMap<(String, TierId), u32> = BTreeMap::new();
     let mut unknown: Vec<UnknownTier> = Vec::new();
-    for row in &sheet.rows {
+    for row in &batch.tickets {
         match tiers.values().find(|t| t.matches(&row.tier)) {
             Some(t) => *counts.entry((row.order.clone(), t.id)).or_insert(0) += 1,
             None => match unknown.iter_mut().find(|u| same_name(&u.name, &row.tier)) {
@@ -324,8 +323,6 @@ pub struct ImportPreview {
     pub tickets: u32,
     /// Tier names that match no tier or alias. They block the import until mapped.
     pub unknown: Vec<UnknownTier>,
-    /// Rows that could not be read.
-    pub problems: Vec<RowProblem>,
     /// Every tier that has tickets before or after, in tier order.
     pub tiers: Vec<TierChange>,
     /// Orders with fewer tickets of a tier than before (R-TKT-12).
@@ -377,12 +374,12 @@ pub struct OrderChange {
 }
 
 pub(crate) fn preview(
-    sheet: &Sheet,
+    batch: &TicketBatch,
     tiers: &BTreeMap<TierId, Tier>,
     previous: Option<&TicketImport>,
     current: bool,
 ) -> ImportPreview {
-    let Orders { orders, unknown } = orders(sheet, tiers);
+    let Orders { orders, unknown } = orders(batch, tiers);
     let key = |o: &OrderCount| (o.order.clone(), o.tier);
     let before: BTreeMap<_, u32> = previous
         .map(|p| p.orders.iter().map(|o| (key(o), o.count)).collect())
@@ -419,14 +416,13 @@ pub(crate) fn preview(
         }
     }
     ImportPreview {
-        filename: sheet.filename.clone(),
-        sha256: sheet.sha256.clone(),
-        same_file: previous.is_some_and(|p| p.sha256 == sheet.sha256),
+        filename: batch.source.clone(),
+        sha256: batch.sha256.clone(),
+        same_file: previous.is_some_and(|p| p.sha256 == batch.sha256),
         previous: previous.map(|p| p.id),
         current,
         tickets: orders.iter().map(|o| o.count).sum(),
         unknown,
-        problems: sheet.problems.clone(),
         tiers: changes.into_values().collect(),
         removed,
         receipts_lost: Vec::new(),
@@ -1044,7 +1040,6 @@ fn order_conflicts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sheet::SheetRow;
 
     fn tier(id: i64, name: &str, aliases: &[&str]) -> (TierId, Tier) {
         let id = TierId(id);
@@ -1061,20 +1056,17 @@ mod tests {
         (id, tier)
     }
 
-    fn sheet(rows: &[(&str, &str)]) -> Sheet {
-        Sheet {
-            filename: "tickets.ods".into(),
+    fn sheet(rows: &[(&str, &str)]) -> TicketBatch {
+        TicketBatch {
+            source: "tickets.ods".into(),
             sha256: "ab".into(),
-            rows: rows
+            tickets: rows
                 .iter()
-                .zip(2..)
-                .map(|((tier, order), row)| SheetRow {
-                    row,
+                .map(|(tier, order)| BatchTicket {
                     tier: (*tier).into(),
                     order: (*order).into(),
                 })
                 .collect(),
-            problems: Vec::new(),
         }
     }
 

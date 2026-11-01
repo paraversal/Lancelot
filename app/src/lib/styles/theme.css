@@ -1,0 +1,38 @@
+/* Light and dark. Each colour is light-dark(light, dark): the values from tokens.css, then their
+   dark counterparts, which UI.fig does not have. An element picks one through `color-scheme`, so
+   the app follows the system until Settings sets `data-theme` on the root element. */
+:root {
+	color-scheme: light dark;
+	--color-paper: light-dark(#f6f1e7, #1e1b16);
+	--color-paper-sunk: light-dark(#ece5d6, #16140f);
+	--color-field: light-dark(#ffffff, #2a261f);
+	--color-ink: light-dark(#1e1b16, #f1ebdd);
+	--color-ink-muted: light-dark(#5e574c, #b8af9e);
+	--color-on-ink-muted: light-dark(#a79f90, #6e6658);
+	--color-rule: light-dark(#dcd3c2, #3a352b);
+	--color-marker: light-dark(#f5d547, #524410);
+	--color-plus: light-dark(#2e7a4b, #6cbf8a);
+	--color-minus: light-dark(#b23a2b, #eb8274);
+	--color-attention: light-dark(#8c480c, #e5a45c);
+	--color-tier-1: light-dark(#5c7a3e, #93b36f);
+	--color-tier-2: light-dark(#3b6ea5, #7ba8d9);
+	--color-tier-3: light-dark(#c9772b, #e0a05c);
+	--color-tier-4: light-dark(#8a6bb0, #b69bd6);
+	--color-tier-5: light-dark(#a8475f, #d57f95);
+}
+
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+}
+
+/* Paper is light, whatever the window is. */
+@media print {
+	:root,
+	:root[data-theme] {
+		color-scheme: light;
+	}
+}

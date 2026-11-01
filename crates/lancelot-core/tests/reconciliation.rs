@@ -274,20 +274,17 @@ fn tiers(book: &mut Book) {
 }
 
 /// A sheet: (order number, whether the ticket is Regular).
-fn sheet(rows: &[(u8, bool)], n: usize) -> Sheet {
-    Sheet {
-        filename: format!("sheet-{n}.csv"),
+fn sheet(rows: &[(u8, bool)], n: usize) -> TicketBatch {
+    TicketBatch {
+        source: format!("sheet-{n}.csv"),
         sha256: format!("{n}"),
-        rows: rows
+        tickets: rows
             .iter()
-            .enumerate()
-            .map(|(i, (order, regular))| SheetRow {
-                row: u32::try_from(i).unwrap() + 2,
+            .map(|(order, regular)| BatchTicket {
                 order: order.to_string(),
                 tier: if *regular { "Regular" } else { "Early Bird" }.to_owned(),
             })
             .collect(),
-        problems: Vec::new(),
     }
 }
 
@@ -418,7 +415,7 @@ mod properties {
                 let before = store.book().clone();
                 let figure = status(&before, id).computed;
                 let import = store
-                    .import_tickets(&format!("sheet-{n}.csv"), csv(rows).as_bytes(), june(*day))
+                    .import_tickets(&batch(&format!("sheet-{n}.csv"), csv(rows).as_bytes()), june(*day))
                     .unwrap();
                 if june(*day) > june(checkpoint_day) {
                     prop_assert_eq!(status(store.book(), id).computed, figure);

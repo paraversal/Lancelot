@@ -5,7 +5,7 @@
 	import { flipOptions, rowIn, rowOut } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
 	import { categoryColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
@@ -19,6 +19,8 @@
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import { onFileDrop } from '#lib/dragdrop.ts';
 	import EntryPanel from '#lib/entry/EntryPanel.svelte';
+	import type { EntryProposal } from '#lib/plugins/api.ts';
+	import { takeProposal } from '#lib/plugins/host.ts';
 	import Preview from './Preview.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
@@ -33,7 +35,7 @@
 	let panelKey = $state(0);
 	let pending = $state<string[]>([]);
 	let preview = $state<Attachment | null>(null);
-	let invoice = $state(false);
+	let proposal = $state<EntryProposal | null>(null);
 	let dragging = $state<string[] | null>(null);
 
 	// Dropping files anywhere attaches them to the open entry, or starts a new expense with
@@ -69,15 +71,23 @@
 	];
 
 	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`, or
-	// "New entry" on the overview: `/event/ledger?new`, or the supplier's invoice on the Drinks
-	// page: `/event/ledger?invoice`.
+	// "New entry" on the overview: `/event/ledger?new`, or what a plugin proposes:
+	// `/event/ledger?proposal`. The Tickets page leads to a category: `/event/ledger?category=4`.
 	onMount(() => {
-		if (page.url.searchParams.has('invoice') && !session.closed) {
+		if (page.url.searchParams.has('proposal') && !session.closed) {
 			open(null);
-			invoice = true;
+			proposal = takeProposal();
 			return;
 		}
 		if (page.url.searchParams.has('new') && !session.closed) return open(null);
+		const category = page.url.searchParams.get('category');
+		if (category) {
+			grouping = 'category';
+			tick().then(() =>
+				document.getElementById(`group-${category}`)?.scrollIntoView({ block: 'start' })
+			);
+			return;
+		}
 		const id = Number(page.url.searchParams.get('txn'));
 		const txn = snapshot.txns.find((t) => t.id === id);
 		if (txn) {
@@ -89,7 +99,7 @@
 	});
 
 	function open(txn: TxnView | null) {
-		invoice = false;
+		proposal = null;
 		selected = txn?.id ?? null;
 		editing = txn;
 		pending = [];
@@ -197,7 +207,7 @@
 
 				<div class="rows" role="table">
 					{#each groups as group (group.key)}
-						<div class="group" role="rowgroup">
+						<div class="group" id="group-{group.key}" role="rowgroup">
 							{#if grouping === 'day'}
 								<span>{dayLabel(group.key)}</span>
 							{:else}
@@ -265,7 +275,7 @@
 		{#key panelKey}
 			<EntryPanel
 				txn={editing}
-				{invoice}
+				{proposal}
 				bind:pending
 				previewing={preview?.id ?? null}
 				onpreview={(a) => (preview = a)}

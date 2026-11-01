@@ -2,6 +2,7 @@
 //! No money logic lives here; everything goes through `lancelot_core`.
 
 mod commands;
+mod tokens;
 
 use std::sync::Mutex;
 
@@ -93,7 +94,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
-            app.manage(AppState(Mutex::new(Service::new(data_dir))));
+            app.manage(AppState(Mutex::new(Service::with_tokens(
+                data_dir,
+                Box::new(tokens::Keychain),
+            ))));
             app.set_menu(menu(app)?)?;
             // The UI decides what each menu item does (see app/src/lib/shortcuts.ts).
             app.on_menu_event(|app, event| {
@@ -147,14 +151,15 @@ pub fn run() {
             commands::cost_centre_rename,
             commands::cost_centre_delete,
             commands::category_set_cost_centre,
-            commands::drink_product_add,
-            commands::drink_product_update,
-            commands::drink_product_delete,
-            commands::drink_settings_set,
+            commands::plugin_records_apply,
             commands::tier_add,
             commands::tier_update,
             commands::tier_delete,
-            commands::ticket_columns_set,
+            commands::data_sources_get,
+            commands::data_source_set,
+            commands::data_source_set_token,
+            commands::data_source_pull,
+            commands::ticket_sheet_read,
             commands::tickets_set_enabled,
             commands::ticket_account_set,
             commands::tickets_preview,

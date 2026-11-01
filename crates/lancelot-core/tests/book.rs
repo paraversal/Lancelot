@@ -16,15 +16,10 @@ fn new_event_has_default_accounts() {
             .collect::<Vec<_>>()
     };
     assert_eq!(names(AccountKind::Asset), ["Verein account", "Cash box"]);
-    assert_eq!(
-        names(AccountKind::Income),
-        ["Tickets", "Drink donations", "General"]
-    );
+    assert_eq!(names(AccountKind::Income), ["Tickets", "General"]);
     assert_eq!(
         names(AccountKind::Expense),
-        [
-            "Kitchen", "Drinks", "Pfand", "Mobility", "Venue", "Tech", "General"
-        ]
+        ["Kitchen", "Mobility", "Venue", "Tech", "General"]
     );
     assert!(!book.event().is_closed());
     assert_eq!(
@@ -343,7 +338,7 @@ fn closing_counts_show_the_difference() {
     let (cash, verein, donations) = (
         asset(&book, "Cash box"),
         asset(&book, "Verein account"),
-        income(&book, "Drink donations"),
+        income(&book, "General"),
     );
     save(
         &mut book,
@@ -470,7 +465,7 @@ fn a_split_must_add_up_to_the_receipt_total() {
     let (cash, kitchen, drinks) = (
         asset(&book, "Cash box"),
         expense(&book, "Kitchen"),
-        expense(&book, "Drinks"),
+        expense(&book, "General"),
     );
     let mut d = draft(
         "Metro",
