@@ -16,9 +16,9 @@ fn fixture(name: &str) -> (String, Vec<u8>) {
     (name.to_owned(), std::fs::read(path).unwrap())
 }
 
-fn sheet(book: &Book, name: &str) -> Sheet {
+fn sheet(name: &str) -> TicketBatch {
     let (name, data) = fixture(name);
-    read_sheet(&name, &data, book.ticket_columns()).unwrap()
+    batch(&name, &data)
 }
 
 fn tier(name: &str, price: &str, fee_bp: u32) -> TierDraft {
@@ -48,7 +48,7 @@ fn with_tiers() -> (Book, Tiers) {
 }
 
 fn import(book: &mut Book, name: &str, day: u8) -> ImportId {
-    let sheet = sheet(book, name);
+    let sheet = sheet(name);
     book.import_tickets(&sheet, june(day), now()).unwrap()
 }
 
@@ -69,16 +69,14 @@ fn sold(book: &Book, tier: TierId) -> TicketTotals {
 
 #[test]
 fn the_three_formats_read_the_same_tickets_and_nothing_else() {
-    let (book, _) = with_tiers();
-    let ods = sheet(&book, "import-1.ods");
+    let ods = sheet("import-1.ods");
     for other in ["import-1.xlsx", "import-1.csv"] {
-        let s = sheet(&book, other);
-        assert_eq!(s.rows, ods.rows, "{other}");
-        assert_eq!(s.problems, ods.problems, "{other}");
+        let s = sheet(other);
+        assert_eq!(s.tickets, ods.tickets, "{other}");
     }
-    assert_eq!(ods.rows.len(), 6);
-    assert_eq!(ods.rows[0].order, "4701");
-    assert_eq!(ods.rows[0].tier, "Early Bird");
+    assert_eq!(ods.tickets.len(), 6);
+    assert_eq!(ods.tickets[0].order, "4701");
+    assert_eq!(ods.tickets[0].tier, "Early Bird");
     // Names and e-mail addresses are in the sheet but never read (R-TKT-17).
     let debug = format!("{ods:?}");
     assert!(!debug.contains("Gast") && !debug.contains("example.invalid"));
@@ -138,7 +136,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
     let regular_txn = income_of(&book, t.regular).unwrap().id;
 
     // R-TKT-5: the preview, per tier and per order (R-TKT-12).
-    let preview = book.preview_import(&sheet(&book, "import-2.ods"), june(20));
+    let preview = book.preview_import(&sheet("import-2.ods"), june(20));
     assert_eq!(preview.previous, Some(first));
     assert!(!preview.same_file);
     assert_eq!(preview.tickets, 8);
@@ -158,14 +156,17 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
         removed,
         [("4702", t.regular, 1, 0), ("4711", t.regular, 2, 0)]
     );
-    // The row without an order ID is listed; the blank row is not a ticket.
-    assert_eq!(
-        preview.problems,
-        [RowProblem {
-            row: 10,
-            problem: Problem::NoOrder
-        }]
-    );
+    // The row without an order ID comes through for the plugin to list; the blank row doesn't.
+    let (name, data) = fixture("import-2.ods");
+    let columns = ["Ticket".to_owned(), "Order ID".to_owned()];
+    let table = read_table(&name, &data, &columns, NumberFormat::De).unwrap();
+    let incomplete: Vec<u32> = table
+        .rows
+        .iter()
+        .filter(|r| r.cells.iter().any(String::is_empty))
+        .map(|r| r.row)
+        .collect();
+    assert_eq!(incomplete, [10]);
 
     let second = import(&mut book, "import-2.ods", 8);
     assert_eq!(book.latest_import().unwrap().id, second);
@@ -190,7 +191,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
 
     // The same file again is flagged.
     assert!(
-        book.preview_import(&sheet(&book, "import-2.ods"), june(20))
+        book.preview_import(&sheet("import-2.ods"), june(20))
             .same_file
     );
 }
@@ -199,7 +200,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
 fn unknown_tiers_block_the_import_until_they_are_mapped() {
     let (mut book, t) = with_tiers();
     import(&mut book, "import-2.ods", 8);
-    let s = sheet(&book, "import-3.ods");
+    let s = sheet("import-3.ods");
     let preview = book.preview_import(&s, june(20));
     assert_eq!(preview.unknown.len(), 1);
     assert_eq!(
@@ -331,27 +332,34 @@ fn manual_sales_are_income_held_by_the_person() {
 
 #[test]
 fn the_columns_can_be_renamed() {
-    let (mut book, _) = with_tiers();
-    book.set_ticket_columns(TicketColumns {
-        tier: "Kategorie".into(),
-        order: "Order ID".into(),
-        sale_date: None,
-    })
-    .unwrap();
     let (name, data) = fixture("import-1.ods");
+    let renamed = ["Kategorie".to_owned(), "Order ID".to_owned()];
     assert_eq!(
-        read_sheet(&name, &data, book.ticket_columns()),
+        read_table(&name, &data, &renamed, NumberFormat::De),
         Err(DomainError::MissingColumn {
             column: "Kategorie".into()
         })
     );
-    let same = TicketColumns {
-        tier: "Ticket".into(),
-        order: " ticket ".into(),
-        sale_date: None,
-    };
+}
+
+#[test]
+fn a_batch_needs_a_source_and_every_order() {
+    let (mut book, _) = with_tiers();
+    let good = sheet("import-1.ods");
+    let mut no_source = good.clone();
+    no_source.source = "  ".into();
     assert_eq!(
-        book.set_ticket_columns(same).unwrap_err().field(),
+        book.import_tickets(&no_source, june(1), now())
+            .unwrap_err()
+            .field(),
+        Some("source")
+    );
+    let mut no_order = good;
+    no_order.tickets[0].order = " ".into();
+    assert_eq!(
+        book.import_tickets(&no_order, june(1), now())
+            .unwrap_err()
+            .field(),
         Some("order")
     );
 }
@@ -368,7 +376,7 @@ fn a_closed_event_takes_no_imports() {
         })
         .collect();
     book.close(accepted, now()).unwrap();
-    let s = sheet(&book, "import-1.ods");
+    let s = sheet("import-1.ods");
     assert_eq!(
         book.import_tickets(&s, june(1), now()),
         Err(DomainError::EventClosed)
@@ -392,11 +400,11 @@ fn tickets_survive_saving_and_reopening() {
         .change(|book| book.add_tier(tier("Supporter", "45", 0)))
         .unwrap();
     let (name, data) = fixture("import-1.ods");
-    let first = store.import_tickets(&name, &data, june(1)).unwrap();
+    let first = store.import_tickets(&batch(&name, &data), june(1)).unwrap();
     let (name, data) = fixture("import-2.ods");
-    let preview = store.preview_ticket_import(&name, &data, june(1)).unwrap();
+    let preview = store.book().preview_import(&batch(&name, &data), june(1));
     assert_eq!(preview.removed.len(), 2);
-    store.import_tickets(&name, &data, june(8)).unwrap();
+    store.import_tickets(&batch(&name, &data), june(8)).unwrap();
     store
         .change(|book| book.set_import_date(first, june(2)))
         .unwrap();
@@ -452,7 +460,7 @@ fn imported_file(dir: &TempDir) -> (std::path::PathBuf, Store) {
         .change(|book| book.add_tier(tier("Supporter", "45", 0)))
         .unwrap();
     let (name, data) = fixture("import-1.ods");
-    store.import_tickets(&name, &data, june(1)).unwrap();
+    store.import_tickets(&batch(&name, &data), june(1)).unwrap();
     (path, store)
 }
 
@@ -550,7 +558,7 @@ fn a_wrongly_chosen_sheet_can_be_deleted_and_leaves_nothing_behind() {
 
     // The right sheet has fewer orders, which reads as tickets gone from the wrong one.
     let (name, data) = fixture("import-2.ods");
-    store.import_tickets(&name, &data, june(8)).unwrap();
+    store.import_tickets(&batch(&name, &data), june(8)).unwrap();
     assert!(store.book().tickets().conflict_count() > 0);
     let wrong = store.book().ticket_imports().last().unwrap().id;
 
@@ -633,16 +641,15 @@ fn the_import_preview_says_which_receipts_would_go() {
 
     let preview = book.preview_delete_import(first).unwrap();
     assert_eq!(preview.receipts_lost, std::slice::from_ref(&filename));
-    let empty = Sheet {
-        filename: "empty.csv".into(),
+    let empty = TicketBatch {
+        source: "empty.csv".into(),
         sha256: "00".into(),
-        rows: Vec::new(),
-        problems: Vec::new(),
+        tickets: Vec::new(),
     };
     let conflicted = book.preview_import(&empty, june(9));
     assert_eq!(conflicted.receipts_lost, [filename], "{conflicted:?}");
     assert!(
-        book.preview_import(&sheet(&book, "import-1.ods"), june(9))
+        book.preview_import(&sheet("import-1.ods"), june(9))
             .receipts_lost
             .is_empty()
     );
@@ -657,21 +664,18 @@ mod properties {
         prop::collection::vec((0u8..20, 0usize..3), 0..40)
     }
 
-    fn to_sheet(rows: &[(u8, usize)], n: u32) -> Sheet {
+    fn to_sheet(rows: &[(u8, usize)], n: u32) -> TicketBatch {
         let names = ["Early Bird", "Regular", "Supporter"];
-        Sheet {
-            filename: format!("import-{n}.ods"),
+        TicketBatch {
+            source: format!("import-{n}.ods"),
             sha256: format!("{n:064x}"),
-            rows: rows
+            tickets: rows
                 .iter()
-                .zip(2..)
-                .map(|((order, tier), row)| SheetRow {
-                    row,
+                .map(|(order, tier)| BatchTicket {
                     tier: names[*tier].into(),
                     order: order.to_string(),
                 })
                 .collect(),
-            problems: Vec::new(),
         }
     }
 
@@ -708,9 +712,7 @@ mod properties {
             // What a file would hold loads back as the same book.
             let parts = BookParts {
                 event: book.event().clone(),
-                ticket_columns: book.ticket_columns().clone(),
                 ticket_settings: book.ticket_settings(),
-                drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
                 txns: book.txns().cloned().collect(),
@@ -723,7 +725,7 @@ mod properties {
                 manual_sales: Vec::new(),
                 cancellations: Vec::new(),
                 cost_centres: book.cost_centres().cloned().collect(),
-                drink_products: Vec::new(),
+                plugin_records: Vec::new(),
                 next: book.next_ids(),
             };
             prop_assert_eq!(Book::from_parts(parts), Ok(book));
@@ -734,17 +736,17 @@ mod properties {
 // --- conflicts and cancellations (R-TKT-12 to R-TKT-16) ---------------------------------------
 
 /// A sheet as CSV: each `(order, tier)` is one ticket.
-fn csv_sheet(book: &Book, name: &str, rows: &[(&str, &str)]) -> Sheet {
+fn csv_sheet(name: &str, rows: &[(&str, &str)]) -> TicketBatch {
     let mut text = String::from("Order ID,Ticket\n");
     for (order, tier) in rows {
         text.push_str(&format!("{order},{tier}\n"));
     }
-    read_sheet(name, text.as_bytes(), book.ticket_columns()).unwrap()
+    batch(name, text.as_bytes())
 }
 
 fn import_rows(book: &mut Book, day: u8, rows: &[(&str, &str)]) {
     let name = format!("tickets-{day}.csv");
-    let sheet = csv_sheet(book, &name, rows);
+    let sheet = csv_sheet(&name, rows);
     book.import_tickets(&sheet, june(day), now()).unwrap();
 }
 
@@ -1233,10 +1235,10 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
         text.into_bytes()
     };
     store
-        .import_tickets("a.csv", &rows(TWO_REGULAR), june(1))
+        .import_tickets(&batch("a.csv", &rows(TWO_REGULAR)), june(1))
         .unwrap();
     store
-        .import_tickets("b.csv", &rows(ONE_LEFT), june(2))
+        .import_tickets(&batch("b.csv", &rows(ONE_LEFT)), june(2))
         .unwrap();
     let id = store
         .change(|book| {
@@ -1305,7 +1307,9 @@ fn a_file_with_a_cancellation_of_tickets_it_never_had_does_not_open() {
         .change(|book| book.add_tier(tier("Regular", "32", 0)))
         .unwrap();
     let data = b"Order ID,Ticket\n4711,Regular\n";
-    store.import_tickets("a.csv", data, june(1)).unwrap();
+    store
+        .import_tickets(&batch("a.csv", data), june(1))
+        .unwrap();
     store
         .change(|book| {
             book.add_cancellation(CancellationDraft {
@@ -1380,9 +1384,7 @@ mod conflict_properties {
 
             let parts = BookParts {
                 event: book.event().clone(),
-                ticket_columns: book.ticket_columns().clone(),
                 ticket_settings: book.ticket_settings(),
-                drink_settings: book.drink_settings().clone(),
                 accounts: book.accounts().cloned().collect(),
                 persons: book.persons().map(|(a, p)| (a.id, p.clone())).collect(),
                 txns: book.txns().cloned().collect(),
@@ -1395,7 +1397,7 @@ mod conflict_properties {
                 manual_sales: Vec::new(),
                 cancellations: book.cancellations().cloned().collect(),
                 cost_centres: book.cost_centres().cloned().collect(),
-                drink_products: Vec::new(),
+                plugin_records: Vec::new(),
                 next: book.next_ids(),
             };
             prop_assert_eq!(Book::from_parts(parts), Ok(book));
@@ -1461,7 +1463,7 @@ fn the_ticket_account_receives_the_sheet_and_is_needed_to_import() {
     let (mut book, _) = with_tiers();
     let cash = asset(&book, "Cash box");
     book.set_ticket_account(None).unwrap();
-    let rows = sheet(&book, "import-1.ods");
+    let rows = sheet("import-1.ods");
     assert_eq!(
         book.import_tickets(&rows, june(1), now()).unwrap_err(),
         DomainError::NoTicketAccount

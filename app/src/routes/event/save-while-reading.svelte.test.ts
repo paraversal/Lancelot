@@ -10,8 +10,6 @@ import EntryPanel from '#lib/entry/EntryPanel.svelte';
 import { session } from '#lib/state/session.svelte.ts';
 import NewEventPanel from '../NewEventPanel.svelte';
 import BudgetLinePanel from './budget/BudgetLinePanel.svelte';
-import ProductPanel from './centre/ProductPanel.svelte';
-import SettingsPanel from './centre/SettingsPanel.svelte';
 import CountPanel from './overview/CountPanel.svelte';
 import StatementPanel from './overview/StatementPanel.svelte';
 import MarkPaidPanel from './people/payouts/MarkPaidPanel.svelte';
@@ -24,7 +22,7 @@ import TierPanel from './tickets/TierPanel.svelte';
 // Reading a field takes a round trip to the core. These hold that trip open across the click on
 // Save: nothing may be saved until it returns, and then the value typed last must be.
 const api = vi.hoisted(() => ({
-	parseAmount: vi.fn(),
+	parseSum: vi.fn(),
 	parseDate: vi.fn(),
 	saveTxn: vi.fn(),
 	addTier: vi.fn(),
@@ -40,8 +38,6 @@ const api = vi.hoisted(() => ({
 	importTickets: vi.fn(),
 	previewTickets: vi.fn(),
 	createEvent: vi.fn(),
-	updateDrinkProduct: vi.fn(),
-	setDrinkSettings: vi.fn(),
 	ticketShare: vi.fn()
 }));
 const chooseNewEventFile = vi.hoisted(() => vi.fn());
@@ -54,12 +50,12 @@ vi.mock('#lib/api/index.ts', async () => {
 
 const snapshot = example as unknown as EventSnapshot;
 const settle = () => new Promise((r) => setTimeout(r, 0));
-const cents = (n: number) => ({ cents: n, ambiguous: false });
+const cents = (n: number) => ({ cents: n, ambiguous: false, terms: 1 });
 const unreadable = () =>
 	new ApiError({ code: 'bad_grouping', message: 'cannot read this', field: null, report: null });
 
 /** The next read stays open until the returned functions answer it. */
-function hold(parser: typeof api.parseAmount) {
+function hold(parser: typeof api.parseSum) {
 	let resolve!: (value: unknown) => void;
 	let reject!: (reason: unknown) => void;
 	parser.mockImplementationOnce(
@@ -77,7 +73,7 @@ const clickSave = () => fireEvent.click(screen.getByRole('button', { name: /^Sav
 const amountInputs = () => [...document.querySelectorAll('input[inputmode="decimal"]')];
 
 async function typeUnreadable(input: Element) {
-	api.parseAmount.mockRejectedValueOnce(unreadable());
+	api.parseSum.mockRejectedValueOnce(unreadable());
 	await type(input, 'x');
 	await settle();
 }
@@ -100,9 +96,7 @@ const savers = () => [
 	api.updateCancellation,
 	api.resolveConflict,
 	api.importTickets,
-	api.createEvent,
-	api.updateDrinkProduct,
-	api.setDrinkSettings
+	api.createEvent
 ];
 
 const anyCall = () => [api.saveTxn, ...savers()].some((f) => f.mock.calls.length);
@@ -122,7 +116,7 @@ async function saveDuringRead(
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	api.parseAmount.mockReset();
+	api.parseSum.mockReset();
 	api.parseDate.mockReset();
 	session.update({
 		revision: 1,
@@ -169,7 +163,7 @@ describe('The entry panel', () => {
 
 	it('saves the amount typed just before Save, not the old one', async () => {
 		open(6);
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(screen.getByLabelText('Amount'), '2000');
 		await saveDuringRead(held, cents(200000));
 		expect(saved().total).toBe(200000);
@@ -179,9 +173,9 @@ describe('The entry panel', () => {
 	it('waits for the read that leaving the field starts', async () => {
 		open(6);
 		const input = screen.getByLabelText('Amount');
-		const typing = hold(api.parseAmount);
+		const typing = hold(api.parseSum);
 		await type(input, '2000');
-		const leaving = hold(api.parseAmount);
+		const leaving = hold(api.parseSum);
 		await fireEvent.blur(input);
 		await clickSave();
 		await settle();
@@ -195,7 +189,7 @@ describe('The entry panel', () => {
 
 	it('saves the split line typed just before Save', async () => {
 		open(5);
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(lineInputs()[0], '1,23');
 		await saveDuringRead(held, cents(123));
 		expect(saved().entry.lines[0].amount).toBe(123);
@@ -211,7 +205,7 @@ describe('The entry panel', () => {
 
 	it('does not save when the amount that was typed turns out unreadable', async () => {
 		open(6);
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(screen.getByLabelText('Amount'), 'x');
 		await clickSave();
 		held.reject(unreadable());
@@ -240,7 +234,7 @@ describe('The entry panel', () => {
 		open(6);
 		const input = screen.getByLabelText('Amount');
 		await typeUnreadable(input);
-		api.parseAmount.mockResolvedValueOnce(cents(200000));
+		api.parseSum.mockResolvedValueOnce(cents(200000));
 		await type(input, '2000');
 		await settle();
 		await clickSave();
@@ -264,7 +258,7 @@ describe('The tier panel', () => {
 
 	it('saves the price typed just before Save', async () => {
 		render(TierPanel, { id: null, onclose: () => {} });
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(price(), '12');
 		await saveDuringRead(held, cents(1200));
 		expect(api.addTier.mock.calls[0][0].price).toBe(1200);
@@ -284,7 +278,7 @@ describe('The budget line panel', () => {
 
 	it('saves the amount typed just before Save', async () => {
 		render(BudgetLinePanel, { line: null, category: 7, onclose: () => {} });
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(amountInputs()[0], '50');
 		await saveDuringRead(held, cents(5000));
 		expect(api.addBudgetLine.mock.calls[0][0].estimate).toEqual({ type: 'amount', amount: 5000 });
@@ -292,7 +286,7 @@ describe('The budget line panel', () => {
 
 	it('saves the unit price typed just before Save, not the old one', async () => {
 		render(BudgetLinePanel, { line: quantityLine(), category: null, onclose: () => {} });
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(screen.getByLabelText('Unit price'), '30');
 		await saveDuringRead(held, cents(3000));
 		expect(api.updateBudgetLine.mock.calls[0][1].estimate).toEqual({
@@ -343,7 +337,7 @@ describe('The count panel', () => {
 
 	it('saves the count typed just before Save, not the old one', async () => {
 		render(CountPanel, { account: 2, onclose: () => {} });
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(closing(), '420');
 		await saveDuringRead(held, cents(42000));
 		expect(api.setCounts).toHaveBeenCalledWith(2, null, { date: '2026-06-14', amount: 42000 });
@@ -384,7 +378,7 @@ describe('The statement panel', () => {
 
 	it('saves the amount typed just before Save, not the old one', async () => {
 		await open();
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(statement(), '1800');
 		await saveDuringRead(held, cents(180000));
 		expect(api.updateReconciliation).toHaveBeenCalledWith(1, '2026-06-30', 180000);
@@ -392,7 +386,7 @@ describe('The statement panel', () => {
 
 	it('adds a new statement after the read when saved from the keyboard', async () => {
 		render(StatementPanel, { account: 1, onclose: () => {} });
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(statement(), '1800');
 		await fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
 		await settle();
@@ -563,7 +557,7 @@ describe('A conflict card', () => {
 describe('The import panel', () => {
 	const open = async () => {
 		withTickets();
-		render(ImportPanel, { path: '/sheet.csv', onclose: () => {}, onnewtier: () => {} });
+		render(ImportPanel, { batch: {} as never, onclose: () => {}, onnewtier: () => {} });
 		await settle();
 	};
 	const date = () => screen.getByLabelText('Snapshot date');
@@ -626,52 +620,11 @@ describe('The new event panel', () => {
 	});
 });
 
-describe('The drink product panel', () => {
-	const product = { id: 1, name: 'Mate', taken: 10, returned: 0, unitPrice: 100 } as never;
-	const price = () => screen.getByLabelText('Price per unit');
-
-	it('saves the price typed just before Save, not the old one', async () => {
-		render(ProductPanel, { product, onclose: () => {} });
-		const held = hold(api.parseAmount);
-		await type(price(), '2');
-		await saveDuringRead(held, cents(200));
-		expect(api.updateDrinkProduct.mock.calls[0][1].unitPrice).toBe(200);
-	});
-
-	it('does not save a price it cannot read', async () => {
-		render(ProductPanel, { product, onclose: () => {} });
-		await typeUnreadable(price());
-		await clickSave();
-		await settle();
-		expect(api.updateDrinkProduct).not.toHaveBeenCalled();
-	});
-});
-
-describe('The drinks settings panel', () => {
-	const price = () => screen.getByLabelText('Price per Strich');
-
-	it('saves the price typed just before Save, not the old one', async () => {
-		render(SettingsPanel, { onclose: () => {} });
-		const held = hold(api.parseAmount);
-		await type(price(), '2');
-		await saveDuringRead(held, cents(200));
-		expect(api.setDrinkSettings.mock.calls[0][0].pricePerStrich).toBe(200);
-	});
-
-	it('does not clear a price it cannot read', async () => {
-		render(SettingsPanel, { onclose: () => {} });
-		await typeUnreadable(price());
-		await clickSave();
-		await settle();
-		expect(api.setDrinkSettings).not.toHaveBeenCalled();
-	});
-});
-
 describe('A field that is gone', () => {
 	it('ignores an amount read that returns afterwards', async () => {
 		const oninput = vi.fn();
 		const { unmount } = render(AmountField, { label: 'Late', value: null, format: 'de', oninput });
-		const held = hold(api.parseAmount);
+		const held = hold(api.parseSum);
 		await type(screen.getByLabelText('Late'), '5');
 		unmount();
 		held.resolve(cents(500));

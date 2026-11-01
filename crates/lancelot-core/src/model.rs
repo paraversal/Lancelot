@@ -63,11 +63,11 @@ pub struct ManualSaleId(#[ts(type = "number")] pub i64);
 #[serde(transparent)]
 pub struct CostCentreId(#[ts(type = "number")] pub i64);
 
-/// Identifies a commission product within one event (R-DRK-5).
+/// Identifies a plugin's record within one event (technical design §10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
 #[serde(transparent)]
-pub struct DrinkProductId(#[ts(type = "number")] pub i64);
+pub struct PluginRecordId(#[ts(type = "number")] pub i64);
 
 /// Identifies a reconciliation checkpoint within one event (R-ACC-4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]

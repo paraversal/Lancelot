@@ -1,9 +1,11 @@
 <script lang="ts">
 	import '#lib/styles/tokens.css';
+	import '#lib/styles/theme.css';
 	import '#lib/styles/base.css';
 	import '#lib/styles/forms.css';
 	import { onMount } from 'svelte';
 	import { api } from '#lib/api/index.ts';
+	import { applyAppearance } from '#lib/appearance.ts';
 	import { motion, reduced, watchReducedMotion } from '#lib/motion/mode.svelte.ts';
 	import { installShortcuts } from '#lib/shortcuts.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -38,6 +40,10 @@
 	});
 	$effect(() => {
 		document.documentElement.dataset.motion = reduced() ? 'reduced' : 'full';
+	});
+	// Light or dark: the system's, unless Settings overrides it. Also sets the window's title bar.
+	$effect(() => {
+		applyAppearance(session.settings?.appearance ?? 'system');
 	});
 </script>
 

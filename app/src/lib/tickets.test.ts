@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import example from './api/fixtures/example-event.json';
+import type { EventSnapshot } from './api/generated/EventSnapshot';
 import type { SalesPoint } from './api/generated/SalesPoint';
 import type { TierFigures } from './api/generated/TierFigures';
 import type { Tickets } from './api/generated/Tickets';
@@ -8,11 +10,40 @@ import {
 	feeInput,
 	formatFee,
 	labelStep,
+	otherTicketIncome,
 	parseCount,
 	parseFee,
 	salesBars,
 	totalQuota
 } from './tickets';
+
+describe('other ticket income', () => {
+	const snapshot = example as unknown as EventSnapshot;
+	const category = snapshot.accounts.find((a) => a.role === 'tickets')!;
+
+	it('adds up what was typed into the category', () => {
+		expect(otherTicketIncome(snapshot)).toBe(652750);
+	});
+
+	it('leaves out generated income', () => {
+		const txns = snapshot.txns.map((t) =>
+			t.lines.some((l) => l.account === category.id)
+				? { ...t, origin: { type: 'ticketImport' as const, tier: 1 } }
+				: t
+		);
+		expect(otherTicketIncome({ ...snapshot, txns })).toBe(0);
+	});
+
+	it('takes off a correction typed as a negative amount', () => {
+		const correction = {
+			...snapshot.txns[0],
+			origin: { type: 'manual' as const },
+			lines: [{ account: category.id, amount: 5000, budgetLine: null, costCentre: null }]
+		};
+		const txns = [...snapshot.txns, correction];
+		expect(otherTicketIncome({ ...snapshot, txns })).toBe(647750);
+	});
+});
 
 describe('conflicts', () => {
 	it('count per order and tier', () => {

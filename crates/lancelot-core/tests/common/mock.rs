@@ -2,6 +2,7 @@
 //! Only the totals come from the mockups; the transactions behind them are made up.
 
 use lancelot_core::*;
+use serde_json::{Value, json};
 
 use super::{asset, draft, eur, expense, income, june, split};
 
@@ -16,8 +17,7 @@ pub trait Target {
     fn checkpoint(&mut self, account: AccountId, date: time::Date, amount: Cents);
     fn budget(&mut self, draft: BudgetLineDraft) -> BudgetLineId;
     fn save_draft(&mut self, draft: TxnDraft) -> TxnId;
-    fn product(&mut self, draft: DrinkProductDraft);
-    fn drink_settings(&mut self, settings: DrinkSettings);
+    fn edit<R>(&mut self, command: impl FnOnce(&mut Book) -> Result<R, DomainError>) -> R;
 }
 
 impl Target for Book {
@@ -57,11 +57,8 @@ impl Target for Book {
     fn save_draft(&mut self, draft: TxnDraft) -> TxnId {
         self.save_txn(&draft, None).unwrap().id
     }
-    fn product(&mut self, draft: DrinkProductDraft) {
-        self.add_drink_product(draft).unwrap();
-    }
-    fn drink_settings(&mut self, settings: DrinkSettings) {
-        self.set_drink_settings(settings).unwrap();
+    fn edit<R>(&mut self, command: impl FnOnce(&mut Book) -> Result<R, DomainError>) -> R {
+        command(self).unwrap()
     }
 }
 
@@ -106,11 +103,8 @@ impl Target for Store {
     fn save_draft(&mut self, draft: TxnDraft) -> TxnId {
         self.change(|b| b.save_txn(&draft, None)).unwrap().id
     }
-    fn product(&mut self, draft: DrinkProductDraft) {
-        self.change(|b| b.add_drink_product(draft)).unwrap();
-    }
-    fn drink_settings(&mut self, settings: DrinkSettings) {
-        self.change(|b| b.set_drink_settings(settings)).unwrap();
+    fn edit<R>(&mut self, command: impl FnOnce(&mut Book) -> Result<R, DomainError>) -> R {
+        self.change(command).unwrap()
     }
 }
 
@@ -124,24 +118,31 @@ pub struct Mock {
 }
 
 pub fn build(t: &mut impl Target) -> Mock {
+    // What the drinks plugin's setup creates.
+    let (centre, donations, drinks, deposit) = t.edit(|b| {
+        let centre = b.add_cost_centre("Drinks")?;
+        let donations = b.add_account(AccountKind::Income, "Drink donations")?;
+        let drinks = b.add_account(AccountKind::Expense, "Drinks")?;
+        let deposit = b.add_account(AccountKind::Expense, "Deposit")?;
+        for category in [donations, drinks, deposit] {
+            b.set_category_cost_centre(category, Some(centre))?;
+        }
+        Ok((centre, donations, drinks, deposit))
+    });
     let b = t.book();
     let (verein, cash) = (asset(b, "Verein account"), asset(b, "Cash box"));
-    let [tickets, donations, other_in] =
-        ["Tickets", "Drink donations", "General"].map(|n| income(b, n));
-    let [food, venue, drinks, pfand, tech, other, mobility] = [
-        "Kitchen", "Venue", "Drinks", "Pfand", "Tech", "General", "Mobility",
-    ]
-    .map(|n| expense(b, n));
-    let centre = b.drinks_cost_centre().unwrap().id;
+    let [tickets, other_in] = ["Tickets", "General"].map(|n| income(b, n));
+    let [food, venue, tech, other, mobility] =
+        ["Kitchen", "Venue", "Tech", "General", "Mobility"].map(|n| expense(b, n));
     let tag = move |account| {
-        [donations, drinks, pfand]
+        [donations, drinks, deposit]
             .contains(&account)
             .then_some(centre)
     };
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
     // The budget. The mockups have none, so it is made up: some lines over, some under, some
-    // complete, and a few receipts left unbudgeted (Pfand, cups, cables, decoration).
+    // complete, and a few receipts left unbudgeted (Deposit, cups, cables, decoration).
     let mut plan = |category, description: &str, estimate, complete| {
         t.budget(BudgetLineDraft {
             cost_centre: tag(category),
@@ -200,26 +201,40 @@ pub fn build(t: &mut impl Target) -> Mock {
     );
     t.save("Donation box", income_to(cash, split(other_in, "50")));
 
-    // The drinks: the supplier's invoice checks against the records (R-DRK-5).
-    t.drink_settings(DrinkSettings {
-        supplier: Some("Hoffmann".into()),
-        price_per_strich: Some(eur("1,00")),
-        ..t.book().drink_settings().clone()
-    });
-    for (name, taken, returned, unit) in [
-        ("Club-Mate 0,5", 240, 96, "1,15"),
-        ("Pils 0,33", 480, 312, "0,95"),
-        ("Radler 0,33", 120, 72, "0,95"),
-        ("Apfelschorle 1,0", 72, 48, "1,40"),
-        ("Water 1,0", 96, 70, "0,60"),
-    ] {
-        t.product(DrinkProductDraft {
-            name: name.into(),
-            taken,
-            returned,
-            unit_price: eur(unit),
+    // The drinks plugin's records: the supplier's invoice checks against them.
+    let mut records = vec![PluginChange {
+        key: format!("centre:{}", centre.0),
+        scope: PluginScope::Setup,
+        value: json!({ "supplier": "Hoffmann", "deposit": deposit.0 }),
+    }];
+    for (id, (name, taken, returned, left_over, logged, cost, donation)) in [
+        ("Club-Mate 0,5", 240, 96, 4, 138, 115, 250),
+        ("Pils 0,33", 480, 312, 0, 165, 95, 200),
+        ("Radler 0,33", 120, 72, 2, 45, 95, 200),
+        ("Apfelschorle 1,0", 72, 48, 2, 22, 140, 300),
+        ("Water 1,0", 96, 70, 6, 20, 60, 100),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        records.push(PluginChange {
+            key: format!("product:{}", id + 1),
+            scope: PluginScope::Setup,
+            value: json!({ "centre": centre.0, "name": name, "cost": cost, "donation": donation }),
+        });
+        records.push(PluginChange {
+            key: format!("count:{}", id + 1),
+            scope: PluginScope::Records,
+            value: json!({
+                "taken": taken,
+                "returned": returned,
+                "leftOver": left_over,
+                "manual": logged,
+                "imported": Value::Null,
+            }),
         });
     }
+    t.edit(|b| b.apply_plugin_changes("drinks".into(), records));
     let invoice = t.save_draft(TxnDraft {
         counterparty: Some("Hoffmann".into()),
         ..draft(
@@ -229,8 +244,8 @@ pub fn build(t: &mut impl Target) -> Mock {
                 vec![
                     to(b_drinks)(drinks, "420"),
                     SplitLine {
-                        cost_centre: tag(pfand),
-                        ..split(pfand, "32")
+                        cost_centre: tag(deposit),
+                        ..split(deposit, "32")
                     },
                 ],
             ),

@@ -15,6 +15,10 @@
 //!    likely a typo of `1,23` or `12,34` than a thousand euros.
 //!
 //! The test cases live in `fixtures/amount-input.json`.
+//!
+//! Amount fields also add up what is typed into them (`1,29+1,49`, see [`parse_sum`]). Only the
+//! fields do: a cell of a file that reads `10-12` is not a sum, so everything else stays with
+//! [`parse_amount`]. The test cases live in `fixtures/amount-sum.json`.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -72,6 +76,17 @@ pub struct Parsed {
     pub ambiguous: bool,
 }
 
+/// The total of an amount field's input.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct ParsedSum {
+    pub cents: Cents,
+    /// At least one term was read according to the number format setting.
+    pub ambiguous: bool,
+    /// How many amounts were added up; 1 for a plain amount.
+    pub terms: u32,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 pub enum AmountError {
     #[error("no amount entered")]
@@ -88,6 +103,8 @@ pub enum AmountError {
     NegativeNotAllowed,
     #[error("amount is too large")]
     TooLarge,
+    #[error("a sum needs a number between its signs")]
+    MissingTerm,
 }
 
 impl AmountError {
@@ -101,6 +118,7 @@ impl AmountError {
             AmountError::MisplacedSign => "misplaced_sign",
             AmountError::NegativeNotAllowed => "negative_not_allowed",
             AmountError::TooLarge => "too_large",
+            AmountError::MissingTerm => "missing_term",
         }
     }
 }
@@ -149,6 +167,53 @@ pub fn parse_amount(
     let cents = if negative { -cents } else { cents };
     let cents = Cents::new(cents).map_err(|_| AmountError::TooLarge)?;
     Ok(Parsed { cents, ambiguous })
+}
+
+/// Adds up what was typed into an amount field, each term read by [`parse_amount`]. One sign at
+/// the end is the next term still being typed and is ignored. `allow_negative` applies to the
+/// total only, so `10-2` is fine in a field that takes no negative amounts.
+pub fn parse_sum(
+    input: &str,
+    format: NumberFormat,
+    allow_negative: bool,
+) -> Result<ParsedSum, AmountError> {
+    let cleaned: String = input
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '€')
+        .collect();
+    let body = cleaned.strip_suffix(is_sign).unwrap_or(&cleaned);
+
+    let mut starts: Vec<usize> = body
+        .char_indices()
+        .skip(1)
+        .filter(|(_, c)| is_sign(*c))
+        .map(|(i, _)| i)
+        .collect();
+    starts.insert(0, 0);
+    let terms = starts.len();
+
+    let mut total = 0_i64;
+    let mut ambiguous = false;
+    for (n, start) in starts.iter().enumerate() {
+        let end = starts.get(n + 1).copied().unwrap_or(body.len());
+        let parsed = parse_amount(&body[*start..end], format, true).map_err(|e| match e {
+            AmountError::Empty if terms > 1 => AmountError::MissingTerm,
+            e => e,
+        })?;
+        total = total
+            .checked_add(parsed.cents.get())
+            .ok_or(AmountError::TooLarge)?;
+        ambiguous |= parsed.ambiguous;
+    }
+
+    if total < 0 && !allow_negative {
+        return Err(AmountError::NegativeNotAllowed);
+    }
+    Ok(ParsedSum {
+        cents: Cents::new(total).map_err(|_| AmountError::TooLarge)?,
+        ambiguous,
+        terms: terms as u32,
+    })
 }
 
 /// Splits `body` (digits and separators only) into its integer digits, its decimal digits and
@@ -422,6 +487,49 @@ mod tests {
     }
 
     #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct SumCase {
+        input: String,
+        format: NumberFormat,
+        #[serde(default = "yes")]
+        allow_negative: bool,
+        cents: Option<i64>,
+        #[serde(default)]
+        ambiguous: bool,
+        terms: Option<u32>,
+        error: Option<String>,
+    }
+
+    #[test]
+    fn sum_fixture_cases() {
+        let cases: Vec<SumCase> =
+            serde_json::from_str(include_str!("../../../fixtures/amount-sum.json")).unwrap();
+        for case in cases {
+            let got = parse_sum(&case.input, case.format, case.allow_negative);
+            let label = format!("{:?} ({:?})", case.input, case.format);
+            match (case.cents, case.terms, case.error) {
+                (Some(c), Some(terms), None) => {
+                    let sum = got.unwrap_or_else(|e| panic!("{label}: unexpected {e:?}"));
+                    assert_eq!(sum.cents.get(), c, "{label}");
+                    assert_eq!(sum.ambiguous, case.ambiguous, "{label}: ambiguity");
+                    assert_eq!(sum.terms, terms, "{label}: terms");
+                }
+                (None, None, Some(code)) => {
+                    let e = got.expect_err(&label);
+                    assert_eq!(e.code(), code, "{label}");
+                }
+                _ => panic!("{label}: needs `cents` and `terms`, or `error`"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_strict_amount_is_not_a_sum() {
+        assert_eq!(err("10-12", De), AmountError::MisplacedSign);
+        assert_eq!(err("1+1", De), AmountError::MisplacedSign);
+    }
+
+    #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct FormatCase {
         cents: i64,
@@ -467,6 +575,21 @@ mod tests {
         #[test]
         fn parsing_never_panics(input in "[-−+€ 0-9.,a]{0,20}", f in any_format(), neg: bool) {
             let _ = parse_amount(&input, f, neg);
+            let _ = parse_sum(&input, f, neg);
+        }
+
+        #[test]
+        fn a_valid_amount_reads_the_same_as_a_sum(
+            input in "[-−+€ 0-9.,a]{0,20}",
+            f in any_format(),
+            neg: bool,
+        ) {
+            if let Ok(parsed) = parse_amount(&input, f, neg) {
+                let sum = parse_sum(&input, f, neg).unwrap();
+                prop_assert_eq!(sum.cents, parsed.cents);
+                prop_assert_eq!(sum.ambiguous, parsed.ambiguous);
+                prop_assert_eq!(sum.terms, 1);
+            }
         }
     }
 }

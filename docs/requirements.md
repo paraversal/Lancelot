@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.10 · 2026-10-31
+Status: draft v0.13 · 2026-11-01
 
 ## 1. Purpose
 
@@ -44,9 +44,9 @@ Mathematical correctness is **not** a non-goal. It is the top priority.
 | **Reimbursement**                      | Paying an advance back to the person. Default source: the Verein account.                                                                                                                                                                                                                                                                                                                                         |
 | **Category**                           | The kind of income or expense. Every transaction line has one (Tickets, Kitchen, Mobility, Drinks, General, …).                                                                                                                                                                                                                                                                                                   |
 | **Budget line**                        | A planned income or expense with an estimated amount.                                                                                                                                                                                                                                                                                                                                                             |
-| **Cost centre**                        | A sub-area of an event with its own profit and loss. Drinks is the first one.                                                                                                                                                                                                                                                                                                                                     |
+| **Cost centre**                        | A sub-area of an event with its own profit and loss, such as Drinks.                                                                                                                                                                                                                                                                                                                                              |
 | **Commission goods (Kommissionsware)** | Goods taken from a supplier with the right to return unsold units. Only what is kept is paid for.                                                                                                                                                                                                                                                                                                                 |
-| **Strich / Strichliste**               | A tally mark one person makes per drink, recorded under their name. At the end of the event people pay according to their Striche, at one fixed price per Strich.                                                                                                                                                                                                                                                 |
+| **Strich / Strichliste**               | A tally mark on a paper list, worth a fixed amount of money (for example 0,50 €), so it doesn't say which drink it was for. Lancelot treats a Strich as a product with a donation price and a logged count (§5.9).                                                                                                                                                                                                |
 
 ## 4. Domain model
 
@@ -56,13 +56,13 @@ Every transaction moves an amount **from** one account **to** another. That make
 
 Account kinds:
 
-| Kind                | Examples                                   | Balance meaning                                                                                                                                                                                   |
-| ------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Asset**           | Verein account, cash box                   | Event money sitting there                                                                                                                                                                         |
-| **Person**          | One per person involved                    | Net balance. Positive: the event owes the person (advances exceed money held). Negative: the person holds event money and owes it to the event. Advances and held money cancel out automatically. |
-| **Income**          | Tickets, Drink donations, General          | Total earned per category                                                                                                                                                                         |
-| **Expense**         | Kitchen, Drinks, Pfand, Mobility, Venue, … | Total spent per category                                                                                                                                                                          |
-| **Opening balance** | One per event                              | The counterpart for opening counts (e.g. cash box at start)                                                                                                                                       |
+| Kind                | Examples                                     | Balance meaning                                                                                                                                                                                   |
+| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Asset**           | Verein account, cash box                     | Event money sitting there                                                                                                                                                                         |
+| **Person**          | One per person involved                      | Net balance. Positive: the event owes the person (advances exceed money held). Negative: the person holds event money and owes it to the event. Advances and held money cancel out automatically. |
+| **Income**          | Tickets, Drink donations, General            | Total earned per category                                                                                                                                                                         |
+| **Expense**         | Kitchen, Drinks, Deposit, Mobility, Venue, … | Total spent per category                                                                                                                                                                          |
+| **Opening balance** | One per event                                | The counterpart for opening counts (e.g. cash box at start)                                                                                                                                       |
 
 How the real flows map onto this:
 
@@ -102,7 +102,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 ### 5.2 Accounts
 
 - **R-ACC-1** Configurable asset accounts per event, each either **bank** or **cash**. They are added, renamed and switched between bank and cash in Settings. Defaults: Verein account (bank), Cash box (cash). Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
-- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, Drink donations, General; expenses Kitchen, Drinks, Pfand, Mobility, Venue, Tech, General.
+- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, General; expenses Kitchen, Mobility, Venue, Tech, General. The drinks plugin's setup adds Drink donations, Drinks and Deposit (§5.9).
 - **R-ACC-3** Every account shows its derived balance and its transaction history.
 - **R-ACC-4** **Reconciliation checkpoints**: the user enters "statement shows X on date D" for an asset account. Lancelot flags any mismatch with the computed balance at D. On a net-movement account this compares the net movement for the event, not the absolute balance.
 
@@ -131,7 +131,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 ### 5.5 Budget (plan vs actual)
 
 - **R-BUD-1** Budget lines per event: category, optional cost centre, description, and the estimate, either as an amount or as quantity × unit price.
-- **R-BUD-2** Actual transaction lines can be linked to a budget line (many-to-one).
+- **R-BUD-2** Actual transaction lines can be linked to a budget line (many-to-one), which must be of the line's category. The entry form offers every budget line of its kind, and choosing one from another category changes the line's category.
 - **R-BUD-3** A plan-vs-actual view per line, per category, per cost centre and in total.
 - **R-BUD-4** A **forecast** result: for each budget line, use the actual amount if it is marked complete, otherwise the cautious one of the estimate and the actual so far: the larger for an expense line, the smaller for an income line. Unbudgeted actuals are added on top.
 - **R-BUD-5** Budget lines are planning data only and never affect real balances.
@@ -140,10 +140,10 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 - **R-TKT-1** **Ticket tiers** per event: name, price, fee percentage (default 0 %, see R-TKT-10), and an optional quota. They are stored in the event file and copied by templates (R-EVT-3). This is the tier→price mapping that the ticket sheet lacks.
 - **R-TKT-2** Each tier has a list of **aliases**: the exact names used for it in the ticket sheet.
-- **R-TKT-3** **Import the ticket sheet.** The primary format is `.ods`; `.xlsx` and `.csv` are also supported because the parser handles them for free. By default the first sheet is read and each row counts as one ticket. The tier comes from the `Ticket` column and the order from the `Order ID` column. The column names can be changed in the import settings (tier column, order ID column), in case the Verein's format changes. A sale date column follows once it is read (R-TKT-8). The account the sheet's money arrives in is set next to them; it is needed only to import. These settings are saved in the event and copied by templates.
+- **R-TKT-3** **Import the ticket sheet.** The primary format is `.ods`; `.xlsx` and `.csv` are also supported because the parser handles them for free. By default the first sheet is read and each row counts as one ticket. The tier comes from the `Ticket` column and the order from the `Order ID` column. The column names can be changed in the import settings (tier column, order ID column), in case the Verein's format changes. A sale date column follows once it is read (R-TKT-8). The account the money arrives in is set in the import's review; it is needed only to import. These settings are saved in the event and copied by templates. Reading the sheet is the built-in **Ticket sheet** plugin, switched in Settings → Plugins; the **Ticket API** plugin pulls them from a data source instead (technical design §10), and every import goes through the same review. Off, imports already made still count and manual sales still work.
 - **R-TKT-19** Tickets are **optional** per event, switched in Settings. Off hides the Tickets page and the Overview block, and removes the ticket categories; a category something refers to stays as an ordinary one. It is refused while the event has tiers. Templates copy the switch.
 - **R-TKT-4** Tier names in the sheet that match no tier or alias **block the import** until the user maps them. Rows are never silently skipped. Rows that cannot be parsed are listed.
-- **R-TKT-5** **Re-import** an updated sheet: this replaces the previous import and shows a preview of what changed (e.g. "+14 Regular, −2 Early Bird") before confirming. For traceability, each import records the file name, a SHA-256 hash of the file, and the extracted rows. The file itself is **not** stored (R-TKT-17). Removed tickets create import conflicts (R-TKT-12).
+- **R-TKT-5** **Re-import** an updated sheet: this replaces the previous import and shows a preview of what changed (e.g. "+14 Regular, −2 Early Bird") before confirming. For traceability, each import records the file name and a SHA-256 hash of the file, or for a pull the data source's label and a hash of the rows, along with the extracted rows. The file itself is **not** stored (R-TKT-17). Removed tickets create import conflicts (R-TKT-12).
 - **R-TKT-6** Imported sales generate ticket income on the ticket account (default: the Verein account): one transaction per tier, worth count × tier price (gross). If the tier has a fee, the same transaction includes a line `Expense: Ticket fees` for the fee amount, so that account receives the net. These transactions are marked _imported_, cannot be edited by hand, and are regenerated on re-import.
 - **R-TKT-7** Tickets sold outside the regular channels are entered manually (tier, count, the account or person who received the money, and an optional free-text reference). They generate `Income: Tickets → that account or person` and count towards the same statistics. They never appear in the ticket sheet, so they never cause import conflicts.
 - **R-TKT-8** **Sales statistics:** tickets sold over time (cumulative, per tier and in total), revenue over time, cancellations, and sold vs quota per tier.
@@ -190,32 +190,30 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 - **R-PER-5** After the payout list has been paid, the user can record all of its reimbursements in one action.
 - **R-PER-6** Optional, later: export the payout list as SEPA pain.001 XML for batch upload.
 
-### 5.8 Cost centres and Drinks
+### 5.8 Cost centres
 
 - **R-CC-1** Any transaction line or budget line can be tagged with a cost centre. Each cost centre has its own P&L: income minus expenses tagged to it. Each has its own page, listed in the sidebar under the pages: income, expenses, result and the tagged lines.
-- **R-CC-2** A **Drinks** cost centre and a **Pfand** category are created by default and named in the drink settings. Both can be deleted, and another can take their place. The drinks' cost centre stays while it holds records; its page adds them with the invoice check.
-- **R-DRK-1** Drinks are bought on commission. The supplier bills after the return, so the drinks cost is normally one invoice for the drinks actually kept.
-- **R-DRK-2** Pfand is recorded as its own expense category (`Pfand`) in the Drinks cost centre. It only occurs for drinks that could not be returned because only full crates can be returned. Pfand on drinks that were sold and returned as empties is not tracked.
-- **R-DRK-3** Drink revenue is recorded as income `Drink donations`, wherever it was collected (cash box, held account, Verein account).
-- **R-DRK-4** The Drinks P&L shows: cost (drinks + Pfand), revenue (donations), and the result (profit or loss).
-- **R-DRK-5** Optional per-product records: product, units taken, units returned, units kept, and price per unit. These let the tool check the supplier invoice and compute the cost per drink.
-- **R-DRK-6** **Price per Strich** is a single event setting. It applies to all drinks.
+- **R-CC-2** A new event has no cost centres. Plugins can add sections to a cost centre's page (technical design §10).
 
-### 5.9 Strichliste (optional, pluggable)
+### 5.9 Drinks (built-in plugin)
 
-- **R-STR-1** A generic **Strichliste provider interface**, so that a provider for any service can be written later. The plan for now is simply a CSV import; the interface is added when a second source appears.
-- **R-STR-2** A provider delivers a list of tallies: person name, count, product (optional), timestamp (optional).
-- **R-STR-3** If tallies are present, the Drinks view additionally shows:
-  - the expected revenue (Σ Striche × price per Strich, R-DRK-6) against the actual donations, and
-  - per person, the Striche and amount due, with an optional "paid" checkbox.
-- **R-STR-4** Strichliste data is informational only. It never creates transactions automatically, because the real money is what was actually collected.
-- **R-STR-5** The whole feature can be turned off per event, which hides it from the UI.
+The plugin is called **Stock and sales**. It is optional: Settings → Plugins switches it per event, and it shows in a frame marked as a plugin. It can be attached to any cost centre. "Set up Drinks" creates a Drinks cost centre with its categories. Everything below is informational: it never creates transactions, and an event settles the same without it, because the real money is what was actually collected.
+
+- **R-DRK-1** Drinks are bought on commission. The supplier bills after the return, so the drinks cost is normally one invoice for the units not returned.
+- **R-DRK-2** A returnable deposit, such as Pfand in Germany, is recorded as its own expense category, which is optional: the Commission panel can name one or leave it empty. It only occurs for drinks that could not be returned because only full crates can be returned. Deposit on drinks that were sold and returned as empties is not tracked.
+- **R-DRK-3** Drink revenue is recorded as income on the cost centre, usually `Drink donations`, wherever it was collected (cash box, held account, Verein account).
+- **R-DRK-4** The cost centre's page shows cost, revenue and the result (R-CC-1). That result includes everything billed, also what is left over.
+- **R-DRK-5** Optional records per product: cost per unit, donation per unit, units taken, returned and left over, and units logged. `Billed = taken − returned`, `gone = billed − left over`, `unaccounted = gone − logged`. A blank left over counts as zero. Unaccounted is not proof of dishonesty: it can also be crew drinks or breakage.
+- **R-DRK-6** `Logged = imported + typed in`, never below zero. The typed-in part may be negative, for a correction. A sales import replaces only the imported part. It pulls from a data source set up in Settings → Plugins (technical design §10), shows the changes first, and a name that matches no product blocks it until it is mapped, which is remembered. Importing from a file is not built yet.
+- **R-DRK-7** **Expected donations** are logged × donation per unit, shown against the income actually collected. A paper list is one product, `Strich`, with its value as the donation, no stock and only a logged count. Expected donations still work; the other products show no logged figure and no unaccounted figure.
+- **R-DRK-8** **Invoice check:** the expenses tagged to the cost centre whose counterparty is the supplier, without the deposit, against the billed cost. "Book invoice" opens the normal expense form, pre-filled. Without a supplier it asks for one and goes straight on.
+- **R-DRK-9** Cost per drink is the cost of what is gone per unit gone, so left-over stock doesn't count.
 
 ### 5.10 Settlement report
 
 - **R-SET-1** Per event: income by category, expenses by category, result.
 - **R-SET-2** Plan vs actual summary.
-- **R-SET-3** P&L per cost centre (Drinks).
+- **R-SET-3** P&L per cost centre.
 - **R-SET-4** **Final balance:** the balance per asset account (Verein account net movement, and the cash box with its closing count and any discrepancy). This is the event's final state.
 - **R-SET-5** **Open items:** persons with a non-zero net balance (in either direction), missing receipts, unresolved reconciliation mismatches, and unresolved ticket import conflicts.
 - **R-SET-6** Export as PDF (human-readable, with the receipts) and CSV (raw transactions, one row per line).
@@ -228,7 +226,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 - **R-COR-2** Every transaction balances to exactly zero. This is enforced when a transaction is built, before each commit by reading the write back, and whenever a file is loaded. The database's column checks stay; it has no trigger for it.
 - **R-COR-3** Splitting rule: when an amount is divided (e.g. quantity × unit price, or splitting equally), the remainder cents go to the first lines. Percentages (fees) are computed in integer arithmetic and rounded half-up (R-TKT-10). The rules are deterministic and documented.
 - **R-COR-4** All balances and reports are derived from transactions. No cached totals unless they are verified on load.
-- **R-COR-5** An **integrity check** runs on every open and save, and on demand: every transaction balances, no line points to a missing account, attachments are intact (by hash), and reimbursements do not exceed their advances. Failures are shown prominently.
+- **R-COR-5** An **integrity check** runs on every open and save, and on demand: every transaction balances, no line points to a missing account, and attachments are intact (by hash). Failures are shown prominently. A person who was reimbursed or repaid past a zero balance is a warning, not a failure, because corrections happen.
 - **R-COR-6** All calculation logic lives in a single core module with extensive unit tests and property-based tests (e.g. "for any sequence of valid transactions, the sum of all account balances is 0").
 - **R-COR-7** Single currency: EUR.
 
@@ -236,7 +234,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 - **R-NF-1** Local desktop application. Primary platform macOS, with Windows and Linux possible.
 - **R-NF-2** Fast: the app starts in under 1 second, and every interaction responds instantly at expected data sizes (≈ 40–100 transactions and ≈ 100 attachments per event).
-- **R-NF-3** Works fully offline.
+- **R-NF-3** Works fully offline. Pulling from a data source is the only use of the network: it is optional, and a failed pull changes nothing.
 - **R-NF-4** The event file is a single file in an open format, readable without Lancelot.
 - **R-NF-5** Automatic backup: keep the last N versions of each event file next to it, or in an app data directory.
 - **R-NF-6** UI language: English. The **number and date format** is a user setting (app-wide, not per event). Options: `1.234,56 €` / `31.12.2026`, or `€1,234.56` / `2026-12-31`. The default follows the OS locale.
@@ -248,6 +246,8 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
   - **Ambiguous case:** a single separator followed by exactly three digits (`1.234`, `1,234`) is read according to the user's format setting, and the hint below says so.
   - The field always shows a live preview of the interpreted value (e.g. "= €1,234.00") before it is committed. Invalid input is flagged and cannot be saved.
   - The currency sign and spaces are ignored. A leading `-` is allowed only where negative amounts make sense.
+  - **Sums:** a field also adds up what is typed into it with `+` and `-`, such as `1,29+1,49`, and previews the total. The sum stays on show until the field is reset, but only the total is saved. A sign at the end is ignored, and only the total has to be allowed in that field, so `10-2` is fine where negative amounts aren't.
+- **R-NF-9** **Appearance** is a user setting (app-wide, not per event): System, Light or Dark, following the system by default. Printing stays light.
 
 ## 8. Proposed architecture
 
@@ -261,7 +261,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 | Storage      | **SQLite**, one `.lancelot` file per event, attachments as BLOBs                                            | One portable file, transactional writes, open format, trivial backup.                                   |
 | Money type   | `Cents(i64)` newtype in Rust. Crosses the IPC boundary as an integer, formatted for display in the UI only. | Rules out float errors by construction.                                                                 |
 | PDF export   | The webview's print dialog, with `typst` as an option for the polished report (M13)                         | Decided in the [technical design](technical-design.md).                                                 |
-| Strichliste  | A CSV import in core                                                                                        | Matches R-STR-1.                                                                                        |
+| Sales log    | The drinks plugin, pulling from a data source; a file import when the app's export is known                 | R-DRK-6. Only per-product totals are kept, so the file doesn't record who drank what.                   |
 | Excel import | `calamine` crate in Rust (reads .xlsx/.xls/.ods)                                                            | Pure Rust, read-only, no Office installation needed.                                                    |
 | Charts       | Hand-written SVG components, no library                                                                     | The design needs only simple bars. Decided in the [technical design](technical-design.md).              |
 
@@ -276,8 +276,8 @@ The Tauri approach has one real cost: the IPC boundary between Svelte and Rust. 
 ## 9. Phasing
 
 1. **MVP**: event file, accounts, typed transaction entry with splits, attachments, persons with IBAN and netting, reimbursements and repayments, person overview, payout list, settlement report, integrity check. Ticket income is entered manually.
-2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records, reconciliation checkpoints, templates from previous events.
-3. **Phase 3**: Strichliste interface and CSV import, SEPA XML export, polished PDF reports, receipt OCR.
+2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records (now the drinks plugin), reconciliation checkpoints, templates from previous events.
+3. **Phase 3**: drink sales import from a file, SEPA XML export, polished PDF reports.
 
 ## 10. Remaining open points
 

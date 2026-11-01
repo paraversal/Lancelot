@@ -7,20 +7,28 @@
 		name,
 		value,
 		options,
+		hint,
 		onchange
 	}: {
 		label?: string;
 		/** The accessible name when there is no visible label. */
 		name?: string;
 		value: V;
-		options: { value: V; label: string }[];
+		options: { value: V; label: string; group?: string }[];
+		hint?: import('svelte').Snippet;
 		onchange: (value: V) => void;
 	} = $props();
 
 	const id = $props.id();
+	const groups = $derived(
+		[...new Set(options.map((o) => o.group ?? ''))].map((g) => ({
+			group: g,
+			options: options.filter((o) => (o.group ?? '') === g)
+		}))
+	);
 </script>
 
-<Field {label} {id}>
+<Field {label} {id} {hint}>
 	<select
 		{id}
 		aria-label={name}
@@ -30,8 +38,14 @@
 			if (picked) onchange(picked.value);
 		}}
 	>
-		{#each options as o (o.value)}
-			<option value={String(o.value)}>{o.label}</option>
+		{#each groups as g (g.group)}
+			{#if g.group}
+				<optgroup label={g.group}>
+					{#each g.options as o (o.value)}<option value={String(o.value)}>{o.label}</option>{/each}
+				</optgroup>
+			{:else}
+				{#each g.options as o (o.value)}<option value={String(o.value)}>{o.label}</option>{/each}
+			{/if}
 		{/each}
 	</select>
 	<span class="chevron"><Icon name="down" size={14} /></span>

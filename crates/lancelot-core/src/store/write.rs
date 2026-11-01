@@ -232,42 +232,24 @@ pub(crate) fn persist<'a>(
         },
     )?;
 
-    // The event row, which also holds the ticket and drink settings.
+    // The event row, which also holds the ticket settings.
     let event = after.event();
-    let row = |b: &'a Book| {
-        (
-            b.event(),
-            b.ticket_columns(),
-            b.ticket_settings(),
-            b.drink_settings(),
-        )
-    };
+    let row = |b: &'a Book| (b.event(), b.ticket_settings());
     if before.map(row) != Some(row(after)) {
         let d = &event.details;
-        let columns = after.ticket_columns();
         let tickets = after.ticket_settings();
-        let drinks = after.drink_settings();
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
                                 default_reimbursement_account_id, closing_overrides,
-                                ticket_tier_column, ticket_order_column, ticket_date_column,
-                                tickets_enabled, ticket_account_id,
-                                drink_supplier, price_per_strich, drink_cost_centre_id, pfand_category_id)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+                                tickets_enabled, ticket_account_id)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
                location = excluded.location, notes = excluded.notes, closed_at = excluded.closed_at,
                default_reimbursement_account_id = excluded.default_reimbursement_account_id,
                closing_overrides = excluded.closing_overrides,
-               ticket_tier_column = excluded.ticket_tier_column,
-               ticket_order_column = excluded.ticket_order_column,
-               ticket_date_column = excluded.ticket_date_column,
                tickets_enabled = excluded.tickets_enabled,
-               ticket_account_id = excluded.ticket_account_id,
-               drink_supplier = excluded.drink_supplier,
-               price_per_strich = excluded.price_per_strich,
-               drink_cost_centre_id = excluded.drink_cost_centre_id,
-               pfand_category_id = excluded.pfand_category_id",
+               ticket_account_id = excluded.ticket_account_id",
             params![
                 d.name,
                 d.starts_on.map(date_text),
@@ -277,15 +259,8 @@ pub(crate) fn persist<'a>(
                 event.closed_at.map(timestamp_text).transpose()?,
                 event.default_reimbursement_account.0,
                 serde_json::to_string(&event.closing_overrides)?,
-                columns.tier,
-                columns.order,
-                columns.sale_date,
                 tickets.enabled,
                 tickets.account.map(|a| a.0),
-                drinks.supplier,
-                drinks.price_per_strich.map(|p| p.get()),
-                drinks.cost_centre.map(|c| c.0),
-                drinks.pfand.map(|a| a.0),
             ],
         )?;
         match before.map(|b| b.event()) {
@@ -300,21 +275,9 @@ pub(crate) fn persist<'a>(
         }
         setting(
             log,
-            "ticket_columns",
-            before.map(Book::ticket_columns),
-            columns,
-        )?;
-        setting(
-            log,
             "ticket_settings",
             before.map(Book::ticket_settings).as_ref(),
             &tickets,
-        )?;
-        setting(
-            log,
-            "drink_settings",
-            before.map(Book::drink_settings),
-            drinks,
         )?;
     }
 
@@ -359,21 +322,26 @@ pub(crate) fn persist<'a>(
 
     saved(
         log,
-        "drink_product",
-        "DELETE FROM drink_product WHERE id = ?1",
+        "plugin_record",
+        "DELETE FROM plugin_record WHERE id = ?1",
         before,
         after,
-        |b| b.drink_products().map(|p| (p.id.0, p)),
-        |id, p| {
-            let d = &p.draft;
+        |b| b.plugin_records().map(|r| (r.id.0, r)),
+        |id, r| {
             conn.execute(
-                        "INSERT INTO drink_product (id, name, taken, returned, unit_price)
-                         VALUES (?1, ?2, ?3, ?4, ?5)
-                         ON CONFLICT (id) DO UPDATE SET
-                           name = excluded.name, taken = excluded.taken, returned = excluded.returned,
-                           unit_price = excluded.unit_price",
-                        params![id, d.name, d.taken, d.returned, d.unit_price.get()],
-                    )?;
+                "INSERT INTO plugin_record (id, plugin, key, scope, value)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT (id) DO UPDATE SET
+                   plugin = excluded.plugin, key = excluded.key, scope = excluded.scope,
+                   value = excluded.value",
+                params![
+                    id,
+                    r.plugin,
+                    r.key,
+                    enum_text(&r.scope)?,
+                    serde_json::to_string(&r.value)?
+                ],
+            )?;
             Ok(())
         },
     )?;
@@ -636,7 +604,7 @@ pub(crate) fn persist<'a>(
             ("next_manual_sale_id", next.manual_sale),
             ("next_cancellation_id", next.cancellation),
             ("next_cost_centre_id", next.cost_centre),
-            ("next_drink_product_id", next.drink_product),
+            ("next_plugin_record_id", next.plugin_record),
             ("next_reconciliation_id", next.reconciliation),
         ] {
             conn.execute(

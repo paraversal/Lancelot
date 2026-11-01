@@ -31,8 +31,11 @@ export function confetti(from: { x: number; y: number }, count = 120, spread = 1
 	document.body.append(canvas);
 	const ctx = canvas.getContext('2d')!;
 	ctx.scale(dpr, dpr);
-	const style = getComputedStyle(document.documentElement);
-	const colors = COLORS.map((c) => style.getPropertyValue(c).trim() || '#F5D547');
+	// A colour token holds both schemes; only an element's `color` says which one applies.
+	const colors = COLORS.map((c) => {
+		canvas.style.color = `var(${c})`;
+		return getComputedStyle(canvas).color || '#F5D547';
+	});
 	const pieces: Piece[] = Array.from({ length: count }, () => {
 		const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * spread;
 		const speed = 6 + Math.random() * 9;

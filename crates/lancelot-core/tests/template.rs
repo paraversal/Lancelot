@@ -68,7 +68,6 @@ fn a_template_keeps_the_setup_and_none_of_the_money() {
         book.event().default_reimbursement_account,
         source.event().default_reimbursement_account
     );
-    assert_eq!(book.drink_settings(), source.drink_settings());
 
     assert_eq!(book.accounts().count(), source.accounts().count());
     assert_eq!(book.persons().count(), source.persons().count());
@@ -83,15 +82,11 @@ fn a_template_keeps_the_setup_and_none_of_the_money() {
     assert!(book.ledger().result().is_zero());
     assert!(book.budget_lines().all(|b| !b.draft.complete));
     assert!(book.budget().result.actual.is_zero());
-    assert!(
-        book.drink_products()
-            .all(|p| p.draft.taken == 0 && p.draft.returned == 0)
-    );
-    assert!(
-        book.drink_products()
-            .zip(source.drink_products())
-            .all(|(a, b)| a.draft.unit_price == b.draft.unit_price)
-    );
+    assert!(book.plugin_records().all(|r| r.scope == PluginScope::Setup));
+    let setup = source
+        .plugin_records()
+        .filter(|r| r.scope == PluginScope::Setup);
+    assert!(book.plugin_records().eq(setup));
 }
 
 #[test]
@@ -243,23 +238,21 @@ fn copying_creates_missing_categories_and_cost_centres_and_follows_roles() {
     source
         .add_budget_line(line(stage, "Boards", Some(centre)))
         .unwrap();
-    let pfand = source
-        .account_by_name(AccountKind::Expense, "Pfand")
+    let venue = source
+        .account_by_name(AccountKind::Expense, "Venue")
         .unwrap()
         .id;
-    let drinks = source.drinks_cost_centre().unwrap().id;
+    let bar = source.add_cost_centre("Bar").unwrap();
     source
-        .add_budget_line(line(pfand, "Deposit", Some(drinks)))
+        .add_budget_line(line(venue, "Deposit", Some(bar)))
         .unwrap();
 
     let mut book = new_book();
-    let pfand_here = book
-        .account_by_name(AccountKind::Expense, "Pfand")
+    let venue_here = book
+        .account_by_name(AccountKind::Expense, "Venue")
         .unwrap()
         .id;
-    book.rename_account(pfand_here, "Leergut").unwrap();
-    let drinks_here = book.drinks_cost_centre().unwrap().id;
-    book.rename_cost_centre(drinks_here, "Bar").unwrap();
+    let bar_here = book.add_cost_centre("bar").unwrap();
 
     let summary = book
         .copy_from(
@@ -285,8 +278,8 @@ fn copying_creates_missing_categories_and_cost_centres_and_follows_roles() {
         .budget_lines()
         .find(|b| b.draft.description == "Deposit")
         .unwrap();
-    assert_eq!(deposit.draft.category, pfand_here);
-    assert_eq!(deposit.draft.cost_centre, Some(drinks_here));
+    assert_eq!(deposit.draft.category, venue_here);
+    assert_eq!(deposit.draft.cost_centre, Some(bar_here));
 }
 
 #[test]
@@ -385,15 +378,11 @@ fn a_file_that_is_no_event_is_refused() {
 }
 
 #[test]
-fn a_template_keeps_the_ticket_and_drink_settings() {
+fn a_template_keeps_the_ticket_settings() {
     let mut source = new_book();
     source.set_tickets_enabled(false).unwrap();
-    let centre = source.drinks_cost_centre().unwrap().id;
-    source.delete_cost_centre(centre).unwrap();
     let book = Book::from_template(&source, source.event().details.clone()).unwrap();
     assert_eq!(book.ticket_settings(), source.ticket_settings());
-    assert_eq!(book.drink_settings(), source.drink_settings());
-    assert_eq!(book.drinks_cost_centre(), None);
 }
 
 #[test]

@@ -11,8 +11,8 @@ The app should feel like a well-kept paper ledger at a community event. It is ca
 1. **No gradients, no shadows.** Depth comes from rules (1 px lines) and the sunk sidebar tone.
 2. **No coloured edge accents** (the "fingernail" strip on the side of cards or rows).
 3. **One type face: Familjen Grotesk, weights 400 and 600.** Sizes: 12, 14, 16, 22, 40.
-4. **Show, don't tell.** Labels name things. No sentences that explain a view, no empty-state prose, no "Here you can…" hints. A hint line exists only when it carries data (e.g. `= 1.234,50 €` under an amount, `~9 tickets`).
-5. **Rules and whitespace instead of cards.** A card is allowed only when it holds more than one figure and is a unit of work. Example: the open ticket conflict, which has its own controls.
+4. **Show, don't tell.** Labels name things. No sentences that explain a view, no empty-state prose, no "Here you can…" hints. A hint line exists only when it carries data (e.g. `= 1.234,50 €` under an amount, `~9 tickets`), or when the words alone don't say what to type (the counts of a drinks product, the deposit category).
+5. **Rules and whitespace instead of cards.** A card is allowed only when it holds more than one figure and is a unit of work. Example: the open ticket conflict, which has its own controls. A plugin always sits in its own card: white, a rule around it, radius 16, its name and a "Plugin" tag in the header. That rounder corner belongs to plugins alone, so they read as added to the app rather than part of it.
 6. **Inviting, a little quirky, never forced.** The quirks are the marker highlight, the tally marks and the warm paper tone.
 
 ## Colour semantics
@@ -32,7 +32,8 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 
 ## Layout
 
-- Window 1280 × 800. Sidebar 220 px with event name and dates, navigation (counts on the right, a badge in `attention` when something needs doing), and the file name at the bottom, which opens Settings.
+- Light or dark: Settings → Display, following the system by default. The dark values are in `app/src/lib/styles/theme.css`, not in `UI.fig`. Print and the report's sheet stay light.
+- Window 1280 × 800. Sidebar 220 px with event name and dates, navigation (counts on the right, a badge in `attention` when something needs doing), and at the bottom History and the file name, which opens Settings.
 - Content padding 40. Spacing scale 4 · 8 · 12 · 16 · 24 · 32 · 40 · 48. Radius 4 / 6 / 8, plus pills for filter chips.
 - A list or table on the left. Editing and detail happen in a **right-hand panel** (380 px) separated by a rule. There are no modals for routine work.
 - Tables: 36–40 px rows, a hairline under each row, numbers right-aligned in fixed-width columns, and day headers in the ledger.
@@ -48,10 +49,10 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 | Button            | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`)                                                                              |
 | Filter chip       | Pill; active is an ink fill                                                                                                                                      |
 | Segmented control | Sunk track; active segment uses `marker`                                                                                                                         |
-| Amount input      | Lenient parsing with a live `= …` preview. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
+| Amount input      | Lenient parsing with a live `= …` preview, which also adds up sums such as `1,29+1,49`. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
 | Balance cell      | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled`                                                                                                      |
 | Receipt indicator | Paperclip when present, `attention` warning when missing                                                                                                         |
-| Tally             | Groups of four strokes crossed by a fifth (Strichliste)                                                                                                          |
+| Tally             | Groups of four strokes crossed by a fifth (Strichliste). In `UI.fig` only; the app doesn't draw it.                                                              |
 | Stacked bar       | In vs. out composition, and ticket snapshots per import                                                                                                          |
 
 ## Screens in UI.fig
@@ -85,7 +86,7 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says _Note_.
 
-The app's Tickets page follows the Tickets frames. Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees.
+The app's Tickets page follows the Tickets frames. Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees, and **Other income in the ledger** when income was typed into the Tickets category by hand, which the Ticket income total includes. In the Import panel, an order's conflict sits on its own line under the tier.
 
 Sales draws places against the quota, so its label matches the Sold column, with the cancelled on top in `on-ink-muted`, a neutral fill that belongs to no tier. The line appears only when every tier has a quota. Revenue is net income; only its last column carries an amount, and the others have theirs in the tooltip. Date labels thin out when they no longer fit, and the last always shows. Below 920 px of content, Break-even and Sales move under the tiers.
 
@@ -93,7 +94,17 @@ The conflict card has more fields than the frame, which only shows the refund an
 
 The app's Overview follows the Overview frame, whose hero has the result, the forecast and the tickets. Where it differs: Income and Expenses stay in the hero unless both the forecast and the tickets are there; the Tickets figure counts places, like the Tickets page, without a quota or bar when a tier has none; the forecast's note is the plan once there is no gap to close, and the break-even reads `~9 tickets to break even`, with the places left in `attention` when they fall short.
 
-The sidebar's Cost centres section, with a separator, a label and one item per centre, is in no frame. Each centre's page reuses the Drinks hero and table rows for its result, costs, income and tagged lines. The drinks centre's page follows the Drinks frame without the Strichliste, its Sync button and the `% of Striche` under Donations, which come with M11; the records take the full width. Where it differs: `+ Product` beside Supplier invoice, a panel per product and a panel for the supplier and the price per Strich, opened from the caption, a row with the kept units and their cost, the cost per drink beside the price per Strich, and category names in the Cost note as they are in the event. A difference on the invoice reads `11,50 € more than the records` in `attention`. Not in any frame: the entry panel's Notes and free Transfer fields, the import panel's account, the Sells tickets, Net movement, Drinks are in and Pfand category settings, the entry panel's and the budget panel's Cost centre field, Cost centres on the Budget page and in the report, and the Cost centres section in Settings.
+The sidebar's Cost centres section, with a separator, a label and one item per centre, is in no frame. Each centre's page reuses the Drinks hero and table rows for its result, costs, income and tagged lines. A split line in the entry panel keeps its Budget line and Cost centre side by side under its category, with a rule between lines, so each line's details read as its own. Its label says Category until there is a second line, then Split. Budget line always shows and also lists the other categories' lines, so a treasurer who thinks of the line first can start there; choosing one sets the category.
+
+Not in any frame: the entry panel's Notes and free Transfer fields, the Sells tickets and Net movement settings, the entry panel's and the budget panel's Cost centre field, Cost centres on the Budget page and in the report, and the Cost centres and Categories sections in Settings.
+
+Settings has its two columns, then two sections across the full width. An ink rule opens each section, so it reads apart from the hairlines between rows. **Categories** flows over two columns, expenses then income, with a category's cost centre beside it, and shows no choice while the event has no cost centres. A category's Delete shows when its row is hovered or focused. **Plugins** comes last under a double rule, with a larger heading and its cards in two columns.
+
+The Drinks frame predates the drinks plugin and logging each drink, so the plugin departs from it. **Stock and sales** sits in its plugin card on a cost centre's page, with no Strichliste or tallies. A paper list is one product, `Strich`. Its table has Billed, Left over, Logged, Gap, Cost and Expected per product, and drops columns beside a panel. Its caption opens a panel for the supplier and the deposit category, and beside it are the cost per drink, Pull logged, Book invoice and `+ Product`. Under the table are expected against collected and the invoice check, where a difference reads `11,50 € more than the records` in `attention`.
+
+Plugins are in no frame beyond the card in the ground rules. Settings → Plugins has a card with an On switch per plugin, and under it the plugin's settings and its data source form: label, URL, header, token, list and fields, with Save and test. On the Tickets page, **Ticket sheet** and **Ticket API** each have a card that starts an import, and the Import frame's panel, called Review import and with the ticket account added, comes after that. Naming the sheet's columns happens in the plugin's own panel. Appearance under Display is in no frame either.
+
+History is in no frame. It sits apart from the pages at the bottom of the sidebar, and ⌘1–9 skip it, since it's where you look when something seems off rather than a place you work. It follows the ledger's day headers and time column, one block per command, and each row shows the fields that moved as `old → new`.
 
 Reconciliation and templates are in no frame. **Statement** on each account in Where the money is opens a right-hand panel like Count: date and amount (`Net movement` for the Verein account, `Statement shows` otherwise) over the account's checkpoints with the books' figure and any difference. The note beside the account shows its latest mismatch, else its latest checkpoint. The New event panel has a **Template** field, with the counts of what comes along once an event is chosen, and Settings has a **Copy from another event** section with what is new and what is already here.
 

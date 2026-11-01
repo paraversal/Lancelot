@@ -13,6 +13,9 @@
 	import { describe } from '#lib/openItems.ts';
 	import { nudge } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
+	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
+	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import { plugins } from '#lib/plugins/registry.ts';
 	import { renderPdf } from '#lib/report/pdf.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -25,6 +28,20 @@
 	const today = new Date().toISOString().slice(0, 10);
 
 	let withReceipts = $state(true);
+
+	// What plugins add. Like the receipts, each can be left out of this printout.
+	const sections = plugins.flatMap((plugin) =>
+		plugin.ReportSection
+			? [{ plugin, ctx: pluginContext(plugin.id), Section: plugin.ReportSection }]
+			: []
+	);
+	const reporting = $derived(
+		sections.filter((s) => pluginEnabled(s.plugin.id) && (s.plugin.inReport?.(s.ctx) ?? true))
+	);
+	let leftOut = $state<string[]>([]);
+	function toggle(id: string, on: boolean) {
+		leftOut = on ? leftOut.filter((x) => x !== id) : [...leftOut, id];
+	}
 
 	const categories = (kind: 'income' | 'expense') =>
 		snapshot.accounts.filter((a) => a.kind === kind && a.balance !== 0);
@@ -128,6 +145,16 @@
 	<header class="toolbar no-print">
 		<Button icon="back" onclick={() => goto('/event/overview')}>Overview</Button>
 		<span class="grow"></span>
+		{#each reporting as { plugin } (plugin.id)}
+			<label class="toggle">
+				<input
+					type="checkbox"
+					checked={!leftOut.includes(plugin.id)}
+					onchange={(e) => toggle(plugin.id, e.currentTarget.checked)}
+				/>
+				{plugin.name}
+			</label>
+		{/each}
 		<label class="toggle">
 			<input type="checkbox" bind:checked={withReceipts} />
 			Receipts
@@ -334,6 +361,16 @@
 			</table>
 		{/if}
 
+		{#each reporting as { plugin, ctx, Section } (plugin.id)}
+			{#if !leftOut.includes(plugin.id)}
+				<div class="plugin" data-testid="report-plugin">
+					<PluginFrame name={plugin.name}>
+						<Section {ctx} />
+					</PluginFrame>
+				</div>
+			{/if}
+		{/each}
+
 		{#if entries.length}
 			<table class="entries">
 				<caption>Entries</caption>
@@ -441,6 +478,7 @@
 		padding: 20mm 18mm;
 		border: 1px solid var(--color-rule);
 		background: white;
+		color-scheme: light;
 		color: var(--color-ink);
 		font-size: 10pt;
 		line-height: 1.4;
@@ -552,6 +590,11 @@
 		border-bottom: none;
 		border-top: 1.5pt solid var(--color-ink);
 		font-weight: 600;
+	}
+
+	.plugin {
+		margin-top: 18pt;
+		break-inside: avoid;
 	}
 
 	.budget td.num,

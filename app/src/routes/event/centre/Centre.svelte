@@ -1,26 +1,22 @@
 <script lang="ts">
-	// One cost centre (R-CC-1): its income, costs and result, and the lines tagged with it. The
-	// drinks' also has the commission records with the check of the supplier's invoice and the price
-	// per Strich (R-DRK-1 to R-DRK-6). Every figure comes from the core.
+	// One cost centre (R-CC-1): its income, costs and result, and the lines tagged with it. Plugins
+	// attached to it add their sections. Every figure of the core comes from the core.
 	import { goto } from '$app/navigation';
+	import type { Snippet } from 'svelte';
 	import type { CostCentre } from '#lib/api/generated/CostCentre.ts';
-	import Button from '#lib/components/Button.svelte';
-	import Icon from '#lib/components/Icon.svelte';
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { riseIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
+	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
+	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import ProductPanel from './ProductPanel.svelte';
-	import SettingsPanel from './SettingsPanel.svelte';
 
 	let { centre }: { centre: CostCentre } = $props();
 
 	const snapshot = $derived(session.event!.snapshot);
 	const format = $derived(session.format);
-	const settings = $derived(snapshot.drinkSettings);
-	const drinks = $derived(snapshot.drinks);
-	const isDrinks = $derived(settings.costCentre === centre.id);
 	const pnl = $derived(snapshot.budget.costCentres.find((c) => c.costCentre === centre.id));
 	const result = $derived(pnl?.result.actual ?? 0);
 
@@ -44,64 +40,22 @@
 				}))
 		)
 	);
-	const rows = $derived(
-		snapshot.drinkProducts.map((product) => ({
-			product,
-			figures: drinks.products.find((f) => f.product === product.id)
-		}))
+
+	const sections = plugins.flatMap((plugin) =>
+		plugin.CentreSection
+			? [{ plugin, ctx: pluginContext(plugin.id), Section: plugin.CentreSection }]
+			: []
 	);
-
-	let selected = $state<number | null>(null);
-	let adding = $state(false);
-	let editingSettings = $state(false);
-	const product = $derived(snapshot.drinkProducts.find((p) => p.id === selected) ?? null);
-
-	function open(id: number) {
-		selected = id;
-		adding = false;
-		editingSettings = false;
-	}
-
-	function add() {
-		selected = null;
-		adding = true;
-		editingSettings = false;
-	}
-
-	function openSettings() {
-		selected = null;
-		adding = false;
-		editingSettings = true;
-	}
-
-	// The invoice names its supplier, so without one the settings come first.
-	function invoice() {
-		if (settings.supplier) goto('/event/ledger?invoice');
-		else openSettings();
-	}
-
-	function keydown(e: KeyboardEvent) {
-		const target = e.target instanceof Element ? e.target : null;
-		if (target?.closest('input, textarea, select, aside') || e.metaKey || e.ctrlKey) return;
-		if (e.key === 'n' && isDrinks && !session.closed) {
-			e.preventDefault();
-			add();
-		}
+	let panel = $state<Snippet | null>(null);
+	function setPanel(next: Snippet | null) {
+		panel = next;
 	}
 </script>
 
-<svelte:window onkeydown={keydown} />
-
-<div class="drinks">
+<div class="centre">
 	<section class="main">
 		<header>
 			<h1>{centre.name}</h1>
-			{#if isDrinks && !session.closed}
-				<div class="actions">
-					<Button icon="plus" onclick={invoice}>Supplier invoice</Button>
-					<Button kind="primary" icon="plus" shortcut="N" onclick={add}>Product</Button>
-				</div>
-			{/if}
 		</header>
 
 		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
@@ -123,80 +77,13 @@
 			</div>
 		</div>
 
-		{#if isDrinks}
-			<div class="records">
-				<div class="caption">
-					<button type="button" class="link" onclick={openSettings}>
-						{settings.supplier ? `${settings.supplier} · commission` : 'Commission'}
-					</button>
-					<span class="prices">
-						{#if drinks.costPerDrink !== null}
-							<span>{formatAmount(drinks.costPerDrink, format)} per drink</span>
-						{/if}
-						{#if settings.pricePerStrich !== null}
-							<span>{formatAmount(settings.pricePerStrich, format)} per Strich</span>
-						{/if}
-					</span>
-				</div>
-
-				{#if rows.length}
-					<div class="rows" role="table" aria-label="Commission records">
-						<div class="row head" role="row">
-							<span class="name"></span>
-							<span class="count">Taken</span>
-							<span class="count">Returned</span>
-							<span class="count">Kept</span>
-							<span class="unit">Unit</span>
-							<span class="cost">Cost</span>
-						</div>
-						{#each rows as r (r.product.id)}
-							<button
-								type="button"
-								class="row"
-								class:selected={selected === r.product.id}
-								role="row"
-								onclick={() => open(r.product.id)}
-							>
-								<span class="name">{r.product.name}</span>
-								<span class="count">{r.product.taken}</span>
-								<span class="count muted">{r.product.returned}</span>
-								<span class="count strong">{r.figures?.kept}</span>
-								<span class="unit muted">{formatAmount(r.product.unitPrice, format)}</span>
-								<span class="cost">{formatAmount(r.figures?.cost ?? 0, format)}</span>
-							</button>
-						{/each}
-						<div class="row sum" role="row" data-testid="drinks-records">
-							<span class="name"></span>
-							<span class="count"></span>
-							<span class="count"></span>
-							<span class="count">{drinks.kept}</span>
-							<span class="unit"></span>
-							<span class="cost">{formatAmount(drinks.cost, format)}</span>
-						</div>
-					</div>
-				{/if}
-
-				{#if drinks.invoice}
-					{@const check = drinks.invoice}
-					<div class="invoice" data-testid="drinks-invoice">
-						<span class="muted">
-							{check.pfand ? `Invoice incl. Pfand ${formatAmount(check.pfand, format)}` : 'Invoice'}
-						</span>
-						<span class="grow"></span>
-						{#if check.difference === 0}
-							<span class="ok"><Icon name="check" size={14} /></span>
-						{:else}
-							<span class="attention">
-								<Icon name="warn" size={14} />
-								{formatAmount(check.difference, format, 'magnitude')}
-								{check.difference > 0 ? 'more' : 'less'} than the records
-							</span>
-						{/if}
-						<strong>{formatAmount(check.amount, format)}</strong>
-					</div>
-				{/if}
-			</div>
-		{/if}
+		{#each sections as { plugin, ctx, Section } (plugin.id)}
+			{#if pluginEnabled(plugin.id) && plugin.attachedTo?.(ctx, centre.id)}
+				<PluginFrame name={plugin.name}>
+					<Section {ctx} {centre} {setPanel} />
+				</PluginFrame>
+			{/if}
+		{/each}
 
 		{#if tagged.length}
 			<div class="records">
@@ -224,19 +111,11 @@
 		{/if}
 	</section>
 
-	{#if adding}
-		<ProductPanel product={null} onclose={() => (adding = false)} />
-	{:else if product}
-		{#key product.id}
-			<ProductPanel {product} onclose={() => (selected = null)} />
-		{/key}
-	{:else if editingSettings}
-		<SettingsPanel onclose={() => (editingSettings = false)} />
-	{/if}
+	{#if panel}{@render panel()}{/if}
 </div>
 
 <style>
-	.drinks {
+	.centre {
 		display: flex;
 		height: 100%;
 	}
@@ -264,13 +143,10 @@
 		font-weight: 600;
 	}
 
-	.actions {
-		display: flex;
-		gap: var(--spacing-2);
-	}
-
 	.hero {
 		display: flex;
+		flex-wrap: wrap;
+		row-gap: 16px;
 		padding-bottom: 28px;
 		border-bottom: 1px solid var(--color-rule);
 	}
@@ -291,8 +167,7 @@
 
 	.label,
 	.note,
-	.caption,
-	.head {
+	.caption {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
 	}
@@ -313,30 +188,19 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-2);
+		container-type: inline-size;
+	}
+
+	/* Beside a panel in a small window, what the entry was matters more than its category. */
+	@container (max-width: 420px) {
+		.category {
+			display: none;
+		}
 	}
 
 	.caption {
 		display: flex;
 		justify-content: space-between;
-		gap: var(--spacing-4);
-	}
-
-	.link {
-		padding: 0;
-		border: none;
-		background: none;
-		color: inherit;
-		font: inherit;
-		cursor: pointer;
-	}
-
-	.link:hover {
-		text-decoration: underline;
-		text-underline-offset: 3px;
-	}
-
-	.prices {
-		display: flex;
 		gap: var(--spacing-4);
 	}
 
@@ -357,16 +221,6 @@
 		text-align: left;
 	}
 
-	.row.head {
-		height: auto;
-		padding-bottom: 6px;
-	}
-
-	.row.sum {
-		border-bottom: none;
-		font-weight: 600;
-	}
-
 	button.row {
 		cursor: pointer;
 	}
@@ -376,27 +230,12 @@
 		text-underline-offset: 3px;
 	}
 
-	.row.selected {
-		border-radius: var(--radius-sm);
-		background: var(--color-marker);
-		font-weight: 600;
-	}
-
 	.name {
 		flex: 1;
 		min-width: 0;
-	}
-
-	.count {
-		width: 64px;
-		flex: none;
-		text-align: right;
-	}
-
-	.unit {
-		width: 72px;
-		flex: none;
-		text-align: right;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.day {
@@ -420,30 +259,6 @@
 
 	.muted {
 		color: var(--color-ink-muted);
-	}
-
-	.strong {
-		font-weight: 600;
-	}
-
-	.invoice {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-2);
-		padding: 0 8px;
-		font-size: 13px;
-	}
-
-	.ok {
-		display: flex;
-		color: var(--color-plus);
-	}
-
-	.attention {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		color: var(--color-attention);
 	}
 
 	.plus {

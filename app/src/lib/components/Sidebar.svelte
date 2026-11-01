@@ -1,6 +1,6 @@
 <script lang="ts">
-	// The event's sidebar: name and dates, the pages with their counts, the cost centres, and the
-	// file name, which opens Settings.
+	// The event's sidebar: name and dates, the pages with their counts, the cost centres, the
+	// History link, and the file name, which opens Settings.
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { markerTravel } from '../motion/effects';
@@ -112,15 +112,25 @@
 		{/if}
 	</ul>
 
-	<a
-		class="file"
-		href="/event/settings"
-		title={event.path}
-		aria-current={page.url.pathname === '/event/settings' ? 'page' : undefined}
-	>
-		<Icon name="gear" />
-		<span>{event.fileName}</span>
-	</a>
+	<div class="foot">
+		<a
+			class="file"
+			href="/event/history"
+			aria-current={page.url.pathname === '/event/history' ? 'page' : undefined}
+		>
+			<Icon name="history" />
+			<span>History</span>
+		</a>
+		<a
+			class="file"
+			href="/event/settings"
+			title={event.path}
+			aria-current={page.url.pathname === '/event/settings' ? 'page' : undefined}
+		>
+			<Icon name="gear" />
+			<span>{event.fileName}</span>
+		</a>
+	</div>
 </nav>
 
 <style>
@@ -235,10 +245,16 @@
 		color: var(--color-paper);
 	}
 
+	.foot {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: auto;
+	}
+
 	.file {
 		justify-content: flex-start;
 		gap: var(--spacing-2);
-		margin-top: auto;
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
 	}

@@ -212,7 +212,10 @@ fn person_reimbursed() {
 #[test]
 fn drink_donations_collected_in_cash() {
     let mut book = new_book();
-    let (cash, donations) = (asset(&book, "Cash box"), income(&book, "Drink donations"));
+    let cash = asset(&book, "Cash box");
+    let donations = book
+        .add_account(AccountKind::Income, "Drink donations")
+        .unwrap();
     save(
         &mut book,
         "Donations",

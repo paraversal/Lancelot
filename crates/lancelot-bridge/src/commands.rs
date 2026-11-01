@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use lancelot_core::{Book, DomainError, Person};
+use lancelot_core::{Book, DomainError, Person, TicketBatch};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -85,6 +85,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         }
 
         "integrity_check" => json(s.check_integrity()),
+        "change_log_list" => json(s.change_log()),
         "backups_list" => json(s.backups(&arg::<PathBuf>(a, "event")?)),
         "backup_restore" => json(s.restore_backup(
             &arg::<PathBuf>(a, "event")?,
@@ -94,6 +95,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "amount_parse" => {
             json(s.parse_amount(&arg::<String>(a, "input")?, arg(a, "allowNegative")?))
         }
+        "amount_sum" => json(s.parse_sum(&arg::<String>(a, "input")?, arg(a, "allowNegative")?)),
         "ticket_share" => json(s.ticket_share(arg(a, "price")?, arg(a, "bp")?, arg(a, "count")?)),
         "date_parse" => json(s.parse_date(&arg::<String>(a, "input")?)),
         "txn_save" => json(s.save_txn(
@@ -187,13 +189,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
             Book::set_category_cost_centre,
         ),
 
-        "drink_product_add" => one(s, a, "draft", Book::add_drink_product),
-
-        "drink_product_update" => two(s, a, ("id", "draft"), Book::update_drink_product),
-
-        "drink_product_delete" => one(s, a, "id", Book::delete_drink_product),
-
-        "drink_settings_set" => one(s, a, "settings", Book::set_drink_settings),
+        "plugin_records_apply" => two(s, a, ("plugin", "changes"), Book::apply_plugin_changes),
 
         "tier_add" => one(s, a, "draft", Book::add_tier),
 
@@ -201,16 +197,26 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
 
         "tier_delete" => one(s, a, "id", Book::delete_tier),
 
-        "ticket_columns_set" => one(s, a, "columns", Book::set_ticket_columns),
         "tickets_set_enabled" => one(s, a, "enabled", Book::set_tickets_enabled),
         "ticket_account_set" => one(s, a, "account", Book::set_ticket_account),
 
-        "tickets_preview" => json(s.preview_tickets(&arg::<PathBuf>(a, "path")?, date(a)?)),
-        "tickets_import" => json(s.import_tickets(
-            &arg::<PathBuf>(a, "path")?,
-            date(a)?,
-            &arg::<String>(a, "sha256")?,
+        "data_sources_get" => json(Ok(s.data_sources())),
+        "data_source_set" => json(s.set_data_source(&arg::<String>(a, "id")?, arg(a, "source")?)),
+        "data_source_set_token" => json(s.set_data_source_token(
+            &arg::<String>(a, "id")?,
+            arg::<Option<String>>(a, "token")?.as_deref(),
         )),
+        "data_source_pull" => json(s.pull_request(&arg::<String>(a, "id")?)?.run(&arg::<
+            Vec<String>,
+        >(
+            a, "fields"
+        )?)),
+        "table_read" => json(s.read_table(
+            &arg::<PathBuf>(a, "path")?,
+            &arg::<Vec<String>>(a, "columns")?,
+        )),
+        "tickets_preview" => json(s.preview_tickets(&arg::<TicketBatch>(a, "batch")?, date(a)?)),
+        "tickets_import" => json(s.import_tickets(&arg::<TicketBatch>(a, "batch")?, date(a)?)),
         "import_set_date" => {
             let id = arg(a, "id")?;
             let date = date(a)?;

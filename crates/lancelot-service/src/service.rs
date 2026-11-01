@@ -3,15 +3,16 @@
 //! One window holds at most one open event. Opening or creating another closes the current
 //! one first, which releases its lock.
 
+use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
-    DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
-    MAX_ATTACHMENT_SIZE, Parsed, Report, Store, StoreError, StoreOptions, TemplateSummary,
-    TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
-    parse_amount, parse_date, read_book, ticket_share,
+    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, ChangeLogEntry,
+    CopyChoice, CopySummary, DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId,
+    ImportPreview, MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store, StoreError, StoreOptions,
+    Table, TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
+    format_date, list_backups, parse_amount, parse_date, parse_sum, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -21,10 +22,13 @@ use crate::api::{
     SavedTxn,
 };
 use crate::settings::{AppSettings, RecentEntry, SettingsFile};
+use crate::sources::{self, DataSource, DataSourceView, MemoryTokens, PullRequest, TokenStore};
 
 pub struct Service {
     data_dir: PathBuf,
     file: SettingsFile,
+    sources: BTreeMap<String, DataSource>,
+    tokens: Box<dyn TokenStore>,
     open: Option<Opened>,
 }
 
@@ -55,29 +59,44 @@ fn now() -> String {
         .unwrap_or_default()
 }
 
+fn token_error(reason: String) -> ApiError {
+    ApiError::new(
+        "token_store",
+        format!("the keychain could not be used: {reason}"),
+    )
+}
+
 /// A ticket sheet's name and bytes. Sheets are small; anything the size of an attachment
 /// limit is not one.
-fn read_sheet_file(path: &Path) -> Result<(String, Vec<u8>)> {
+fn read_table_file(path: &Path) -> Result<(String, Vec<u8>)> {
     if std::fs::metadata(path)?.len() > MAX_ATTACHMENT_SIZE {
         return Err(ApiError::new(
-            "sheet_too_large",
-            "this file is too large for a ticket sheet",
+            "table_too_large",
+            "this file is too large to read as a table",
         ));
     }
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "sheet".into());
+        .unwrap_or_else(|| "table".into());
     Ok((name, std::fs::read(path)?))
 }
 
 impl Service {
-    /// `data_dir` holds `settings.json` and the `backups` folder.
+    /// `data_dir` holds `settings.json`, `data-sources.json` and the `backups` folder. Tokens last
+    /// as long as the process.
     pub fn new(data_dir: PathBuf) -> Service {
+        Service::with_tokens(data_dir, Box::new(MemoryTokens::default()))
+    }
+
+    pub fn with_tokens(data_dir: PathBuf, tokens: Box<dyn TokenStore>) -> Service {
         let file = SettingsFile::load(&data_dir.join("settings.json"));
+        let sources = sources::load(&data_dir.join("data-sources.json"));
         Service {
             data_dir,
             file,
+            sources,
+            tokens,
             open: None,
         }
     }
@@ -381,31 +400,89 @@ impl Service {
     }
 
     /// Reads a ticket sheet from disk and shows what importing it would change (R-TKT-5).
-    pub fn preview_tickets(&self, path: &Path, date: time::Date) -> Result<ImportPreview> {
+    pub fn preview_tickets(&self, batch: &TicketBatch, date: time::Date) -> Result<ImportPreview> {
         let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
-        let (name, data) = read_sheet_file(path)?;
-        Ok(open.store.preview_ticket_import(&name, &data, date)?)
+        Ok(open.store.book().preview_import(batch, date))
     }
 
-    /// Imports a ticket sheet as the snapshot of `date`. `sha256` is the file the preview
-    /// showed: a file changed since is not imported unseen.
-    pub fn import_tickets(
-        &mut self,
-        path: &Path,
-        date: time::Date,
-        sha256: &str,
-    ) -> Result<OpenEvent> {
-        let (name, data) = read_sheet_file(path)?;
+    /// Imports a batch of tickets as the snapshot of `date`.
+    pub fn import_tickets(&mut self, batch: &TicketBatch, date: time::Date) -> Result<OpenEvent> {
         self.on_store(|s| {
-            if s.preview_ticket_import(&name, &data, date)?.sha256 != sha256 {
-                return Err(ApiError::new(
-                    "file_changed",
-                    "the file changed since it was read; read it again",
-                ));
-            }
-            s.import_tickets(&name, &data, date)?;
+            s.import_tickets(batch, date)?;
             Ok(())
         })
+    }
+
+    /// The data sources saved on this computer, by the plugin that uses them.
+    pub fn data_sources(&self) -> BTreeMap<String, DataSourceView> {
+        self.sources
+            .iter()
+            .map(|(id, source)| {
+                let has_token = matches!(self.tokens.get(id), Ok(Some(_)));
+                let view = DataSourceView {
+                    source: source.clone(),
+                    has_token,
+                };
+                (id.clone(), view)
+            })
+            .collect()
+    }
+
+    /// Saves a plugin's data source, or removes it along with its token.
+    pub fn set_data_source(
+        &mut self,
+        id: &str,
+        source: Option<DataSource>,
+    ) -> Result<BTreeMap<String, DataSourceView>> {
+        let mut next = self.sources.clone();
+        match source {
+            Some(source) => {
+                next.insert(id.to_owned(), sources::clean(source)?);
+            }
+            None => {
+                next.remove(id);
+            }
+        }
+        sources::save(&self.data_dir.join("data-sources.json"), &next)?;
+        if !next.contains_key(id) {
+            self.tokens.delete(id).map_err(token_error)?;
+        }
+        self.sources = next;
+        Ok(self.data_sources())
+    }
+
+    /// Sets or removes a data source's token. It is never handed back.
+    pub fn set_data_source_token(
+        &mut self,
+        id: &str,
+        token: Option<&str>,
+    ) -> Result<BTreeMap<String, DataSourceView>> {
+        match token.map(str::trim).filter(|t| !t.is_empty()) {
+            Some(token) => self.tokens.set(id, token).map_err(token_error)?,
+            None => self.tokens.delete(id).map_err(token_error)?,
+        }
+        Ok(self.data_sources())
+    }
+
+    /// What pulling from a plugin's data source takes. Run it outside any lock on the service.
+    pub fn pull_request(&self, id: &str) -> Result<PullRequest> {
+        let source = self
+            .sources
+            .get(id)
+            .ok_or_else(|| ApiError::new("no_data_source", "this data source is not set up"))?;
+        Ok(PullRequest {
+            source: source.clone(),
+            token: self.tokens.get(id).map_err(token_error)?,
+        })
+    }
+
+    /// Reads these columns of a file, for a plugin. Changes nothing: the file isn't kept
+    /// (R-TKT-17). Number cells are written in the number format setting, so `parse_amount` reads
+    /// them as they stand.
+    pub fn read_table(&self, path: &Path, columns: &[String]) -> Result<Table> {
+        let (name, data) = read_table_file(path)?;
+        let format = self.file.settings.number_format;
+        Ok(lancelot_core::read_table(&name, &data, columns, format)?)
     }
 
     /// What deleting an import would change; changes nothing.
@@ -452,6 +529,12 @@ impl Service {
         let open = self.open.as_mut().ok_or_else(ApiError::no_event)?;
         open.integrity = open.store.check_integrity()?;
         self.current().ok_or_else(ApiError::no_event)
+    }
+
+    /// The open event's change log, newest first (R-TX-6).
+    pub fn change_log(&self) -> Result<Vec<ChangeLogEntry>> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        Ok(open.store.change_log(usize::MAX)?)
     }
 
     // --- backups -------------------------------------------------------------------------
@@ -519,6 +602,15 @@ impl Service {
         )?)
     }
 
+    /// What an amount field holds, which may be a sum.
+    pub fn parse_sum(&self, input: &str, allow_negative: bool) -> Result<ParsedSum> {
+        Ok(parse_sum(
+            input,
+            self.file.settings.number_format,
+            allow_negative,
+        )?)
+    }
+
     /// The fee or refund a form is about to save, by the core's rule.
     pub fn ticket_share(&self, price: Cents, bp: u32, count: u32) -> Result<TicketShare> {
         ticket_share(price, bp, count).map_err(|e| DomainError::from(e).into())
@@ -537,10 +629,13 @@ mod tests {
     use super::*;
     use lancelot_core::{
         AccountKind, AssetType, CancellationDraft, CancellationEdit, CancellationSource,
-        ManualSaleDraft, NumberFormat, OpenItem, Person, RefundTerms, Resolution, TicketColumns,
-        TierDraft,
+        ManualSaleDraft, NumberFormat, OpenItem, Person, RefundTerms, Resolution, TierDraft,
     };
     use tempfile::TempDir;
+
+    fn ticket_columns() -> [String; 2] {
+        ["Ticket".to_owned(), "Order ID".to_owned()]
+    }
 
     fn details(name: &str) -> EventDetails {
         EventDetails {
@@ -590,6 +685,22 @@ mod tests {
 
         // The file open here is read from memory: its lock would refuse a second reader.
         assert_eq!(s.template_preview(&third).unwrap().name, "Third");
+    }
+
+    #[test]
+    fn lists_the_open_events_change_log_newest_first() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        assert_eq!(s.change_log().unwrap_err().code, "no_event_open");
+        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        s.add(|b| b.add_person("Kim", Person::default())).unwrap();
+
+        let log = s.change_log().unwrap();
+        assert!(log.len() > 2);
+        assert_eq!(log[0].entity, "person");
+        assert_eq!(log[1].after.as_ref().unwrap()["name"], "Kim");
+        assert!(log.windows(2).all(|w| w[0].id > w[1].id));
     }
 
     #[test]
@@ -709,6 +820,7 @@ mod tests {
         assert_eq!(service(&dir).settings(), settings);
 
         assert_eq!(s.parse_amount("1.234", false).unwrap().cents.get(), 123_400);
+        assert_eq!(s.parse_sum("1.234+1", false).unwrap().cents.get(), 123_500);
         settings.number_format = NumberFormat::En;
         s.update_settings(settings.clone()).unwrap();
         assert_eq!(
@@ -1031,22 +1143,18 @@ mod tests {
         // Regular is not a tier yet: the preview names it and the import is refused.
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let sheet = fixtures.join("import-1.ods");
-        let preview = s.preview_tickets(&sheet, june(1)).unwrap();
+        let batch = TicketBatch::from_table(s.read_table(&sheet, &ticket_columns()).unwrap());
+        let preview = s.preview_tickets(&batch, june(1)).unwrap();
         assert_eq!(preview.unknown[0].name, "Regular");
-        let err = s
-            .import_tickets(&sheet, june(1), &preview.sha256)
-            .unwrap_err();
+        let err = s.import_tickets(&batch, june(1)).unwrap_err();
         assert_eq!(err.code, "unknown_tiers");
 
         let open = s.change(|b| b.add_tier(tier("Regular", 3_200))).unwrap();
         let regular = open.snapshot.tickets.tiers[1].tier.id;
         s.change(|b| b.add_tier(tier("Supporter", 4_500))).unwrap();
-        let preview = s.preview_tickets(&sheet, june(1)).unwrap();
+        let preview = s.preview_tickets(&batch, june(1)).unwrap();
         assert!(preview.unknown.is_empty());
-        // A file that is not the one previewed is not imported.
-        let err = s.import_tickets(&sheet, june(1), "0000").unwrap_err();
-        assert_eq!(err.code, "file_changed");
-        let open = s.import_tickets(&sheet, june(1), &preview.sha256).unwrap();
+        let open = s.import_tickets(&batch, june(1)).unwrap();
         let tickets = &open.snapshot.tickets;
         assert_eq!(tickets.imports.len(), 1);
         assert_eq!(tickets.total.sheet, preview.tickets);
@@ -1085,17 +1193,8 @@ mod tests {
         let open = s.change(|b| b.delete_manual_sale(id)).unwrap();
         assert!(open.snapshot.tickets.manual_sales.is_empty());
 
-        let open = s
-            .change(|b| {
-                b.set_ticket_columns(TicketColumns {
-                    tier: "Kategorie".into(),
-                    order: "Order ID".into(),
-                    sale_date: None,
-                })
-            })
-            .unwrap();
-        assert_eq!(open.snapshot.ticket_columns.tier, "Kategorie");
-        assert!(s.preview_tickets(&sheet, june(9)).is_err());
+        let renamed = ["Kategorie".to_owned(), "Order ID".to_owned()];
+        assert!(s.read_table(&sheet, &renamed).is_err());
     }
 
     #[test]
@@ -1119,8 +1218,8 @@ mod tests {
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let import = |s: &mut Service, name: &str, day| {
             let path = fixtures.join(name);
-            let sha = s.preview_tickets(&path, june(day)).unwrap().sha256;
-            s.import_tickets(&path, june(day), &sha).unwrap()
+            let batch = TicketBatch::from_table(s.read_table(&path, &ticket_columns()).unwrap());
+            s.import_tickets(&batch, june(day)).unwrap()
         };
         import(&mut s, "import-1.ods", 1);
         let terms = RefundTerms {

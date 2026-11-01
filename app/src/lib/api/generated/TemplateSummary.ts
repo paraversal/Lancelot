@@ -3,4 +3,4 @@
 /**
  * What a new event gets from a template.
  */
-export type TemplateSummary = { name: string, categories: number, persons: number, budgetLines: number, tiers: number, drinkProducts: number, };
+export type TemplateSummary = { name: string, categories: number, persons: number, budgetLines: number, tiers: number, };

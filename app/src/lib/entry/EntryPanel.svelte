@@ -12,6 +12,7 @@
 	import { goto } from '$app/navigation';
 	import { ApiError, api, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
+	import type { EntryProposal } from '../plugins/api';
 	import type { BudgetLineId } from '#lib/api/generated/BudgetLineId.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
 	import type { CostCentreId } from '#lib/api/generated/CostCentreId.ts';
@@ -36,7 +37,8 @@
 	import { session } from '#lib/state/session.svelte.ts';
 
 	type Kind = 'expense' | 'income' | 'transfer' | 'settle';
-	// The budget line link is kept while the category stays (R-BUD-2); the Budget page sets it.
+	// The budget line link is kept while the category stays (R-BUD-2). A line can only link to a
+	// budget line of its category, so picking one from another category changes the category too.
 	// A category starts with its cost centre; a budget line brings its own (R-CC-1).
 	type SplitLine = {
 		account: AccountId | null;
@@ -48,7 +50,7 @@
 	let {
 		txn,
 		settle = null,
-		invoice = false,
+		proposal = null,
 		pending = $bindable([]),
 		previewing,
 		onpreview,
@@ -60,8 +62,8 @@
 		txn: TxnView | null;
 		/** For a new entry: start as a settle with this person, filled in from their balance. */
 		settle?: AccountId | null;
-		/** For a new entry: start as the supplier's invoice, filled in from the drink records. */
-		invoice?: boolean;
+		/** For a new entry: start as what a plugin proposes (technical design §10). */
+		proposal?: EntryProposal | null;
 		/** Files to attach on save (paths), e.g. dropped onto the window. */
 		pending?: string[];
 		previewing: number | null;
@@ -169,6 +171,36 @@
 			.filter((a) => a.kind === 'expense')
 			.map((a) => ({ value: a.id, label: a.name, group: 'Expenses' }))
 	]);
+	// The line's own category first, then the others under their names.
+	function budgetOptions(category: AccountId | null) {
+		const planned = snapshot.budgetLines.filter((b) =>
+			categories.some((c) => c.value === b.category)
+		);
+		return [
+			{ value: 0, label: 'Not budgeted' },
+			...planned
+				.filter((b) => b.category === category)
+				.map((b) => ({ value: b.id, label: b.description })),
+			...planned
+				.filter((b) => b.category !== category)
+				.map((b) => ({
+					value: b.id,
+					label: b.description,
+					group: byId.get(b.category)?.name
+				}))
+		];
+	}
+
+	function pickBudgetLine(i: number, id: BudgetLineId) {
+		const b = snapshot.budgetLines.find((p) => p.id === id);
+		lines[i].budgetLine = b ? id : null;
+		if (b) {
+			lines[i].account = b.category;
+			lines[i].costCentre = b.costCentre;
+			clearError('lines');
+		}
+	}
+
 	const personOptions = $derived(people.map((a) => ({ value: a.id, label: a.name })));
 	const assetOptions = $derived(assets.map((a) => ({ value: a.id, label: a.name })));
 
@@ -196,20 +228,27 @@
 		direction = n >= 0 ? 'reimburse' : 'repay';
 		if (n !== 0 && txn === null) amount = Math.abs(n);
 		other ??= snapshot.event.defaultReimbursementAccount;
+		clearError('party');
 		generation++;
 	}
 
-	// The supplier's invoice: the kept drinks at their price, in the drinks cost centre's first
-	// expense category that is not Pfand. Pfand is added as a line if there is any (R-DRK-2).
-	function fillInvoice() {
-		const { costCentre: centre, pfand } = snapshot.drinkSettings;
-		const category = snapshot.accounts.find(
-			(a) => a.kind === 'expense' && a.costCentre === centre && a.id !== pfand
-		);
-		counterparty = snapshot.drinkSettings.supplier;
-		party = snapshot.event.defaultReimbursementAccount;
-		amount = snapshot.drinks.cost || null;
-		if (category) lines = [{ account: category.id, amount: null, costCentre: centre }];
+	// A plugin's proposal, for the treasurer to check. Nothing is saved until they do.
+	function fillProposal(p: EntryProposal) {
+		kind = p.kind;
+		amount = p.amount;
+		date = p.date ?? date;
+		description = p.description ?? null;
+		notes = p.notes ?? null;
+		if (p.kind === 'transfer') {
+			party = p.from;
+			other = p.to;
+			return;
+		}
+		counterparty = p.counterparty;
+		party =
+			(p.kind === 'expense' ? p.payer : p.destination) ??
+			snapshot.event.defaultReimbursementAccount;
+		if (p.lines.length) lines = p.lines.map((l) => ({ ...l, amount: l.amount ?? null }));
 	}
 
 	// --- adding people and categories on the spot ------------------------------------
@@ -333,6 +372,14 @@
 	}
 
 	const fieldError = (name: string) => (error?.field === name ? error.message : null);
+
+	// A field that was corrected stops showing why it was refused. Its message would otherwise
+
+	// appear when the field loses focus and move Save away from under the click.
+
+	const clearError = (name: string) => {
+		if (error?.field === name) error = null;
+	};
 	const partyLabel = $derived(
 		txn?.kind === 'refund'
 			? 'Paid by'
@@ -347,7 +394,7 @@
 			kind = 'settle';
 			pickPerson(settle);
 		}
-		if (!txn && invoice) fillInvoice();
+		if (!txn && proposal) fillProposal(proposal);
 	});
 </script>
 
@@ -370,12 +417,13 @@
 		</fieldset>
 	{/snippet}
 
-	<!-- A closed event shows its entries as they are (R-EVT-2). -->
-	<fieldset class="plain body" disabled={locked}>
-		<!-- B4: "Save & next" turns the form like a page; both forms share one grid cell. -->
-		<div class="stage">
-			{#key generation}
-				<div class="gen" in:formIn={{ level: level('B4') }} out:formOut={{ level: level('B4') }}>
+	<!-- B4: "Save & next" turns the form like a page; both forms share one grid cell. -->
+	<div class="stage">
+		{#key generation}
+			<div class="gen" in:formIn={{ level: level('B4') }} out:formOut={{ level: level('B4') }}>
+				<!-- A closed event shows its entries as they are (R-EVT-2). Its receipts stay outside,
+				     so they can still be previewed. -->
+				<fieldset class="plain" disabled={locked}>
 					{#if kind === 'settle'}
 						<ChoiceField
 							label="Person"
@@ -411,7 +459,10 @@
 							large
 							autofocus={kind !== 'settle'}
 							bind:invalid={amountInvalid}
-							oninput={(v) => (amount = v)}
+							oninput={(v) => {
+								amount = v;
+								clearError('amount');
+							}}
 							oncommit={(v) => (amount = v)}
 						/>
 						{#if overSettles}
@@ -427,7 +478,10 @@
 							options={kind === 'transfer' ? everywhere : sources}
 							addLabel="New person…"
 							error={fieldError('party')}
-							onchange={(v) => (party = v)}
+							onchange={(v) => {
+								party = v;
+								clearError('party');
+							}}
 							onadd={addPerson}
 						>
 							{#snippet hint()}{balanceHint(party) ?? ''}{/snippet}
@@ -441,7 +495,10 @@
 							options={everywhere}
 							addLabel="New person…"
 							error={fieldError('other')}
-							onchange={(v) => (other = v)}
+							onchange={(v) => {
+								other = v;
+								clearError('other');
+							}}
 							onadd={addPerson}
 						>
 							{#snippet hint()}{balanceHint(other) ?? ''}{/snippet}
@@ -453,7 +510,10 @@
 							options={assetOptions}
 							addLabel="New account…"
 							error={fieldError('other')}
-							onchange={(v) => (other = v)}
+							onchange={(v) => {
+								other = v;
+								clearError('other');
+							}}
 							onadd={async (name) => {
 								try {
 									return (await session.change(() => api.addAccount('asset', name))).id;
@@ -471,7 +531,7 @@
 					{#if kind === 'expense' || kind === 'income'}
 						<div class="split">
 							<div class="split-head">
-								<span class="form-label">Split</span>
+								<span class="form-label">{split ? 'Split' : 'Category'}</span>
 								{#if left !== null}
 									<span class="left" class:done={left === 0}>{formatAmount(left, format)} left</span
 									>
@@ -479,68 +539,60 @@
 							</div>
 							{#each lines as line, i (i)}
 								{@const account = line.account === null ? undefined : byId.get(line.account)}
-								{@const planned = snapshot.budgetLines.filter((b) => b.category === line.account)}
-								<div class="line">
-									{#if account}<span
+								{@const fixed = snapshot.budgetLines.find((b) => b.id === line.budgetLine)}
+								<div class="split-line">
+									<div class="line">
+										<span
 											class="dot"
-											style:background={categoryColor(account, snapshot.accounts)}
-										></span>{/if}
-									<div class="category">
-										<ChoiceField
-											value={line.account}
-											options={categories}
-											addLabel="New category…"
-											invalid={!!fieldError('lines') && line.account === null}
-											onchange={(v) => {
-												if (v !== lines[i].account) {
-													lines[i].budgetLine = null;
-													lines[i].costCentre = byId.get(v)?.costCentre ?? null;
-												}
-												lines[i].account = v;
-											}}
-											onadd={addCategory}
-										/>
-									</div>
-									{#if split}
-										<div class="line-amount">
-											<AmountField
-												value={line.amount}
-												{format}
-												bind:invalid={() => lineInvalid[i] ?? false, (v) => (lineInvalid[i] = v)}
-												oninput={(v) => (lines[i].amount = v)}
-												oncommit={(v) => (lines[i].amount = v)}
+											style:background={account ? categoryColor(account, snapshot.accounts) : null}
+										></span>
+										<div class="category">
+											<ChoiceField
+												value={line.account}
+												options={categories}
+												addLabel="New category…"
+												invalid={!!fieldError('lines') && line.account === null}
+												onchange={(v) => {
+													if (v !== lines[i].account) {
+														lines[i].budgetLine = null;
+														lines[i].costCentre = byId.get(v)?.costCentre ?? null;
+													}
+													lines[i].account = v;
+													clearError('lines');
+												}}
+												onadd={addCategory}
 											/>
 										</div>
-										<button
-											type="button"
-											class="icon"
-											aria-label="Remove line"
-											onclick={() => (lines = lines.filter((_, j) => j !== i))}
-										>
-											<Icon name="x" size={14} />
-										</button>
-									{/if}
-								</div>
-								{#if planned.length}
-									<div class="budget-line">
+										{#if split}
+											<div class="line-amount">
+												<AmountField
+													value={line.amount}
+													{format}
+													bind:invalid={() => lineInvalid[i] ?? false, (v) => (lineInvalid[i] = v)}
+													oninput={(v) => {
+														lines[i].amount = v;
+														clearError('lines');
+													}}
+													oncommit={(v) => (lines[i].amount = v)}
+												/>
+											</div>
+											<button
+												type="button"
+												class="icon"
+												aria-label="Remove line"
+												onclick={() => (lines = lines.filter((_, j) => j !== i))}
+											>
+												<Icon name="x" size={14} />
+											</button>
+										{/if}
+									</div>
+									<div class="line-details">
 										<Select
 											label="Budget line"
 											value={line.budgetLine ?? 0}
-											options={[
-												{ value: 0, label: 'Not budgeted' },
-												...planned.map((b) => ({ value: b.id, label: b.description }))
-											]}
-											onchange={(v) => {
-												lines[i].budgetLine = v === 0 ? null : v;
-												const b = planned.find((p) => p.id === v);
-												if (b) lines[i].costCentre = b.costCentre;
-											}}
+											options={budgetOptions(line.account)}
+											onchange={(v) => pickBudgetLine(i, v)}
 										/>
-									</div>
-								{/if}
-								{#if account}
-									{@const fixed = planned.find((b) => b.id === line.budgetLine)}
-									<div class="budget-line">
 										<fieldset class="plain" disabled={!!fixed}>
 											<Select
 												label="Cost centre"
@@ -553,7 +605,7 @@
 											/>
 										</fieldset>
 									</div>
-								{/if}
+								</div>
 							{/each}
 							<button
 								type="button"
@@ -577,7 +629,10 @@
 							{format}
 							required
 							bind:invalid={dateInvalid}
-							oninput={(v) => v && (date = v)}
+							oninput={(v) => {
+								if (v) date = v;
+								clearError('date');
+							}}
 							oncommit={(v) => (date = v)}
 						/>
 						{#if kind === 'expense' || kind === 'income'}
@@ -602,25 +657,26 @@
 						oninput={(t) => (notes = t.trim() || null)}
 						oncommit={(v) => (notes = v)}
 					/>
-					{#if origin.type === 'manual'}
-						<Receipts
-							{attachments}
-							{pending}
-							{previewing}
-							{onpreview}
-							onremove={(a) => (removed = [...removed, a.id])}
-							onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
-							onadd={(paths) =>
-								(pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
-						/>
-					{/if}
-					{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
-						<p class="form-error">{error.message}</p>
-					{/if}
-				</div>
-			{/key}
-		</div>
-	</fieldset>
+				</fieldset>
+				{#if origin.type === 'manual' && (!locked || attachments.length)}
+					<Receipts
+						{attachments}
+						{pending}
+						{previewing}
+						readonly={locked}
+						{onpreview}
+						onremove={(a) => (removed = [...removed, a.id])}
+						onremovePending={(i) => (pending = pending.filter((_, j) => j !== i))}
+						onadd={(paths) =>
+							(pending = [...pending, ...paths.filter((p) => !pending.includes(p))])}
+					/>
+				{/if}
+				{#if error && !['party', 'other', 'lines', 'amount'].includes(error.field ?? '')}
+					<p class="form-error">{error.message}</p>
+				{/if}
+			</div>
+		{/key}
+	</div>
 
 	{#snippet footer()}
 		{#if origin.type !== 'manual'}
@@ -708,6 +764,19 @@
 		color: var(--color-plus);
 	}
 
+	.split-line {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+	}
+
+	/* A rule between lines, so each line's details read as its own. */
+	.split-line + .split-line {
+		margin-top: 6px;
+		padding-top: 12px;
+		border-top: 1px solid var(--color-rule);
+	}
+
 	.line {
 		display: flex;
 		align-items: center;
@@ -730,8 +799,15 @@
 		width: 120px;
 	}
 
-	.budget-line {
+	.line-details {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: var(--spacing-2);
 		padding-left: 14px;
+	}
+
+	.line-details fieldset {
+		min-width: 0;
 	}
 
 	.icon,

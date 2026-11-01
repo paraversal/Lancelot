@@ -5,6 +5,8 @@
 pub mod api;
 pub mod service;
 pub mod settings;
+pub mod sources;
 
 pub use service::Service;
-pub use settings::AppSettings;
+pub use settings::{AppSettings, Appearance};
+pub use sources::{DataSource, DataSourceView, MemoryTokens, PullRequest, Pulled, TokenStore};

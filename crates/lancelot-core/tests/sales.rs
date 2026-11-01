@@ -25,16 +25,16 @@ fn with_tiers() -> (Book, TierId, TierId) {
     (book, early, regular)
 }
 
-fn sheet(book: &Book, name: &str, rows: &[(&str, &str)]) -> Sheet {
+fn sheet(name: &str, rows: &[(&str, &str)]) -> TicketBatch {
     let mut text = String::from("Order ID,Ticket\n");
     for (order, tier) in rows {
         text.push_str(&format!("{order},{tier}\n"));
     }
-    read_sheet(name, text.as_bytes(), book.ticket_columns()).unwrap()
+    batch(name, text.as_bytes())
 }
 
 fn import(book: &mut Book, day: u8, rows: &[(&str, &str)]) -> ImportId {
-    let s = sheet(book, &format!("tickets-{day}.csv"), rows);
+    let s = sheet(&format!("tickets-{day}.csv"), rows);
     book.import_tickets(&s, june(day), now()).unwrap()
 }
 
@@ -87,7 +87,7 @@ fn a_file_imported_after_the_fact_takes_its_place_in_the_past() {
     );
 
     // The preview counts from the import before its date, and says it won't be current.
-    let old = sheet(&book, "old.csv", &[("1", "Regular")]);
+    let old = sheet("old.csv", &[("1", "Regular")]);
     let preview = book.preview_import(&old, june(2));
     assert_eq!(preview.previous, None);
     assert!(!preview.current);
@@ -110,7 +110,7 @@ fn a_file_imported_after_the_fact_takes_its_place_in_the_past() {
     assert_eq!(sold, [1, 3]);
 
     // A file dated last is current, and counts from the one before it.
-    let new = sheet(&book, "new.csv", &[("1", "Regular"), ("2", "Regular")]);
+    let new = sheet("new.csv", &[("1", "Regular"), ("2", "Regular")]);
     let preview = book.preview_import(&new, june(16));
     assert_eq!(preview.previous, Some(june_9));
     assert!(preview.current);
@@ -140,7 +140,7 @@ fn changing_a_date_can_change_the_current_import() {
 fn imports_on_one_day_count_in_the_order_they_came() {
     let (mut book, _, regular) = with_tiers();
     import(&mut book, 2, &[("1", "Regular")]);
-    let s = sheet(&book, "same-day.csv", &[("1", "Regular"), ("2", "Regular")]);
+    let s = sheet("same-day.csv", &[("1", "Regular"), ("2", "Regular")]);
     let preview = book.preview_import(&s, june(2));
     assert!(preview.current);
     book.import_tickets(&s, june(2), now()).unwrap();
