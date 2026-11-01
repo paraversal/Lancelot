@@ -86,7 +86,7 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 In the app, the entry panel's last text field is **Description** (shown in the ledger row), where the Ledger frame says _Note_.
 
-The app's Tickets page follows the Tickets frames. Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees.
+The app's Tickets page follows the Tickets frames. Where it differs: the Edit tier panel saves with **Save ⌘↵** instead of Done, like the other panels; "New tier" for an unknown name in the Import panel opens the tier panel and returns to the import once saved; the header's import line opens the earlier imports with their snapshot dates; the totals also show the ticket fees, and **Other income in the ledger** when income was typed into the Tickets category by hand, which the Ticket income total includes. In the Import panel, an order's conflict sits on its own line under the tier.
 
 Sales draws places against the quota, so its label matches the Sold column, with the cancelled on top in `on-ink-muted`, a neutral fill that belongs to no tier. The line appears only when every tier has a quota. Revenue is net income; only its last column carries an amount, and the others have theirs in the tooltip. Date labels thin out when they no longer fit, and the last always shows. Below 920 px of content, Break-even and Sales move under the tiers.
 

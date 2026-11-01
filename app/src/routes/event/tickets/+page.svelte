@@ -22,7 +22,7 @@
 	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
 	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { conflictCount, formatFee, shortDay } from '#lib/tickets.ts';
+	import { conflictCount, formatFee, otherTicketIncome, shortDay } from '#lib/tickets.ts';
 	import CancellationPanel from './CancellationPanel.svelte';
 	import ConflictCard from './ConflictCard.svelte';
 	import ImportPanel from './ImportPanel.svelte';
@@ -34,6 +34,8 @@
 	const tickets = $derived(snapshot.tickets);
 	const latest = $derived(tickets.imports.at(-1) ?? null);
 	const conflicts = $derived(conflictCount(tickets));
+	const otherIncome = $derived(otherTicketIncome(snapshot));
+	const ticketCategory = $derived(snapshot.accounts.find((a) => a.role === 'tickets')?.id);
 
 	type Open =
 		| { type: 'tier'; id: TierId | null; name?: string; then?: TicketBatch | null }
@@ -212,7 +214,7 @@
 							<Icon name="plus" size={14} />Tier
 						</button>
 					{/if}
-					{#if tickets.tiers.length}
+					{#if tickets.tiers.length || otherIncome}
 						{#if tickets.total.fees}
 							<div class="row total" role="row">
 								<span class="name">Ticket fees</span>
@@ -225,9 +227,17 @@
 								<span class="num">{formatAmount(-tickets.total.refunds, format)}</span>
 							</div>
 						{/if}
+						{#if otherIncome}
+							<div class="row total" role="row">
+								<a class="name other" href="/event/ledger?category={ticketCategory}"
+									>Other income in the ledger</a
+								>
+								<span class="num">{formatAmount(otherIncome, format)}</span>
+							</div>
+						{/if}
 						<div class="row total strong" role="row">
 							<span class="name">Ticket income</span>
-							<span class="num">{formatAmount(tickets.total.net, format)}</span>
+							<span class="num">{formatAmount(tickets.total.net + otherIncome, format)}</span>
 						</div>
 						{#if conflicts}
 							<p class="warning" role="note">
@@ -539,6 +549,17 @@
 
 	.row.total + .row.total {
 		padding-top: 6px;
+	}
+
+	.other {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.other:hover {
+		color: var(--color-ink);
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 
 	.row.total.strong {

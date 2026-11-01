@@ -1,9 +1,24 @@
 // Ticket helpers for the Tickets page. Fees are basis points (R-TKT-10): `250` is 2,5 %. The
 // fee field takes a percentage with at most two decimals; the core checks it against the price.
+import type { EventSnapshot } from './api/generated/EventSnapshot';
 import type { NumberFormat } from './api/generated/NumberFormat';
 import type { SalesPoint } from './api/generated/SalesPoint';
 import type { TierFigures } from './api/generated/TierFigures';
 import type { Tickets } from './api/generated/Tickets';
+
+/**
+ * Income typed into the Tickets category by hand. The sales don't know it, but it is in the
+ * category's balance, so the Tickets page shows it to add up with the rest of the app.
+ */
+export function otherTicketIncome(snapshot: EventSnapshot): number {
+	const category = snapshot.accounts.find((a) => a.role === 'tickets');
+	if (!category) return 0;
+	return snapshot.txns
+		.filter((t) => t.origin.type === 'manual')
+		.flatMap((t) => t.lines)
+		.filter((l) => l.account === category.id)
+		.reduce((sum, l) => sum - l.amount, 0);
+}
 
 /** `2,5 %` (De) or `2.5%` (En), without trailing zeros. */
 export function formatFee(bp: number, format: NumberFormat): string {

@@ -237,12 +237,16 @@
 					<div class="row">
 						<span class="dot" style:background={tierColor(tierIndex(c.tier))}></span>
 						<span class="name">{tierName(c.tier)}</span>
-						{#each removed as r (r.order)}
-							<span class="conflict">Order {r.order} · conflict</span>
-						{/each}
 						{#if c.added}<span class="delta plus">{signed(c.added)}</span>{/if}
 						{#if c.removed}<span class="delta">{signed(-c.removed)}</span>{/if}
 						{#if !c.added && !c.removed}<span class="delta muted">±0</span>{/if}
+						{#if removed.length}
+							<div class="conflicts">
+								{#each removed as r (r.order)}
+									<span class="conflict">Order {r.order} · conflict</span>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -403,6 +407,7 @@
 
 	.changes .row {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--spacing-2);
 		min-height: 32px;
@@ -431,6 +436,15 @@
 	.changes .name {
 		flex: 1;
 		min-width: 0;
+	}
+
+	/* On their own line under the tier's name, however many orders there are. */
+	.conflicts {
+		display: flex;
+		flex-basis: 100%;
+		flex-wrap: wrap;
+		gap: 2px var(--spacing-3);
+		padding: 0 0 var(--spacing-2) var(--spacing-4);
 	}
 
 	.conflict {

@@ -72,6 +72,7 @@ Optional per event, and switched off in Settings while the event has no tiers (R
 - Manual cancellations on an order or a manual sale, and a choice of who pays the refund (R-TKT-14, R-TKT-15).
 - A sales chart over the imports, by places or net income, against the quota (R-TKT-8).
 - Break-even: the amount missing and about how many tickets close it, overall and per tier, with the places left (R-TKT-9).
+- Income typed into the Tickets category by hand shows as its own line, counted in Ticket income and leading to the category in the ledger. It adds no tickets to the tiers.
 
 ## Cost centres
 

@@ -5,7 +5,7 @@
 	import { flipOptions, rowIn, rowOut } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import { page } from '$app/state';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
 	import { categoryColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
@@ -72,7 +72,7 @@
 
 	// Opened from elsewhere, e.g. a person's running balance: `/event/ledger?txn=12`, or
 	// "New entry" on the overview: `/event/ledger?new`, or what a plugin proposes:
-	// `/event/ledger?proposal`.
+	// `/event/ledger?proposal`. The Tickets page leads to a category: `/event/ledger?category=4`.
 	onMount(() => {
 		if (page.url.searchParams.has('proposal') && !session.closed) {
 			open(null);
@@ -80,6 +80,14 @@
 			return;
 		}
 		if (page.url.searchParams.has('new') && !session.closed) return open(null);
+		const category = page.url.searchParams.get('category');
+		if (category) {
+			grouping = 'category';
+			tick().then(() =>
+				document.getElementById(`group-${category}`)?.scrollIntoView({ block: 'start' })
+			);
+			return;
+		}
 		const id = Number(page.url.searchParams.get('txn'));
 		const txn = snapshot.txns.find((t) => t.id === id);
 		if (txn) {
@@ -199,7 +207,7 @@
 
 				<div class="rows" role="table">
 					{#each groups as group (group.key)}
-						<div class="group" role="rowgroup">
+						<div class="group" id="group-{group.key}" role="rowgroup">
 							{#if grouping === 'day'}
 								<span>{dayLabel(group.key)}</span>
 							{:else}
