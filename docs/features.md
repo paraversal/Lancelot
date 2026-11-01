@@ -97,6 +97,10 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 **Ticket API** pulls tickets from a data source into the same review (R-TKT-3). Not yet tried with a real provider.
 
+**What if** tries ideas against the forecast on the Budget page: more tickets per tier up to its quota, another price for those still to sell, and each category's figure, which can't go below what is booked. The sliders aren't saved, and nothing they show reaches the ledger.
+
+**Cash box count** adds up notes and coins under both amounts when counting a cash account, and fills in the amount. The pieces are kept when the count is saved, and say so if the amount is changed afterwards. Settings can leave out denominations a group doesn't use, which a template copies. Euro only, like the app.
+
 **Data sources** are set up with a form under the plugin, with Save and test. The details stay on this computer and the token in the system's keychain, so neither is in the event file. Pulling is the only use of the network (R-NF-3). Saving a token and pulling in the desktop app hasn't been fully tested yet.
 
 ## Settling and closing

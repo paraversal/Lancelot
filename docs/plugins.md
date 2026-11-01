@@ -22,7 +22,7 @@ A plugin adds records, screens and proposals for one kind of group's workflow. P
      id: "example", // Stored with its records, so it never changes.
      name: "Example",
      description: "One sentence for Settings: what it adds to the app.",
-     ReportSection: Section,
+     BudgetSection: Section,
    };
    ```
 
@@ -36,20 +36,22 @@ The app draws the frame around every slot, with the plugin's name and a "Plugin"
 
 A plugin that is switched off for the event shows none of these, and its records stay in the file.
 
-| Slot              | Shows                                  | Shown when                                                     | Props                              |
-| ----------------- | -------------------------------------- | -------------------------------------------------------------- | ---------------------------------- |
-| `CentreSection`   | On a cost centre's page                | `attachedTo(ctx, centre)` holds                                | `ctx`, `centre`, `setPanel`        |
-| `TicketSection`   | On the Tickets page                    | The event is open and its data source is set                   | `ctx`, `proposeImport`, `setPanel` |
-| `SettingsSection` | Under its entry in Settings → Plugins  | Always                                                         | `ctx`                              |
-| `ReportSection`   | In the settlement report               | `inReport(ctx)` holds, unless left out in the report's toolbar | `ctx`                              |
+| Slot              | Shows                                  | Shown when                                                     | Props                                                       |
+| ----------------- | -------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
+| `CentreSection`   | On a cost centre's page                | `attachedTo(ctx, centre)` holds                                | `ctx`, `centre`, `setPanel`                                 |
+| `TicketSection`   | On the Tickets page                    | The event is open and its data source is set                   | `ctx`, `proposeImport`, `setPanel`                          |
+| `BudgetSection`   | On the Budget page, under the forecast | The event is open and `onBudget(ctx)` holds                    | `ctx`                                                       |
+| `CountSection`    | Under each amount in the Count panel   | `onCount(ctx, account)` holds                                  | `ctx`, `account`, `which`, `amount`, `setAmount`, `onSaved` |
+| `SettingsSection` | Under its entry in Settings → Plugins  | Always                                                         | `ctx`                                                       |
+| `ReportSection`   | In the settlement report               | `inReport(ctx)` holds, unless left out in the report's toolbar | `ctx`                                                       |
 
-`inReport` defaults to yes when left out. A report section prints on the report's sheet, so it uses `pt` sizes, avoids breaking inside a row and changes nothing.
+`onBudget`, `onCount` and `inReport` default to yes when left out. A count section fills in the amount with `setAmount` and saves nothing. To keep its own records, it registers a function with `onSaved`, which runs once the panel's Save has saved the count, so Cancel leaves nothing. A report section prints on the report's sheet, so it uses `pt` sizes, avoids breaking inside a row and changes nothing.
 
 ## The context
 
 ### What the event holds
 
-`closed`, `format`, `costCentres`, `accounts`, `txns` and `figuresOf(centre)` read the event as it is now. They are reactive, so read them in `$derived`. People's bank details and ticket orders are left out on purpose.
+`closed`, `format`, `costCentres`, `accounts`, `txns`, `budget`, `tiers` and `figuresOf(centre)` read the event as it is now. They are reactive, so read them in `$derived`. People's bank details and ticket orders are left out on purpose.
 
 A closed event refuses changes, so hide what would change it when `ctx.closed` holds.
 
@@ -111,7 +113,7 @@ Declare `dataSource` on the plugin. The app draws the form in Settings, keeps th
 
 ## Your own figures
 
-Every figure of the core comes from the core, and the UI only formats it. A plugin's own figures are the one exception, allowed because they never affect the ledger. Keep them in integer cents, say so at the top of the file, and test them. `drinks/figures.ts` is a good example.
+Every figure of the core comes from the core, and the UI only formats it. A plugin's own figures are the one exception, allowed because they never affect the ledger. Keep them in integer cents, say so at the top of the file, and test them. `drinks/figures.ts` and `what-if/scenario.ts` are good examples.
 
 ## Design
 
@@ -119,4 +121,4 @@ Follow the [design notes](design/README.md): labels name things, and a hint line
 
 ## Testing
 
-Render through the real page where the slot lives, with the example event, as `drinks/drinks.svelte.test.ts` does, or pass a stub context, as `ticket-sheet/sheet.svelte.test.ts` does. Check that proposing saves nothing, and that a closed event hides what would change it. `scripts/check.sh` runs everything, including the boundary test.
+Render through the real page where the slot lives, with the example event, as `what-if/what-if.svelte.test.ts` does, or pass a stub context, as `ticket-sheet/sheet.svelte.test.ts` does. Check that proposing saves nothing, and that a closed event hides what would change it. `scripts/check.sh` runs everything, including the boundary test.

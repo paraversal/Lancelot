@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.11. Phases 1 and 2 are built, and most of what's left of them needs a real event. The roadmap builds on [requirements v0.13](requirements.md) and the [design notes](design/README.md), and what exists today is listed in [features](features.md). Finished work is kept to a summary here; the full checklists are in git, with `git show bb9e4a8:docs/roadmap.md`.
+Status: v0.11. Phases 1 and 2 are built, and most of what's left of them needs a real event. The roadmap builds on [requirements v0.13](requirements.md) and the [design notes](design/README.md), and what exists today is listed in [features](features.md). Finished work is kept to a summary here; the full checklists are in git, with `git show 16fd479:docs/roadmap.md`.
 
 ## Next step
 

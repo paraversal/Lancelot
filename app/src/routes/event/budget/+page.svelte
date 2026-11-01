@@ -14,6 +14,9 @@
 	import { riseIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
+	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
+	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import BudgetLinePanel from './BudgetLinePanel.svelte';
 
@@ -71,6 +74,12 @@
 	const line = $derived(snapshot.budgetLines.find((b) => b.id === selected) ?? null);
 
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
+
+	const pluginSections = plugins.flatMap((plugin) =>
+		plugin.BudgetSection
+			? [{ plugin, ctx: pluginContext(plugin.id), Section: plugin.BudgetSection }]
+			: []
+	);
 
 	// Opened from elsewhere: `/event/budget?line=3`.
 	onMount(() => {
@@ -134,6 +143,16 @@
 				<span class="total">{formatAmount(budget.result.actual, format, 'always')}</span>
 			</div>
 		</div>
+
+		{#if !session.closed}
+			{#each pluginSections as { plugin, ctx, Section } (plugin.id)}
+				{#if pluginEnabled(plugin.id) && (plugin.onBudget?.(ctx) ?? true)}
+					<PluginFrame name={plugin.name}>
+						<Section {ctx} />
+					</PluginFrame>
+				{/if}
+			{/each}
+		{/if}
 
 		{#each sections as section (section.title)}
 			<div class="rows" role="table" aria-label={section.title}>

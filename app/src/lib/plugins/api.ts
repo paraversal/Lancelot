@@ -4,6 +4,7 @@
 import type { Component, Snippet } from 'svelte';
 import type { AccountKind } from '../api/generated/AccountKind';
 import type { AccountView } from '../api/generated/AccountView';
+import type { Budget } from '../api/generated/Budget';
 import type { CostCentre } from '../api/generated/CostCentre';
 import type { CostCentreFigures } from '../api/generated/CostCentreFigures';
 import type { NumberFormat } from '../api/generated/NumberFormat';
@@ -13,10 +14,12 @@ import type { Pulled } from '../api/generated/Pulled';
 import type { Table } from '../api/generated/Table';
 import type { TableRow } from '../api/generated/TableRow';
 import type { TicketBatch } from '../api/generated/TicketBatch';
+import type { TierFigures } from '../api/generated/TierFigures';
 import type { TxnView } from '../api/generated/TxnView';
 
 export type {
 	AccountView,
+	Budget,
 	CostCentre,
 	CostCentreFigures,
 	PluginChange,
@@ -25,6 +28,7 @@ export type {
 	Table,
 	TableRow,
 	TicketBatch,
+	TierFigures,
 	TxnView
 };
 
@@ -73,6 +77,10 @@ export interface PluginContext {
 	readonly accounts: AccountView[];
 	readonly txns: TxnView[];
 	figuresOf(centre: number): CostCentreFigures | undefined;
+	/** Plan, actual and forecast of the whole event, as the Budget page shows them. */
+	readonly budget: Budget;
+	/** The ticket tiers with what was sold of each. No orders, so no one's purchase. */
+	readonly tiers: TierFigures[];
 	/** This plugin's records, in creation order. */
 	readonly records: PluginRecord[];
 	/** Applies the changes together. A null value removes a record. */
@@ -120,6 +128,22 @@ export type TicketSectionProps = {
 
 export type SettingsSectionProps = { ctx: PluginContext };
 
+/** On the Budget page while the event is open. */
+export type BudgetSectionProps = { ctx: PluginContext };
+
+/** Under one of the amounts in the panel that counts an account. */
+export type CountSectionProps = {
+	ctx: PluginContext;
+	account: number;
+	which: 'opening' | 'closing';
+	/** What the amount field holds now. */
+	amount: number | null;
+	/** Fills in the amount field; nothing is saved until the treasurer does. */
+	setAmount: (amount: number | null) => void;
+	/** Runs this once the count is saved, so Cancel leaves nothing. Returns a function that stops. */
+	onSaved: (run: () => Promise<void>) => () => void;
+};
+
 /** Printed in the settlement report: it only shows, it changes nothing. */
 export type ReportSectionProps = { ctx: PluginContext };
 
@@ -142,6 +166,12 @@ export interface Plugin {
 	/** On the Tickets page: a way for tickets to come in. */
 	TicketSection?: Component<TicketSectionProps>;
 	SettingsSection?: Component<SettingsSectionProps>;
+	/** Whether `BudgetSection` has something to show. Yes when left out. */
+	onBudget?(ctx: PluginContext): boolean;
+	BudgetSection?: Component<BudgetSectionProps>;
+	/** Whether `CountSection` shows for this account. Yes when left out. */
+	onCount?(ctx: PluginContext, account: number): boolean;
+	CountSection?: Component<CountSectionProps>;
 	/** Whether `ReportSection` has something to print. Yes when left out. */
 	inReport?(ctx: PluginContext): boolean;
 	ReportSection?: Component<ReportSectionProps>;

@@ -1,6 +1,6 @@
 ---
 name: lancelot-plugin
-description: Add or change a built-in Lancelot plugin in app/src/lib/plugins, or add a slot or method to its PluginContext. Use for work on the drinks, ticket-sheet or ticket-api plugins, or a new one.
+description: Add or change a built-in Lancelot plugin in app/src/lib/plugins, or add a slot or method to its PluginContext. Use for work on the drinks, ticket-sheet, ticket-api, what-if or cash-count plugins, or a new one.
 ---
 
 Read `docs/plugins.md` first: it has the rules, the slots and the context. `app/src/lib/plugins/api.ts` is the source of truth for the types.

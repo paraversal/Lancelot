@@ -50,6 +50,12 @@ export function pluginContext(id: string): PluginContext {
 			return snapshot().txns;
 		},
 		figuresOf: (centre) => snapshot().budget.costCentres.find((c) => c.costCentre === centre),
+		get budget() {
+			return snapshot().budget;
+		},
+		get tiers() {
+			return snapshot().tickets.tiers;
+		},
 		get records() {
 			return snapshot().pluginRecords.filter((r) => r.plugin === id && r.key !== OFF_KEY);
 		},

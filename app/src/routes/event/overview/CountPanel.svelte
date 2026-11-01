@@ -10,6 +10,9 @@
 	import { popIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import Check from '#lib/motion/Check.svelte';
+	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
+	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let { account, onclose }: { account: number; onclose: () => void } = $props();
@@ -42,6 +45,19 @@
 	);
 	const difference = $derived(closing === null ? null : closing - computed);
 
+	// What plugins add under each amount (technical design §10). Saving stays this panel's.
+	const sections = plugins.flatMap((plugin) =>
+		plugin.CountSection && pluginEnabled(plugin.id)
+			? [{ plugin, ctx: pluginContext(plugin.id), Section: plugin.CountSection }]
+			: []
+	);
+	const counting = $derived(sections.filter((s) => s.plugin.onCount?.(s.ctx, account) ?? true));
+	const afterSave = new Set<() => Promise<void>>();
+	function onSaved(run: () => Promise<void>) {
+		afterSave.add(run);
+		return () => afterSave.delete(run);
+	}
+
 	async function save() {
 		try {
 			error = null;
@@ -52,6 +68,7 @@
 					closing !== null && closingDate ? { date: closingDate, amount: closing } : null
 				)
 			);
+			for (const run of afterSave) await run();
 			onclose();
 		} catch (e) {
 			error = errorMessage(e);
@@ -67,6 +84,18 @@
 		}
 	}}
 />
+
+{#snippet added(
+	which: 'opening' | 'closing',
+	amount: number | null,
+	setAmount: (amount: number | null) => void
+)}
+	{#each counting as { plugin, ctx, Section } (plugin.id)}
+		<PluginFrame name={plugin.name}>
+			<Section {ctx} {account} {which} {amount} {setAmount} {onSaved} />
+		</PluginFrame>
+	{/each}
+{/snippet}
 
 <Panel title={name} {onclose}>
 	{#if !movement}<div class="group">
@@ -87,6 +116,7 @@
 					oncommit={(v) => (opening = v)}
 				/>
 			</div>
+			{@render added('opening', opening, (v) => (opening = v))}
 		</div>{/if}
 	<div class="group">
 		<h3>Closing count</h3>
@@ -108,6 +138,7 @@
 				oncommit={(v) => (closing = v)}
 			/>
 		</div>
+		{@render added('closing', closing, (v) => (closing = v))}
 	</div>
 	<div class="sums">
 		<div class="line"><span>In the books</span><span>{formatAmount(computed, format)}</span></div>
