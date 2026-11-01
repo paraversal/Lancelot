@@ -28,6 +28,18 @@ Today tickets come from a sheet (`.ods`, `.xlsx` or `.csv`) with one row per tic
 
 A new form is one `Entry` variant, with no change to the load path. Candidates, each only when needed: a supplier credit note, a second payer on one receipt, and income net of a fee.
 
+## Architectural choices to revisit
+
+Choices that work today but could shape later development. Each one says what would make it worth changing.
+
+### Forms wait for field reads with no timeout
+
+`AmountField` and `DateField` read every keystroke through the core, so a form waits for `amountsRead()` and `datesRead()` before it saves. Both wait until no read is in flight, with no timeout, and they wait for every field in the app, not only the form's own. If a read never returned, Save would do nothing and show no message, in every form that waits, until the app restarts.
+
+This is acceptable while reads are local calls that return quickly. Revisit it if reading could ever hang, for example if parsing moved behind a network call or a plugin, or as soon as a stuck Save is reported. The likely change is a time limit that shows an error and refuses to save, since saving without the read would bring back the wrong value this wait prevents.
+
+Each form also has to remember the wait and its `invalid` flags. If new forms keep forgetting them, a shared form helper that does both would be worth the larger change.
+
 ## Decided against
 
 These do not fit a tool for one treasurer, and the changes above cover the realistic cases more simply: a plugin system, configurable workflows and event sourcing. Multi-event, multi-user and compliance features stay out of scope (requirements §1).
