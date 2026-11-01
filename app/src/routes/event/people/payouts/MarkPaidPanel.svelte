@@ -3,7 +3,7 @@
 	// IBAN, from one account on one date, in a single step. Repayments are not part of it.
 	import { api, errorMessage } from '#lib/api/index.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Select from '#lib/components/Select.svelte';
@@ -28,6 +28,7 @@
 	let account = $state(session.event!.snapshot.event.defaultReimbursementAccount);
 	let date = $state<string | null>(new Date().toISOString().slice(0, 10));
 	let error = $state<string | null>(null);
+	let dateInvalid = $state(false);
 
 	// C2: the rows tick off one after another. The change is saved first; the panel keeps the
 	// rows it showed and closes when the last tick is drawn.
@@ -36,7 +37,8 @@
 	const fx = $derived(level('C2'));
 
 	async function confirm() {
-		if (!date || !payable.length || paid) return;
+		await datesRead();
+		if (dateInvalid || !date || !payable.length || paid) return;
 		const shown = payable.map((p) => ({ ...p }));
 		try {
 			await session.change(() => api.markPayoutsPaid(account, date!));
@@ -90,6 +92,7 @@
 		value={date}
 		{format}
 		required
+		bind:invalid={dateInvalid}
 		oninput={(v) => v && (date = v)}
 		oncommit={(v) => (date = v)}
 	/>

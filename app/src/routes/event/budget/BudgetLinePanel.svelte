@@ -9,7 +9,7 @@
 	import type { BudgetLine } from '#lib/api/generated/BudgetLine.ts';
 	import type { BudgetLineDraft } from '#lib/api/generated/BudgetLineDraft.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import ChoiceField from '#lib/components/ChoiceField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -73,6 +73,8 @@
 			unitPrice = e.unitPrice;
 		} else if (e) amount = e.amount;
 	});
+	let amountInvalid = $state(false);
+	let unitPriceInvalid = $state(false);
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
@@ -108,6 +110,8 @@
 
 	async function save() {
 		error = null;
+		await amountsRead();
+		if (mode === 'amount' ? amountInvalid : unitPriceInvalid) return;
 		const d = draft();
 		if (!d) return;
 		try {
@@ -210,7 +214,12 @@
 				onchange={() => (error = null)}
 			/>
 			{#if mode === 'amount'}
-				<AmountField value={amount} {format} oninput={(v) => (amount = v)} />
+				<AmountField
+					value={amount}
+					{format}
+					bind:invalid={amountInvalid}
+					oninput={(v) => (amount = v)}
+				/>
 			{:else}
 				<div class="times">
 					<TextField
@@ -224,6 +233,7 @@
 						label="Unit price"
 						value={unitPrice}
 						{format}
+						bind:invalid={unitPriceInvalid}
 						oninput={(v) => (unitPrice = v)}
 					/>
 				</div>

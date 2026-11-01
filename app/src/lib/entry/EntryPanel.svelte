@@ -19,11 +19,11 @@
 	import type { Entry } from '#lib/api/generated/Entry.ts';
 	import type { TxnView } from '#lib/api/generated/TxnView.ts';
 	import { categoryColor } from '#lib/colors.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import BalanceCell from '#lib/components/BalanceCell.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import ChoiceField from '#lib/components/ChoiceField.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
@@ -100,6 +100,10 @@
 	let error = $state<{ field: string | null; message: string } | null>(null);
 	let confirming = $state(false);
 	let generation = $state(0); // remounts the fields after "Save & next"
+	let amountInvalid = $state(false);
+	let dateInvalid = $state(false);
+	// By position, like the split's fields; only the lines on show count.
+	let lineInvalid = $state<boolean[]>([]);
 
 	function load(t: TxnView | null) {
 		error = null;
@@ -293,6 +297,11 @@
 
 	async function save(next: boolean) {
 		error = null;
+		// A value typed just before the click is still being read. One that cannot be read shows
+		// its own message, and must not be saved as the value it replaced.
+		await Promise.all([amountsRead(), datesRead()]);
+		if (amountInvalid || dateInvalid || (split && lineInvalid.slice(0, lines.length).some(Boolean)))
+			return;
 		const entry = build();
 		if (!entry || !date) {
 			if (!date) error = { field: 'date', message: 'enter a date' };
@@ -449,6 +458,7 @@
 							{format}
 							large
 							autofocus={kind !== 'settle'}
+							bind:invalid={amountInvalid}
 							oninput={(v) => {
 								amount = v;
 								clearError('amount');
@@ -558,6 +568,7 @@
 												<AmountField
 													value={line.amount}
 													{format}
+													bind:invalid={() => lineInvalid[i] ?? false, (v) => (lineInvalid[i] = v)}
 													oninput={(v) => {
 														lines[i].amount = v;
 														clearError('lines');
@@ -617,6 +628,7 @@
 							value={date}
 							{format}
 							required
+							bind:invalid={dateInvalid}
 							oninput={(v) => {
 								if (v) date = v;
 								clearError('date');

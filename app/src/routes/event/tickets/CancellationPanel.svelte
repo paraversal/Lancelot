@@ -10,7 +10,7 @@
 	import type { RefundTerms } from '#lib/api/generated/RefundTerms.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
@@ -99,6 +99,7 @@
 
 	async function save() {
 		error = null;
+		await datesRead();
 		const missing = (field: string, message: string) => void (error = { field, message });
 		if (n === null || Number.isNaN(n)) return missing('count', 'enter a whole number');
 		if (bp === null) return missing('refundBp', 'enter a percentage');

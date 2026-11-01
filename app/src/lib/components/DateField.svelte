@@ -1,7 +1,16 @@
+<script lang="ts" module>
+	const reading = new Set<Promise<void>>();
+
+	/** As `amountsRead`: a form calls this before saving, or a date just typed would be lost. */
+	export async function datesRead() {
+		while (reading.size) await Promise.all(reading);
+	}
+</script>
+
 <script lang="ts">
 	// A date as text in the user's format (R-NF-6). Both formats are accepted; while the typed
 	// text differs from how the date is shown, the hint previews it (`= 06.12.2026`).
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { api, errorMessage } from '../api';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import { formatDate } from '../format';
@@ -12,6 +21,7 @@
 		value,
 		format,
 		required = false,
+		invalid = $bindable(false),
 		oninput: onvalue,
 		oncommit
 	}: {
@@ -20,6 +30,8 @@
 		value: string | null;
 		format: NumberFormat;
 		required?: boolean;
+		/** Whether the input cannot be read. The field shows why; a form must not save. */
+		invalid?: boolean;
 		/** The parsed date after every keystroke (null while empty or invalid). */
 		oninput?: (value: string | null) => void;
 		oncommit: (value: string | null) => void;
@@ -30,6 +42,9 @@
 	let parsed = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let seq = 0;
+	// A read that returns after the field is gone must not touch the form that replaced it.
+	let gone = false;
+	onDestroy(() => (gone = true));
 
 	// Reset only when the value or format really changed (see TextField).
 	let synced: string | undefined;
@@ -43,26 +58,37 @@
 		text = value ? formatDate(value, format) : '';
 		parsed = value;
 		error = null;
+		invalid = false;
 	});
 
-	async function parse() {
+	function parse() {
+		const run = read();
+		reading.add(run);
+		run.finally(() => reading.delete(run));
+		return run;
+	}
+
+	async function read() {
 		const mine = ++seq;
 		if (!text.trim()) {
 			parsed = null;
 			error = null;
+			invalid = false;
 			onvalue?.(null);
 			return;
 		}
 		try {
 			const r = await api.parseDate(text);
-			if (mine !== seq) return;
+			if (gone || mine !== seq) return;
 			parsed = r.date;
 			error = null;
+			invalid = false;
 			onvalue?.(r.date);
 		} catch (e) {
-			if (mine !== seq) return;
+			if (gone || mine !== seq) return;
 			parsed = null;
 			error = errorMessage(e);
+			invalid = true;
 			onvalue?.(null);
 		}
 	}
@@ -76,6 +102,7 @@
 
 	async function commit() {
 		await parse();
+		if (gone) return;
 		// Invalid input stays, with its message, until it is fixed; nothing is committed.
 		if (error) return;
 		if (required && !parsed) {

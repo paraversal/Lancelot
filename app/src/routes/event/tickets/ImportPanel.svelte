@@ -11,7 +11,7 @@
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import { tierColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Select from '#lib/components/Select.svelte';
@@ -95,6 +95,7 @@
 	}
 
 	async function doImport() {
+		await datesRead();
 		if (!batch || !preview || preview.unknown.length || !date || ticketAccount === null) return;
 		error = null;
 		try {

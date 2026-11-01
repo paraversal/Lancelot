@@ -5,9 +5,9 @@
 	import { api, errorMessage } from '#lib/api/index.ts';
 	import type { OpenEvent } from '#lib/api/generated/OpenEvent.ts';
 	import type { ReconciliationStatus } from '#lib/api/generated/ReconciliationStatus.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import { differenceText, formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -29,6 +29,8 @@
 	// The fields are rebuilt when another checkpoint is picked.
 	let form = $state(0);
 	let error = $state<string | null>(null);
+	let dateInvalid = $state(false);
+	let amountInvalid = $state(false);
 
 	function reset() {
 		editing = null;
@@ -58,7 +60,9 @@
 		}
 	}
 
-	function save() {
+	async function save() {
+		await Promise.all([amountsRead(), datesRead()]);
+		if (dateInvalid || amountInvalid) return;
 		const on = date;
 		const value = amount;
 		if (!on || value === null) return;
@@ -92,6 +96,7 @@
 				label="Date"
 				value={date}
 				{format}
+				bind:invalid={dateInvalid}
 				oninput={(v) => v && (date = v)}
 				oncommit={(v) => (date = v)}
 			/>
@@ -101,6 +106,7 @@
 				{format}
 				allowNegative
 				autofocus
+				bind:invalid={amountInvalid}
 				oninput={(v) => (amount = v)}
 				oncommit={(v) => (amount = v)}
 			/>

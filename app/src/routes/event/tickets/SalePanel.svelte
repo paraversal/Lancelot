@@ -12,7 +12,7 @@
 	import { tierColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
 	import ChoiceField from '#lib/components/ChoiceField.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import TextField from '#lib/components/TextField.svelte';
@@ -99,6 +99,7 @@
 
 	async function save() {
 		error = null;
+		await datesRead();
 		const d = draft();
 		if (!d) return;
 		try {
