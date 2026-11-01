@@ -49,7 +49,7 @@ export async function chooseReceipts(): Promise<string[]> {
 	return Array.isArray(picked) ? picked : picked ? [picked] : [];
 }
 
-/** Asks for a file for a plugin, which is only ever a ticket sheet so far. `null` when cancelled. */
+/** Asks for a file for a plugin. In a plain browser that is always a ticket sheet. `null` when cancelled. */
 export async function chooseFile(name: string, extensions: string[]): Promise<string | null> {
 	if (!isTauri()) return (await import('./dev')).dialogs.sheet();
 	const { open } = await import('@tauri-apps/plugin-dialog');

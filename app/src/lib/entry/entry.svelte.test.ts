@@ -23,6 +23,7 @@ const groupsOf = (select: HTMLSelectElement) =>
 	[...select.querySelectorAll('optgroup')].map((g) => g.label);
 
 beforeEach(() => {
+	vi.restoreAllMocks();
 	session.update({
 		revision: Date.now(),
 		path: '/x.lancelot',
@@ -93,7 +94,7 @@ describe('A split line', () => {
 	});
 
 	it('stops showing a refused payer once one is chosen', async () => {
-		vi.spyOn(api, 'parseAmount').mockResolvedValue({ cents: 1200, ambiguous: false });
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 1200, ambiguous: false, terms: 1 });
 		render(EntryPanel, props);
 		await fireEvent.input(screen.getByLabelText('Amount'), { target: { value: '12' } });
 		await fireEvent.click(screen.getByRole('button', { name: /^Save(?! &)/ }));
@@ -109,7 +110,7 @@ describe('A split line', () => {
 			...session.event!,
 			revision: Date.now()
 		} as never);
-		vi.spyOn(api, 'parseAmount').mockResolvedValue({ cents: 1200, ambiguous: false });
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 1200, ambiguous: false, terms: 1 });
 		render(EntryPanel, props);
 		const van = budgetLine('Van rental');
 		await fireEvent.change(screen.getByLabelText('Paid by'), {
@@ -124,5 +125,81 @@ describe('A split line', () => {
 			type: 'expense',
 			lines: [{ account: van.category, budgetLine: van.id }]
 		});
+	});
+});
+
+// Last: saving is remembered for the next entry.
+describe('A proposal from a plugin', () => {
+	const saved = () => vi.mocked(api.saveTxn).mock.calls[0][0];
+	const asset = (i: number) => snapshot.accounts.filter((a) => a.kind === 'asset')[i].id;
+	const income = () => snapshot.accounts.find((a) => a.kind === 'income')!.id;
+
+	beforeEach(() => {
+		vi.spyOn(api, 'saveTxn').mockResolvedValue({
+			...session.event!,
+			revision: Date.now()
+		} as never);
+	});
+
+	async function save() {
+		await fireEvent.click(screen.getByRole('button', { name: /^Save(?! &)/ }));
+		await vi.waitFor(() => expect(api.saveTxn).toHaveBeenCalled());
+	}
+
+	it('fills in an income with its date, destination and split, and saves only on Save', async () => {
+		render(EntryPanel, {
+			...props,
+			proposal: {
+				kind: 'income',
+				counterparty: 'SumUp',
+				amount: 1500,
+				date: '2026-06-13',
+				description: 'Card sales',
+				destination: asset(1),
+				lines: [
+					{ account: income(), costCentre: null, amount: 1000 },
+					{ account: income(), costCentre: null, amount: 500 }
+				]
+			}
+		});
+		expect(api.saveTxn).not.toHaveBeenCalled();
+		await save();
+		const draft = saved();
+		expect(draft.date).toBe('2026-06-13');
+		expect(draft.description).toBe('Card sales');
+		expect(draft.counterparty).toBe('SumUp');
+		expect(draft.total).toBe(1500);
+		const entry = draft.entry;
+		if (entry.type !== 'income') throw new Error(entry.type);
+		expect(entry.destination).toBe(asset(1));
+		expect(entry.lines.map((l) => l.amount)).toEqual([1000, 500]);
+	});
+
+	it('fills in a transfer between two accounts', async () => {
+		render(EntryPanel, {
+			...props,
+			proposal: { kind: 'transfer', amount: 2000, from: asset(0), to: asset(1) }
+		});
+		await save();
+		expect(saved().entry).toEqual({ type: 'transfer', from: asset(0), to: asset(1), amount: 2000 });
+	});
+
+	it('takes the default account for an expense that names no payer', async () => {
+		render(EntryPanel, {
+			...props,
+			proposal: {
+				kind: 'expense',
+				counterparty: 'Hoffmann',
+				amount: 700,
+				lines: [
+					{ account: snapshot.accounts.find((a) => a.kind === 'expense')!.id, costCentre: null }
+				]
+			}
+		});
+		await save();
+		const entry = saved().entry;
+		if (entry.type !== 'expense') throw new Error(entry.type);
+		expect(entry.payer).toBe(snapshot.event.defaultReimbursementAccount);
+		expect(entry.lines[0].amount).toBe(700);
 	});
 });

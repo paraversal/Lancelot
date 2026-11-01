@@ -8,13 +8,15 @@ import IbanField from './IbanField.svelte';
 // The real parsers live in Rust; here they are replaced by fixed answers.
 vi.mock('../api', async () => {
 	const { ApiError, errorMessage } = await vi.importActual<typeof import('../api')>('../api');
-	const amounts: Record<string, { cents: number; ambiguous: boolean }> = {
-		'1.234,5': { cents: 123450, ambiguous: false },
-		'1.234': { cents: 123400, ambiguous: true },
-		'1.234,50': { cents: 123450, ambiguous: false },
-		'1.2': { cents: 120, ambiguous: false },
-		'1.20': { cents: 120, ambiguous: false },
-		'1,20': { cents: 120, ambiguous: false }
+	const amounts: Record<string, { cents: number; ambiguous: boolean; terms: number }> = {
+		'1.234,5': { cents: 123450, ambiguous: false, terms: 1 },
+		'1.234': { cents: 123400, ambiguous: true, terms: 1 },
+		'1.234,50': { cents: 123450, ambiguous: false, terms: 1 },
+		'1.2': { cents: 120, ambiguous: false, terms: 1 },
+		'1.20': { cents: 120, ambiguous: false, terms: 1 },
+		'1,20': { cents: 120, ambiguous: false, terms: 1 },
+		'1,29+': { cents: 129, ambiguous: false, terms: 1 },
+		'1,29+1,49': { cents: 278, ambiguous: false, terms: 2 }
 	};
 	const dates: Record<string, string> = { '6.12.26': '2026-12-06', '06.12.2026': '2026-12-06' };
 	const messages: Record<string, string> = {
@@ -28,7 +30,7 @@ vi.mock('../api', async () => {
 		ApiError,
 		errorMessage,
 		api: {
-			parseAmount: vi.fn(async (input: string) => {
+			parseSum: vi.fn(async (input: string) => {
 				if (amounts[input]) return amounts[input];
 				throw error('bad_grouping');
 			}),
@@ -83,6 +85,44 @@ describe('AmountField', () => {
 		await fireEvent.blur(input);
 		await settle();
 		expect(oncommit).not.toHaveBeenCalled();
+	});
+});
+
+describe('AmountField with a sum', () => {
+	it('commits the total and keeps the sum on show to check', async () => {
+		const oncommit = vi.fn();
+		render(AmountField, { label: 'Amount', value: null, format: 'de', oncommit });
+		const input = screen.getByLabelText('Amount') as HTMLInputElement;
+
+		await fireEvent.focus(input);
+		await type(input, '1,29+1,49');
+		expect(screen.getByText(/^= 2,78.€$/)).toBeTruthy();
+
+		await fireEvent.blur(input);
+		await settle();
+		expect(oncommit).toHaveBeenCalledWith(278);
+		expect(input.value).toBe('1,29+1,49');
+		expect(screen.getByText(/^= 2,78.€$/)).toBeTruthy();
+	});
+
+	it('tidies a sign left at the end', async () => {
+		const oncommit = vi.fn();
+		render(AmountField, { label: 'Amount', value: null, format: 'de', oncommit });
+		const input = screen.getByLabelText('Amount') as HTMLInputElement;
+
+		await type(input, '1,29+');
+		expect(input.getAttribute('aria-invalid')).toBe('false');
+		expect(screen.getByText(/^= 1,29.€$/)).toBeTruthy();
+
+		await fireEvent.blur(input);
+		await settle();
+		expect(oncommit).toHaveBeenCalledWith(129);
+		expect(input.value).toBe('1,29');
+	});
+
+	it('shows only the total when the entry is opened again', async () => {
+		render(AmountField, { label: 'Amount', value: 278, format: 'de' });
+		expect((screen.getByLabelText('Amount') as HTMLInputElement).value).toBe('2,78');
 	});
 });
 

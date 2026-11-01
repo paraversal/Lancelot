@@ -77,7 +77,9 @@ export function pluginContext(id: string): PluginContext {
 		},
 		chooseFile,
 		onFileDrop,
-		readTicketSheet: (path, columns) => api.readTicketSheet(path, columns),
+		readTable: (path, columns) => api.readTable(path, columns),
+		parseAmount: async (text) => (await api.parseAmount(text, true)).cents,
+		parseDate: async (text) => (await api.parseDate(text)).date,
 		get dataSource() {
 			return dataSources.of(id)?.source.label ?? null;
 		},

@@ -6,10 +6,10 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
-    CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
-    ManualSaleDraft, ManualSaleId, Parsed, Person, PluginChange, ReconciliationId, Resolution,
-    Sheet, TemplateSummary, TicketBatch, TicketColumns, TicketShare, TierDraft, TierId, TxnDraft,
+    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, ChangeLogEntry,
+    CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
+    ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange, ReconciliationId,
+    Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft,
     TxnId,
 };
 use tauri::{AppHandle, State};
@@ -138,6 +138,11 @@ pub async fn integrity_check(state: State<'_, AppState>) -> Result<OpenEvent> {
 }
 
 #[tauri::command]
+pub async fn change_log_list(state: State<'_, AppState>) -> Result<Vec<ChangeLogEntry>> {
+    with(&state, |s| s.change_log())
+}
+
+#[tauri::command]
 pub async fn backups_list(state: State<'_, AppState>, event: PathBuf) -> Result<Vec<BackupInfo>> {
     with(&state, |s| s.backups(&event))
 }
@@ -159,6 +164,15 @@ pub async fn amount_parse(
     allow_negative: bool,
 ) -> Result<Parsed> {
     with(&state, |s| s.parse_amount(&input, allow_negative))
+}
+
+#[tauri::command]
+pub async fn amount_sum(
+    state: State<'_, AppState>,
+    input: String,
+    allow_negative: bool,
+) -> Result<ParsedSum> {
+    with(&state, |s| s.parse_sum(&input, allow_negative))
 }
 
 #[tauri::command]
@@ -463,12 +477,12 @@ pub async fn data_source_pull(
 }
 
 #[tauri::command]
-pub async fn ticket_sheet_read(
+pub async fn table_read(
     state: State<'_, AppState>,
     path: PathBuf,
-    columns: TicketColumns,
-) -> Result<Sheet> {
-    with(&state, |s| s.read_ticket_sheet(&path, &columns))
+    columns: Vec<String>,
+) -> Result<Table> {
+    with(&state, |s| s.read_table(&path, &columns))
 }
 
 #[tauri::command]

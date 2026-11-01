@@ -5,8 +5,8 @@
 	import { onDestroy } from 'svelte';
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
-	import type { Sheet, TicketSectionProps } from '../api';
-	import { columnsOf, isSheet, SHEET_EXTENSIONS } from './records';
+	import type { TicketSectionProps } from '../api';
+	import { columnsOf, isSheet, SHEET_EXTENSIONS, sheetOf, type Sheet } from './records';
 	import SheetPanel from './SheetPanel.svelte';
 
 	let { ctx, proposeImport, setPanel }: TicketSectionProps = $props();
@@ -37,7 +37,7 @@
 		sheet = null;
 		error = null;
 		try {
-			sheet = await ctx.readTicketSheet(next, columns);
+			sheet = sheetOf(await ctx.readTable(next, [columns.tier, columns.order]));
 		} catch (e) {
 			if (!(e instanceof Error)) throw e;
 			error = e.message;

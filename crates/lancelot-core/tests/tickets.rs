@@ -156,17 +156,17 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
         removed,
         [("4702", t.regular, 1, 0), ("4711", t.regular, 2, 0)]
     );
-    // The row without an order ID is listed; the blank row is not a ticket.
+    // The row without an order ID comes through for the plugin to list; the blank row doesn't.
     let (name, data) = fixture("import-2.ods");
-    assert_eq!(
-        read_sheet(&name, &data, &TicketColumns::default())
-            .unwrap()
-            .problems,
-        [RowProblem {
-            row: 10,
-            problem: Problem::NoOrder
-        }]
-    );
+    let columns = ["Ticket".to_owned(), "Order ID".to_owned()];
+    let table = read_table(&name, &data, &columns, NumberFormat::De).unwrap();
+    let incomplete: Vec<u32> = table
+        .rows
+        .iter()
+        .filter(|r| r.cells.iter().any(String::is_empty))
+        .map(|r| r.row)
+        .collect();
+    assert_eq!(incomplete, [10]);
 
     let second = import(&mut book, "import-2.ods", 8);
     assert_eq!(book.latest_import().unwrap().id, second);
@@ -333,12 +333,9 @@ fn manual_sales_are_income_held_by_the_person() {
 #[test]
 fn the_columns_can_be_renamed() {
     let (name, data) = fixture("import-1.ods");
-    let renamed = TicketColumns {
-        tier: "Kategorie".into(),
-        order: "Order ID".into(),
-    };
+    let renamed = ["Kategorie".to_owned(), "Order ID".to_owned()];
     assert_eq!(
-        read_sheet(&name, &data, &renamed),
+        read_table(&name, &data, &renamed, NumberFormat::De),
         Err(DomainError::MissingColumn {
             column: "Kategorie".into()
         })

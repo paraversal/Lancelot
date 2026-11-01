@@ -33,7 +33,7 @@ Expenses are shown in ink with a leading `−`, income in `plus` with a leading 
 ## Layout
 
 - Light or dark: Settings → Display, following the system by default. The dark values are in `app/src/lib/styles/theme.css`, not in `UI.fig`. Print and the report's sheet stay light.
-- Window 1280 × 800. Sidebar 220 px with event name and dates, navigation (counts on the right, a badge in `attention` when something needs doing), and the file name at the bottom, which opens Settings.
+- Window 1280 × 800. Sidebar 220 px with event name and dates, navigation (counts on the right, a badge in `attention` when something needs doing), and at the bottom History and the file name, which opens Settings.
 - Content padding 40. Spacing scale 4 · 8 · 12 · 16 · 24 · 32 · 40 · 48. Radius 4 / 6 / 8, plus pills for filter chips.
 - A list or table on the left. Editing and detail happen in a **right-hand panel** (380 px) separated by a rule. There are no modals for routine work.
 - Tables: 36–40 px rows, a hairline under each row, numbers right-aligned in fixed-width columns, and day headers in the ledger.
@@ -49,7 +49,7 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 | Button            | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`)                                                                              |
 | Filter chip       | Pill; active is an ink fill                                                                                                                                      |
 | Segmented control | Sunk track; active segment uses `marker`                                                                                                                         |
-| Amount input      | Lenient parsing with a live `= …` preview. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
+| Amount input      | Lenient parsing with a live `= …` preview, which also adds up sums such as `1,29+1,49`. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
 | Balance cell      | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled`                                                                                                      |
 | Receipt indicator | Paperclip when present, `attention` warning when missing                                                                                                         |
 | Tally             | Groups of four strokes crossed by a fifth (Strichliste). In `UI.fig` only; the app doesn't draw it.                                                              |
@@ -103,6 +103,8 @@ Settings has its two columns, then two sections across the full width. An ink ru
 The Drinks frame predates the drinks plugin and logging each drink, so the plugin departs from it. **Stock and sales** sits in its plugin card on a cost centre's page, with no Strichliste or tallies. A paper list is one product, `Strich`. Its table has Billed, Left over, Logged, Gap, Cost and Expected per product, and drops columns beside a panel. Its caption opens a panel for the supplier and the deposit category, and beside it are the cost per drink, Pull logged, Book invoice and `+ Product`. Under the table are expected against collected and the invoice check, where a difference reads `11,50 € more than the records` in `attention`.
 
 Plugins are in no frame beyond the card in the ground rules. Settings → Plugins has a card with an On switch per plugin, and under it the plugin's settings and its data source form: label, URL, header, token, list and fields, with Save and test. On the Tickets page, **Ticket sheet** and **Ticket API** each have a card that starts an import, and the Import frame's panel, called Review import and with the ticket account added, comes after that. Naming the sheet's columns happens in the plugin's own panel. Appearance under Display is in no frame either.
+
+History is in no frame. It sits apart from the pages at the bottom of the sidebar, and ⌘1–9 skip it, since it's where you look when something seems off rather than a place you work. It follows the ledger's day headers and time column, one block per command, and each row shows the fields that moved as `old → new`.
 
 Reconciliation and templates are in no frame. **Statement** on each account in Where the money is opens a right-hand panel like Count: date and amount (`Net movement` for the Verein account, `Statement shows` otherwise) over the account's checkpoints with the books' figure and any difference. The note beside the account shows its latest mismatch, else its latest checkpoint. The New event panel has a **Template** field, with the counts of what comes along once an event is chosen, and Settings has a **Copy from another event** section with what is new and what is already here.
 

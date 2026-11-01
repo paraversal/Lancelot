@@ -14,11 +14,13 @@
 <script lang="ts">
 	// The amount input (R-NF-8). Every keystroke is parsed by the core; the field previews the
 	// result (`= 1.234,50 €`), in attention when the input was ambiguous, and turns minus with a
-	// warning when it cannot be read. Nothing is committed until the input is valid.
+	// warning when it cannot be read. Nothing is committed until the input is valid. A sum
+	// (`1,29+1,49`) stays as typed so it can be checked; only its total is ever saved.
 	import { untrack } from 'svelte';
 	import { api, errorMessage } from '../api';
 	import type { Cents } from '../api/generated/Cents';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
+	import type { ParsedSum } from '../api/generated/ParsedSum';
 	import { formatAmount } from '../format';
 	import Field from './Field.svelte';
 
@@ -55,7 +57,7 @@
 
 	const id = $props.id();
 	let text = $state('');
-	let parsed = $state<{ cents: Cents; ambiguous: boolean } | null>(null);
+	let parsed = $state<ParsedSum | null>(null);
 	let error = $state<string | null>(null);
 	let seq = 0;
 
@@ -73,7 +75,7 @@
 		// The parent passing back what this field just reported (`oninput`) is not a change.
 		if (echo) return;
 		text = initial ?? canonical(value);
-		parsed = value === null ? null : { cents: value, ambiguous: false };
+		parsed = value === null ? null : { cents: value, ambiguous: false, terms: 1 };
 		error = null;
 		if (initial) untrack(parse);
 	});
@@ -95,7 +97,7 @@
 			return;
 		}
 		try {
-			const r = await api.parseAmount(text, allowNegative);
+			const r = await api.parseSum(text, allowNegative);
 			if (mine !== seq) return;
 			parsed = r;
 			error = null;
@@ -123,7 +125,7 @@
 		await parse();
 		if (error) return;
 		const next = parsed?.cents ?? null;
-		text = canonical(next);
+		if (!parsed || parsed.terms === 1) text = canonical(next);
 		if (next !== value) oncommit?.(next);
 	}
 </script>

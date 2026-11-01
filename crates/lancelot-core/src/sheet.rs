@@ -1,95 +1,98 @@
-//! Reads a ticket sheet (R-TKT-3): `.ods`, `.xlsx` or `.csv`, first sheet, first row as the
-//! header, one row per ticket.
+//! Reads a table from a file: `.ods`, `.xlsx` or `.csv`, first sheet, for a plugin to make sense of
+//! (technical design §10).
 //!
-//! Only the configured columns are taken from each row (R-TKT-17). Names, e-mail addresses and
-//! everything else in the sheet never leave this module. Rows that cannot be read are listed,
-//! never dropped silently (R-TKT-4).
+//! Only the columns asked for are taken from each row (R-TKT-17). Names, e-mail addresses and
+//! everything else in the file never leave this module. A row that holds a spreadsheet error is
+//! listed, never dropped silently (R-TKT-4).
 
 use std::io::Cursor;
 
 use calamine::{Data, Reader, open_workbook_auto_from_rs};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use ts_rs::TS;
 
+use crate::amount::NumberFormat;
 use crate::error::DomainError;
 use crate::tickets::{BatchTicket, TicketBatch};
 
-/// The sheet's column names (R-TKT-3). Matched ignoring case.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct TicketColumns {
-    pub tier: String,
-    pub order: String,
-}
-
-impl Default for TicketColumns {
-    fn default() -> TicketColumns {
-        TicketColumns {
-            tier: "Ticket".into(),
-            order: "Order ID".into(),
-        }
-    }
-}
-
-/// The configured columns of a sheet, nothing else.
+/// The columns asked for of a file, nothing else.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
-pub struct Sheet {
-    /// The tickets. The hash is the file's.
-    pub batch: TicketBatch,
-    pub problems: Vec<RowProblem>,
+pub struct Table {
+    /// The file's name.
+    pub source: String,
+    /// SHA-256 of the file, lower-case hex.
+    pub sha256: String,
+    /// The rows below the header. Blank rows are left out.
+    pub rows: Vec<TableRow>,
+    /// The numbers of the rows with a spreadsheet error, such as `#REF!`, in a column asked for.
+    pub errors: Vec<u32>,
 }
 
-/// A row that was not read as a ticket.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
-pub struct RowProblem {
-    /// The row number as the spreadsheet shows it, starting at 1 with the header.
+pub struct TableRow {
+    /// The row number as the spreadsheet shows it, starting at 1.
     pub row: u32,
-    pub problem: Problem,
+    /// In the order of the columns asked for, trimmed. An empty cell is an empty string. A number
+    /// is written in `format`, so the amount parser reads it as it stands; a date is ISO.
+    pub cells: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
-#[ts(export)]
-#[serde(rename_all = "camelCase")]
-pub enum Problem {
-    /// The tier column is empty.
-    NoTier,
-    /// The order ID column is empty.
-    NoOrder,
-    /// A cell holds a spreadsheet error such as `#REF!`.
-    CellError,
-}
-
-/// Reads the configured columns of a ticket sheet. The format follows the file name's
-/// extension; anything that is not `.csv` is tried as a spreadsheet.
-pub fn read_sheet(
+/// Reads these columns of a file. The format follows the file name's extension; anything that is
+/// not `.csv` is tried as a spreadsheet. The header is the first row holding all the columns, so
+/// a bank's lines above it don't matter; names are matched ignoring case.
+pub fn read_table(
     filename: &str,
     data: &[u8],
-    columns: &TicketColumns,
-) -> Result<Sheet, DomainError> {
+    columns: &[String],
+    format: NumberFormat,
+) -> Result<Table, DomainError> {
     let cells = if filename.to_ascii_lowercase().ends_with(".csv") {
         csv_cells(data)?
     } else {
-        spreadsheet_cells(data)?
+        spreadsheet_cells(data, format)?
     };
-    let (tickets, problems) = pick_columns(cells, columns)?;
-    Ok(Sheet {
-        batch: TicketBatch {
-            source: filename.to_owned(),
-            sha256: hex(&Sha256::digest(data)),
-            tickets,
-        },
-        problems,
+    let (rows, errors) = pick_columns(cells, columns)?;
+    Ok(Table {
+        source: filename.to_owned(),
+        sha256: hex(&Sha256::digest(data)),
+        rows,
+        errors,
     })
+}
+
+impl TicketBatch {
+    /// The tickets of a table read with the tier and order columns, without the rows missing
+    /// either. The app's Ticket sheet plugin does this itself and shows those rows; this is for
+    /// the example events and tests, which have no one to show them to.
+    pub fn from_table(table: Table) -> TicketBatch {
+        TicketBatch {
+            source: table.source,
+            sha256: table.sha256,
+            tickets: table
+                .rows
+                .into_iter()
+                .filter_map(|r| match <[String; 2]>::try_from(r.cells) {
+                    Ok([tier, order]) if !tier.is_empty() && !order.is_empty() => {
+                        Some(BatchTicket { tier, order })
+                    }
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// A cell as text, or the error it holds.
 type Cell = Result<String, ()>;
 
 /// The rows of the first sheet, each with its row number.
-fn spreadsheet_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
+fn spreadsheet_cells(
+    data: &[u8],
+    format: NumberFormat,
+) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
     let unreadable = |e: calamine::Error| DomainError::UnreadableSheet {
         reason: e.to_string(),
     };
@@ -111,6 +114,18 @@ fn spreadsheet_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> 
             out.extend(cells.iter().map(|c| match c {
                 Data::Error(_) => Err(()),
                 Data::Empty => Ok(String::new()),
+                Data::Float(number) => Ok(match format {
+                    NumberFormat::De => number.to_string().replace('.', ","),
+                    NumberFormat::En => number.to_string(),
+                }),
+                Data::DateTime(date) if date.is_datetime() => {
+                    let (y, m, d, hour, minute, second, _) = date.to_ymd_hms_milli();
+                    Ok(if (hour, minute, second) == (0, 0, 0) {
+                        format!("{y:04}-{m:02}-{d:02}")
+                    } else {
+                        format!("{y:04}-{m:02}-{d:02}T{hour:02}:{minute:02}:{second:02}")
+                    })
+                }
                 other => Ok(other.to_string().trim().to_owned()),
             }));
             (row + 1, out)
@@ -118,7 +133,7 @@ fn spreadsheet_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> 
         .collect())
 }
 
-/// The rows of a CSV file, separated by `;`, `,` or tabs, whichever the header uses most.
+/// The rows of a CSV file, separated by `;`, `,` or tabs, whichever the first lines use most.
 /// UTF-8 with or without a byte order mark; anything else is read as Latin-1.
 fn csv_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
     let data = data.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(data);
@@ -126,23 +141,28 @@ fn csv_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
         Ok(text) => text.to_owned(),
         Err(_) => data.iter().map(|&b| char::from(b)).collect(),
     };
-    let header = text.lines().next().unwrap_or_default();
     let delimiter = b";,\t"
         .iter()
         .copied()
-        .max_by_key(|d| header.bytes().filter(|b| b == d).count())
+        .max_by_key(|d| {
+            text.lines()
+                .take(20)
+                .map(|line| line.bytes().filter(|b| b == d).count())
+                .sum::<usize>()
+        })
         .unwrap_or(b',');
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
         .delimiter(delimiter)
         .from_reader(text.as_bytes());
-    // Rows are numbered by record, as a spreadsheet opening the file shows them.
+    // Rows are numbered by line, since the reader skips empty ones and a spreadsheet shows them.
     let mut out = Vec::new();
-    for (record, row) in reader.records().zip(1..) {
+    for record in reader.records() {
         let record = record.map_err(|e| DomainError::UnreadableSheet {
             reason: e.to_string(),
         })?;
+        let row = record.position().map_or(0, |p| p.line() as u32);
         out.push((
             row,
             record.iter().map(|c| Ok(c.trim().to_owned())).collect(),
@@ -151,50 +171,49 @@ fn csv_cells(data: &[u8]) -> Result<Vec<(u32, Vec<Cell>)>, DomainError> {
     Ok(out)
 }
 
-/// Finds the configured columns in the header and keeps only those cells of every row.
+/// Finds the header and keeps only the cells of these columns from the rows below it.
 fn pick_columns(
     cells: Vec<(u32, Vec<Cell>)>,
-    columns: &TicketColumns,
-) -> Result<(Vec<BatchTicket>, Vec<RowProblem>), DomainError> {
-    let empty = |cells: &[Cell]| cells.iter().all(|c| c.as_ref().is_ok_and(|c| c.is_empty()));
-    let mut cells = cells.into_iter().filter(|(_, c)| !empty(c));
-    let Some((_, header)) = cells.next() else {
+    columns: &[String],
+) -> Result<(Vec<TableRow>, Vec<u32>), DomainError> {
+    let blank = |cells: &[Cell]| cells.iter().all(|c| c.as_ref().is_ok_and(|c| c.is_empty()));
+    let cells: Vec<_> = cells.into_iter().filter(|(_, c)| !blank(c)).collect();
+    let Some((_, first)) = cells.first() else {
         return Err(DomainError::UnreadableSheet {
             reason: "the sheet is empty".into(),
         });
     };
-    let find = |name: &str| {
-        header
-            .iter()
-            .position(|h| {
-                h.as_ref()
-                    .is_ok_and(|h| h.eq_ignore_ascii_case(name.trim()))
-            })
-            .ok_or_else(|| DomainError::MissingColumn {
-                column: name.to_owned(),
-            })
+    let find = |header: &[Cell], name: &str| {
+        header.iter().position(|h| {
+            h.as_ref()
+                .is_ok_and(|h| h.eq_ignore_ascii_case(name.trim()))
+        })
     };
-    let tier_col = find(&columns.tier)?;
-    let order_col = find(&columns.order)?;
+    let holds_all = |header: &[Cell]| columns.iter().all(|c| find(header, c).is_some());
+    let Some(at) = cells.iter().position(|(_, c)| holds_all(c)) else {
+        let missing = columns.iter().find(|c| find(first, c).is_none());
+        return Err(DomainError::MissingColumn {
+            column: missing.cloned().unwrap_or_default(),
+        });
+    };
+    let positions: Vec<usize> = columns
+        .iter()
+        .filter_map(|c| find(&cells[at].1, c))
+        .collect();
 
     let mut rows = Vec::new();
-    let mut problems = Vec::new();
-    for (row, cells) in cells {
-        let get = |i: usize| cells.get(i).cloned().unwrap_or(Ok(String::new()));
-        let problem = match (get(tier_col), get(order_col)) {
-            (Err(()), _) | (_, Err(())) => Some(Problem::CellError),
-            (Ok(tier), _) if tier.is_empty() => Some(Problem::NoTier),
-            (_, Ok(order)) if order.is_empty() => Some(Problem::NoOrder),
-            (Ok(tier), Ok(order)) => {
-                rows.push(BatchTicket { tier, order });
-                None
-            }
-        };
-        if let Some(problem) = problem {
-            problems.push(RowProblem { row, problem });
+    let mut errors = Vec::new();
+    for (row, cells) in &cells[at + 1..] {
+        let picked: Result<Vec<String>, ()> = positions
+            .iter()
+            .map(|&i| cells.get(i).cloned().unwrap_or(Ok(String::new())))
+            .collect();
+        match picked {
+            Ok(cells) => rows.push(TableRow { row: *row, cells }),
+            Err(()) => errors.push(*row),
         }
     }
-    Ok((rows, problems))
+    Ok((rows, errors))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -205,59 +224,56 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
 
-    fn columns() -> TicketColumns {
-        TicketColumns::default()
+    fn columns() -> Vec<String> {
+        vec!["Ticket".into(), "Order ID".into()]
     }
 
-    fn read(csv: &str) -> Result<Sheet, DomainError> {
-        read_sheet("tickets.csv", csv.as_bytes(), &columns())
+    fn read(csv: &str) -> Result<Table, DomainError> {
+        read_table("tickets.csv", csv.as_bytes(), &columns(), NumberFormat::De)
+    }
+
+    fn cells(table: &Table) -> Vec<Vec<&str>> {
+        table
+            .rows
+            .iter()
+            .map(|r| r.cells.iter().map(String::as_str).collect())
+            .collect()
     }
 
     #[test]
-    fn reads_only_the_configured_columns() {
-        let sheet = read("Name;Ticket;E-Mail;Order ID\nAnna;Regular;a@x.example;4711\n").unwrap();
+    fn reads_only_the_columns_asked_for_in_the_order_asked_for() {
+        let table = read("Name;Order ID;E-Mail;Ticket\nAnna;4711;a@x.example;Regular\n").unwrap();
+        assert_eq!(cells(&table), [["Regular", "4711"]]);
+        assert_eq!(table.source, "tickets.csv");
+        assert!(table.errors.is_empty());
+    }
+
+    #[test]
+    fn finds_columns_ignoring_case_and_sniffs_the_delimiter() {
+        let table = read("order id,TICKET\n 17 , Early Bird \n").unwrap();
+        assert_eq!(cells(&table), [["Early Bird", "17"]]);
+    }
+
+    #[test]
+    fn numbers_rows_and_keeps_empty_cells_but_not_blank_rows() {
+        let table = read("Ticket;Order ID;Name\nRegular;;Anna\n;12;Bob\n;;\n;;Carla\n").unwrap();
         assert_eq!(
-            sheet.batch.tickets,
-            [BatchTicket {
-                tier: "Regular".into(),
-                order: "4711".into()
-            }]
+            table.rows.iter().map(|r| r.row).collect::<Vec<_>>(),
+            [2, 3, 5]
         );
-        assert!(sheet.problems.is_empty());
+        assert_eq!(cells(&table), [["Regular", ""], ["", "12"], ["", ""]]);
     }
 
     #[test]
-    fn finds_columns_ignoring_case_and_order_and_sniffs_the_delimiter() {
-        let sheet = read("order id,TICKET\n 17 , Early Bird \n").unwrap();
-        assert_eq!(sheet.batch.tickets[0].tier, "Early Bird");
-        assert_eq!(sheet.batch.tickets[0].order, "17");
+    fn finds_the_header_below_lines_that_are_not_the_table() {
+        let bank = "Konto;DE12\nZeitraum;Oktober\n\nTicket;Order ID\nRegular;1\n";
+        let table = read(bank).unwrap();
+        assert_eq!(cells(&table), [["Regular", "1"]]);
+        assert_eq!(table.rows[0].row, 5);
     }
 
     #[test]
-    fn lists_rows_it_cannot_read_and_skips_blank_ones() {
-        let sheet = read("Ticket;Order ID;Name\nRegular;;Anna\n;12;Bob\n;;\n;;Carla\n").unwrap();
-        assert!(sheet.batch.tickets.is_empty());
-        assert_eq!(
-            sheet.problems,
-            [
-                RowProblem {
-                    row: 2,
-                    problem: Problem::NoOrder
-                },
-                RowProblem {
-                    row: 3,
-                    problem: Problem::NoTier
-                },
-                RowProblem {
-                    row: 5,
-                    problem: Problem::NoTier
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn a_missing_column_blocks_the_import() {
+    fn a_missing_column_is_named() {
         assert_eq!(
             read("Ticket;Order\nRegular;1\n"),
             Err(DomainError::MissingColumn {
@@ -268,26 +284,37 @@ mod tests {
 
     #[test]
     fn hashes_the_file() {
-        let sheet = read("Ticket;Order ID\n").unwrap();
-        assert_eq!(sheet.batch.sha256.len(), 64);
-        assert_ne!(
-            sheet.batch.sha256,
-            read("Ticket;Order ID\n\n").unwrap().batch.sha256
-        );
+        let table = read("Ticket;Order ID\n").unwrap();
+        assert_eq!(table.sha256.len(), 64);
+        assert_ne!(table.sha256, read("Ticket;Order ID\n\n").unwrap().sha256);
     }
 
     #[test]
     fn reads_latin_1_and_a_byte_order_mark() {
         let latin1 = b"Ticket;Order ID\nErm\xe4\xdfigt;1\n";
-        let sheet = read_sheet("t.csv", latin1, &columns()).unwrap();
-        assert_eq!(sheet.batch.tickets[0].tier, "Ermäßigt");
+        let table = read_table("t.csv", latin1, &columns(), NumberFormat::De).unwrap();
+        assert_eq!(cells(&table), [["Ermäßigt", "1"]]);
         let bom = read("\u{feff}Ticket;Order ID\nRegular;1\n").unwrap();
-        assert_eq!(bom.batch.tickets.len(), 1);
+        assert_eq!(bom.rows.len(), 1);
     }
 
     #[test]
     fn rejects_files_that_are_not_spreadsheets() {
-        let e = read_sheet("t.ods", b"not a zip", &columns()).unwrap_err();
+        let e = read_table("t.ods", b"not a zip", &columns(), NumberFormat::De).unwrap_err();
         assert_eq!(e.code(), "unreadable_sheet");
+    }
+
+    #[test]
+    fn a_batch_leaves_out_rows_missing_a_tier_or_an_order() {
+        let table = read("Ticket;Order ID\nRegular;1\nRegular;\n;2\n").unwrap();
+        let batch = TicketBatch::from_table(table);
+        assert_eq!(batch.source, "tickets.csv");
+        assert_eq!(
+            batch.tickets,
+            [BatchTicket {
+                tier: "Regular".into(),
+                order: "1".into()
+            }]
+        );
     }
 }

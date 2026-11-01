@@ -21,8 +21,8 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 - One receipt can be split over several categories, and the lines must add up exactly (R-TX-2).
 - Each line can link to a budget line and carry a cost centre. Choosing a budget line sets the line's category and cost centre (R-BUD-2, R-CC-1).
 - People and categories can be added from the form itself.
-- Entries can be edited and deleted until the event is closed. Every change is written to a change log, which the app has no page for yet (R-TX-6).
-- Amount fields accept both number formats and show what they read before saving (R-NF-8).
+- Entries can be edited and deleted until the event is closed. Every change is written to a change log, which the History page shows with its before and after values and a search (R-TX-6).
+- Amount fields accept both number formats, add up sums like `1,29+1,49`, and show what they read before saving (R-NF-8).
 
 ## Ledger
 
@@ -89,10 +89,11 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 - Per product: cost, donation, and units taken, returned, left over and logged (R-DRK-5).
 - Billed units, the gap against what was logged, and the cost per drink (R-DRK-5, R-DRK-9).
 - Expected donations against what was collected. A paper tally is one product, `Strich` (R-DRK-7).
+- A table per cost centre in the settlement report, which the report's toolbar can leave out.
 - An invoice check, which can leave out an optional deposit category such as Pfand, and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
 - Pull logged counts from a data source, reviewing the changes first. A name that matches no product must be mapped once and is then remembered (R-DRK-6). Not yet tried with a real provider.
 
-**Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, and the rest of the file is never stored (R-TKT-3, R-TKT-17).
+**Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, even with other lines above them, and the rest of the file is never stored (R-TKT-3, R-TKT-17).
 
 **Ticket API** pulls tickets from a data source into the same review (R-TKT-3). Not yet tried with a real provider.
 

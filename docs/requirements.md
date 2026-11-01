@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.12 · 2026-11-01
+Status: draft v0.13 · 2026-11-01
 
 ## 1. Purpose
 
@@ -246,6 +246,7 @@ The plugin is called **Stock and sales**. It is optional: Settings → Plugins s
   - **Ambiguous case:** a single separator followed by exactly three digits (`1.234`, `1,234`) is read according to the user's format setting, and the hint below says so.
   - The field always shows a live preview of the interpreted value (e.g. "= €1,234.00") before it is committed. Invalid input is flagged and cannot be saved.
   - The currency sign and spaces are ignored. A leading `-` is allowed only where negative amounts make sense.
+  - **Sums:** a field also adds up what is typed into it with `+` and `-`, such as `1,29+1,49`, and previews the total. The sum stays on show until the field is reset, but only the total is saved. A sign at the end is ignored, and only the total has to be allowed in that field, so `10-2` is fine where negative amounts aren't.
 - **R-NF-9** **Appearance** is a user setting (app-wide, not per event): System, Light or Dark, following the system by default. Printing stays light.
 
 ## 8. Proposed architecture
@@ -276,7 +277,7 @@ The Tauri approach has one real cost: the IPC boundary between Svelte and Rust. 
 
 1. **MVP**: event file, accounts, typed transaction entry with splits, attachments, persons with IBAN and netting, reimbursements and repayments, person overview, payout list, settlement report, integrity check. Ticket income is entered manually.
 2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records (now the drinks plugin), reconciliation checkpoints, templates from previous events.
-3. **Phase 3**: drink sales import from a file, SEPA XML export, polished PDF reports, receipt OCR.
+3. **Phase 3**: drink sales import from a file, SEPA XML export, polished PDF reports.
 
 ## 10. Remaining open points
 

@@ -24,6 +24,7 @@ import type { ReconciliationId } from './generated/ReconciliationId';
 import type { CancellationDraft } from './generated/CancellationDraft';
 import type { CancellationEdit } from './generated/CancellationEdit';
 import type { CancellationId } from './generated/CancellationId';
+import type { ChangeLogEntry } from './generated/ChangeLogEntry';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
@@ -35,6 +36,7 @@ import type { ManualSaleId } from './generated/ManualSaleId';
 import type { OpenEvent } from './generated/OpenEvent';
 import type { PluginChange } from './generated/PluginChange';
 import type { Parsed } from './generated/Parsed';
+import type { ParsedSum } from './generated/ParsedSum';
 import type { Person } from './generated/Person';
 import type { ParsedDate } from './generated/ParsedDate';
 import type { RecentEvent } from './generated/RecentEvent';
@@ -44,9 +46,8 @@ import type { SavedTxn } from './generated/SavedTxn';
 import type { DataSource } from './generated/DataSource';
 import type { DataSourceView } from './generated/DataSourceView';
 import type { Pulled } from './generated/Pulled';
-import type { Sheet } from './generated/Sheet';
+import type { Table } from './generated/Table';
 import type { TicketBatch } from './generated/TicketBatch';
-import type { TicketColumns } from './generated/TicketColumns';
 import type { TicketShare } from './generated/TicketShare';
 import type { TierDraft } from './generated/TierDraft';
 import type { TierId } from './generated/TierId';
@@ -129,6 +130,8 @@ export const api = {
 		call<OpenEvent>('event_set_default_reimbursement_account', { account }),
 
 	checkIntegrity: () => call<OpenEvent>('integrity_check'),
+	/** The open event's change log, newest first (R-TX-6). */
+	changeLog: () => call<ChangeLogEntry[]>('change_log_list'),
 	/** Backups of an event file: the open one, or one that cannot be opened. */
 	backups: (event: string) => call<BackupInfo[]>('backups_list', { event }),
 	restoreBackup: (event: string, backup: string, target: string) =>
@@ -139,6 +142,9 @@ export const api = {
 		call<TicketShare>('ticket_share', { price, bp, count }),
 	parseAmount: (input: string, allowNegative: boolean) =>
 		call<Parsed>('amount_parse', { input, allowNegative }),
+	/** What an amount field holds, which may be a sum. File cells go through `parseAmount`. */
+	parseSum: (input: string, allowNegative: boolean) =>
+		call<ParsedSum>('amount_sum', { input, allowNegative }),
 	parseDate: (input: string) => call<ParsedDate>('date_parse', { input }),
 
 	/** Saves a transaction with the files to attach (paths) and the attachments to remove. */
@@ -214,9 +220,8 @@ export const api = {
 	/** Asks the provider for these fields; changes nothing. */
 	pullDataSource: (id: string, fields: string[]) =>
 		call<Pulled>('data_source_pull', { id, fields }),
-	/** Reads the columns of a ticket sheet; changes nothing. */
-	readTicketSheet: (path: string, columns: TicketColumns) =>
-		call<Sheet>('ticket_sheet_read', { path, columns }),
+	/** Reads these columns of a file; changes nothing. */
+	readTable: (path: string, columns: string[]) => call<Table>('table_read', { path, columns }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
 	/** What deleting an import would change; changes nothing. */
 	previewDeleteImport: (id: ImportId) => call<ImportDeletion>('import_delete_preview', { id }),

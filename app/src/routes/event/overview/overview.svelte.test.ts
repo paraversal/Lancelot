@@ -15,7 +15,7 @@ const { goto, setCounts, closeEvent, deleteReconciliation } = vi.hoisted(() => (
 vi.mock('$app/navigation', () => ({ goto }));
 vi.mock('#lib/api/index.ts', async () => {
 	const actual = await vi.importActual<typeof import('#lib/api/index.ts')>('#lib/api/index.ts');
-	return { ...actual, api: { setCounts, closeEvent, deleteReconciliation, parseAmount: vi.fn() } };
+	return { ...actual, api: { setCounts, closeEvent, deleteReconciliation, parseSum: vi.fn() } };
 });
 
 // jsdom does not lay out; the bars only need it to exist.

@@ -1,24 +1,30 @@
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { PluginContext, PluginRecord, Sheet } from '../api';
-import { columnsError, columnsOf, setColumns } from './records';
+import type { PluginContext, PluginRecord, Table } from '../api';
+import { columnsError, columnsOf, setColumns, sheetOf } from './records';
 import Section from './Section.svelte';
 
 const batch = { source: 'a.ods', sha256: 'ab', tickets: [{ tier: 'Regular', order: '1' }] };
+const table = (rows: string[][], errors: number[] = []): Table => ({
+	source: 'a.ods',
+	sha256: 'ab',
+	rows: rows.map((cells, i) => ({ row: i + 2, cells })),
+	errors
+});
 
-function setup(read: () => Promise<Sheet>, records: PluginRecord[] = []) {
-	const readTicketSheet = vi.fn(read);
+function setup(read: () => Promise<Table>, records: PluginRecord[] = []) {
+	const readTable = vi.fn(read);
 	const ctx = {
 		records,
 		chooseFile: vi.fn(async () => '/x/a.ods'),
 		onFileDrop: () => () => {},
-		readTicketSheet
+		readTable
 	} as unknown as PluginContext;
 	const proposeImport = vi.fn();
 	const setPanel = vi.fn();
 	render(Section, { ctx, proposeImport, setPanel });
-	return { readTicketSheet, proposeImport, setPanel };
+	return { readTable, proposeImport, setPanel };
 }
 
 const importSheet = () => fireEvent.click(screen.getByRole('button', { name: /Import sheet/ }));
@@ -26,22 +32,21 @@ const settled = () => new Promise((resolve) => setTimeout(resolve));
 
 describe('The ticket sheet plugin', () => {
 	it('reads the file with its columns and hands the tickets to the review', async () => {
-		const { readTicketSheet, proposeImport, setPanel } = setup(async () => ({
-			batch,
-			problems: []
-		}));
+		const { readTable, proposeImport, setPanel } = setup(async () => table([['Regular', '1']]));
 		await importSheet();
 		await settled();
-		expect(readTicketSheet).toHaveBeenCalledWith('/x/a.ods', { tier: 'Ticket', order: 'Order ID' });
+		expect(readTable).toHaveBeenCalledWith('/x/a.ods', ['Ticket', 'Order ID']);
 		expect(proposeImport).toHaveBeenCalledWith(batch);
 		expect(setPanel).not.toHaveBeenCalledWith(expect.any(Function));
 	});
 
 	it('stops at its panel when rows could not be read', async () => {
-		const { proposeImport, setPanel } = setup(async () => ({
-			batch,
-			problems: [{ row: 3, problem: 'noOrder' }]
-		}));
+		const { proposeImport, setPanel } = setup(async () =>
+			table([
+				['Regular', '1'],
+				['Regular', '']
+			])
+		);
 		await importSheet();
 		await settled();
 		expect(proposeImport).not.toHaveBeenCalled();
@@ -56,6 +61,27 @@ describe('The ticket sheet plugin', () => {
 		await settled();
 		expect(proposeImport).not.toHaveBeenCalled();
 		expect(setPanel).toHaveBeenCalledWith(expect.any(Function));
+	});
+});
+
+describe('A sheet', () => {
+	it('is one ticket per row, and lists the rows it cannot use in order', () => {
+		const sheet = sheetOf(
+			table(
+				[
+					['Regular', '1'],
+					['Regular', ''],
+					['', '2']
+				],
+				[9]
+			)
+		);
+		expect(sheet.batch).toEqual(batch);
+		expect(sheet.problems).toEqual([
+			{ row: 3, problem: 'noOrder' },
+			{ row: 4, problem: 'noTier' },
+			{ row: 9, problem: 'cellError' }
+		]);
 	});
 });
 
