@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use lancelot_core::{Book, DomainError, Person, TicketBatch, TicketColumns};
+use lancelot_core::{Book, DomainError, Person, TicketBatch};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -209,9 +209,9 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         >(
             a, "fields"
         )?)),
-        "ticket_sheet_read" => json(s.read_ticket_sheet(
+        "table_read" => json(s.read_table(
             &arg::<PathBuf>(a, "path")?,
-            &arg::<TicketColumns>(a, "columns")?,
+            &arg::<Vec<String>>(a, "columns")?,
         )),
         "tickets_preview" => json(s.preview_tickets(&arg::<TicketBatch>(a, "batch")?, date(a)?)),
         "tickets_import" => json(s.import_tickets(&arg::<TicketBatch>(a, "batch")?, date(a)?)),

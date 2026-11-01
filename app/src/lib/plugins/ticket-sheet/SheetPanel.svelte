@@ -5,8 +5,8 @@
 	import Button from '../../components/Button.svelte';
 	import Panel from '../../components/Panel.svelte';
 	import TextField from '../../components/TextField.svelte';
-	import type { PluginContext, Sheet, TicketColumns } from '../api';
-	import { columnsError, columnsOf, setColumns } from './records';
+	import type { PluginContext } from '../api';
+	import { columnsError, columnsOf, setColumns, type Sheet, type TicketColumns } from './records';
 
 	let {
 		ctx,

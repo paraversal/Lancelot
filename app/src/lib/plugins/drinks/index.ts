@@ -1,5 +1,6 @@
 import type { Plugin } from '../api';
-import { centreSettings } from './records';
+import { centreSettings, stockedCentres } from './records';
+import ReportSection from './ReportSection.svelte';
 import Section from './Section.svelte';
 import Settings from './Settings.svelte';
 
@@ -12,6 +13,8 @@ export const drinks: Plugin = {
 	attachedTo: (ctx, centre) => centreSettings(ctx.records, centre) !== null,
 	CentreSection: Section,
 	SettingsSection: Settings,
+	inReport: (ctx) => stockedCentres(ctx.records, ctx.costCentres).length > 0,
+	ReportSection,
 	dataSource: {
 		list: 'drinks',
 		fields: [

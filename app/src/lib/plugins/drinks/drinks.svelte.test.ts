@@ -102,6 +102,7 @@ describe('The stock and sales section', () => {
 
 		expect(goto).toHaveBeenCalledWith('/event/ledger?proposal');
 		const proposal = takeProposal()!;
+		if (proposal.kind !== 'expense') throw new Error(proposal.kind);
 		expect(proposal.counterparty).toBe('Hoffmann');
 		expect(proposal.amount).toBe(42000);
 		const deposit = session.event!.snapshot.accounts.find((a) => a.name === 'Deposit')!;
@@ -139,7 +140,7 @@ describe('The stock and sales section', () => {
 
 		await waitFor(() => expect(goto).toHaveBeenCalledWith('/event/ledger?proposal'));
 		expect(apply).toHaveBeenCalledOnce();
-		expect(takeProposal()!.counterparty).toBe('Hoffmann');
+		expect(takeProposal()).toMatchObject({ kind: 'expense', counterparty: 'Hoffmann' });
 	});
 
 	it('takes a Strich with a donation and a logged count, without stock or cost', async () => {

@@ -10,9 +10,9 @@ import type { NumberFormat } from '../api/generated/NumberFormat';
 import type { PluginChange } from '../api/generated/PluginChange';
 import type { PluginRecord } from '../api/generated/PluginRecord';
 import type { Pulled } from '../api/generated/Pulled';
-import type { Sheet } from '../api/generated/Sheet';
+import type { Table } from '../api/generated/Table';
+import type { TableRow } from '../api/generated/TableRow';
 import type { TicketBatch } from '../api/generated/TicketBatch';
-import type { TicketColumns } from '../api/generated/TicketColumns';
 import type { TxnView } from '../api/generated/TxnView';
 
 export type {
@@ -22,9 +22,9 @@ export type {
 	PluginChange,
 	PluginRecord,
 	Pulled,
-	Sheet,
+	Table,
+	TableRow,
 	TicketBatch,
-	TicketColumns,
 	TxnView
 };
 
@@ -35,12 +35,33 @@ export type FileDropHandlers = {
 	drop: (paths: string[]) => void;
 };
 
-/** A new expense for the treasurer to check and save in the normal form. */
-export type EntryProposal = {
-	counterparty: string | null;
-	amount: number | null;
-	lines: { account: number; costCentre: number | null }[];
+/** One line of a proposed expense or income. `amount` is only needed for a split. */
+export type ProposedLine = {
+	account: number;
+	costCentre: number | null;
+	amount?: number | null;
 };
+
+/**
+ * A new entry for the treasurer to check and save in the normal form. What is left out starts as
+ * in a new entry: the date as usual, and the event's default account for the payer or destination.
+ */
+export type EntryProposal = {
+	amount: number | null;
+	/** ISO `YYYY-MM-DD`. */
+	date?: string | null;
+	description?: string | null;
+	notes?: string | null;
+} & (
+	| { kind: 'expense'; counterparty: string | null; payer?: number | null; lines: ProposedLine[] }
+	| {
+			kind: 'income';
+			counterparty: string | null;
+			destination?: number | null;
+			lines: ProposedLine[];
+	  }
+	| { kind: 'transfer'; from: number | null; to: number | null }
+);
 
 export interface PluginContext {
 	readonly id: string;
@@ -67,8 +88,15 @@ export interface PluginContext {
 	chooseFile(name: string, extensions: string[]): Promise<string | null>;
 	/** Listens for files dragged onto the window; returns a function that stops. */
 	onFileDrop(handlers: FileDropHandlers): () => void;
-	/** Reads only these columns of a spreadsheet, and hashes the file. */
-	readTicketSheet(path: string, columns: TicketColumns): Promise<Sheet>;
+	/**
+	 * Reads only these columns of an `.ods`, `.xlsx` or `.csv`, and hashes the file. Everything else
+	 * in it stays out of the plugin. Rejects when a column isn't there.
+	 */
+	readTable(path: string, columns: string[]): Promise<Table>;
+	/** A cell or typed text as cents, by the app's number format. Rejects what it can't read. */
+	parseAmount(text: string): Promise<number>;
+	/** A cell or typed text as an ISO date. Rejects what it can't read. */
+	parseDate(text: string): Promise<string>;
 	/** What this plugin's data source is called; null until it is set up in Settings. */
 	readonly dataSource: string | null;
 	/** Asks the data source for these fields. Nothing else in its answer reaches the plugin. */
@@ -92,6 +120,9 @@ export type TicketSectionProps = {
 
 export type SettingsSectionProps = { ctx: PluginContext };
 
+/** Printed in the settlement report: it only shows, it changes nothing. */
+export type ReportSectionProps = { ctx: PluginContext };
+
 /** What a plugin wants from a provider. The app draws the form for it in Settings. */
 export type DataSourceSpec = {
 	/** The usual name of the provider's list. */
@@ -111,6 +142,9 @@ export interface Plugin {
 	/** On the Tickets page: a way for tickets to come in. */
 	TicketSection?: Component<TicketSectionProps>;
 	SettingsSection?: Component<SettingsSectionProps>;
+	/** Whether `ReportSection` has something to print. Yes when left out. */
+	inReport?(ctx: PluginContext): boolean;
+	ReportSection?: Component<ReportSectionProps>;
 	/** Offers a data source. `TicketSection` then waits until it is set up. */
 	dataSource?: DataSourceSpec;
 }

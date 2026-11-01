@@ -9,8 +9,7 @@ use lancelot_core::{
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
     CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
     ManualSaleDraft, ManualSaleId, Parsed, Person, PluginChange, ReconciliationId, Resolution,
-    Sheet, TemplateSummary, TicketBatch, TicketColumns, TicketShare, TierDraft, TierId, TxnDraft,
-    TxnId,
+    Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -463,12 +462,12 @@ pub async fn data_source_pull(
 }
 
 #[tauri::command]
-pub async fn ticket_sheet_read(
+pub async fn table_read(
     state: State<'_, AppState>,
     path: PathBuf,
-    columns: TicketColumns,
-) -> Result<Sheet> {
-    with(&state, |s| s.read_ticket_sheet(&path, &columns))
+    columns: Vec<String>,
+) -> Result<Table> {
+    with(&state, |s| s.read_table(&path, &columns))
 }
 
 #[tauri::command]

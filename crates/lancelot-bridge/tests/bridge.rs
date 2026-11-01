@@ -187,13 +187,20 @@ fn a_chosen_sheet_and_receipt_are_real_files() {
     assert!(std::path::Path::new(sheet.as_str().unwrap()).exists());
     let (_, read) = invoke(
         &mut bridge,
-        "ticket_sheet_read",
-        json!({ "path": sheet, "columns": { "tier": "Ticket", "order": "Order ID" } }),
+        "table_read",
+        json!({ "path": sheet, "columns": ["Ticket", "Order ID"] }),
     );
+    let tickets: Vec<Value> = read["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| json!({ "tier": r["cells"][0], "order": r["cells"][1] }))
+        .collect();
+    let batch = json!({ "source": read["source"], "sha256": read["sha256"], "tickets": tickets });
     let (_, preview) = invoke(
         &mut bridge,
         "tickets_preview",
-        json!({ "batch": read["batch"], "date": "2026-06-01" }),
+        json!({ "batch": batch, "date": "2026-06-01" }),
     );
     assert!(preview["sha256"].is_string(), "{preview}");
 

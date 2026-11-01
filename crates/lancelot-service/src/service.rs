@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 use lancelot_core::{
     AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
     DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
-    MAX_ATTACHMENT_SIZE, Parsed, Report, Sheet, Store, StoreError, StoreOptions, TemplateSummary,
-    TicketBatch, TicketColumns, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
-    format_date, list_backups, parse_amount, parse_date, read_book, ticket_share,
+    MAX_ATTACHMENT_SIZE, Parsed, Report, Store, StoreError, StoreOptions, Table, TemplateSummary,
+    TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date,
+    list_backups, parse_amount, parse_date, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -68,17 +68,17 @@ fn token_error(reason: String) -> ApiError {
 
 /// A ticket sheet's name and bytes. Sheets are small; anything the size of an attachment
 /// limit is not one.
-fn read_sheet_file(path: &Path) -> Result<(String, Vec<u8>)> {
+fn read_table_file(path: &Path) -> Result<(String, Vec<u8>)> {
     if std::fs::metadata(path)?.len() > MAX_ATTACHMENT_SIZE {
         return Err(ApiError::new(
-            "sheet_too_large",
-            "this file is too large for a ticket sheet",
+            "table_too_large",
+            "this file is too large to read as a table",
         ));
     }
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "sheet".into());
+        .unwrap_or_else(|| "table".into());
     Ok((name, std::fs::read(path)?))
 }
 
@@ -476,10 +476,13 @@ impl Service {
         })
     }
 
-    /// Reads a ticket sheet's columns (R-TKT-3). Changes nothing: the file isn't kept (R-TKT-17).
-    pub fn read_ticket_sheet(&self, path: &Path, columns: &TicketColumns) -> Result<Sheet> {
-        let (name, data) = read_sheet_file(path)?;
-        Ok(lancelot_core::read_sheet(&name, &data, columns)?)
+    /// Reads these columns of a file, for a plugin. Changes nothing: the file isn't kept
+    /// (R-TKT-17). Number cells are written in the number format setting, so `parse_amount` reads
+    /// them as they stand.
+    pub fn read_table(&self, path: &Path, columns: &[String]) -> Result<Table> {
+        let (name, data) = read_table_file(path)?;
+        let format = self.file.settings.number_format;
+        Ok(lancelot_core::read_table(&name, &data, columns, format)?)
     }
 
     /// What deleting an import would change; changes nothing.
@@ -614,6 +617,10 @@ mod tests {
         ManualSaleDraft, NumberFormat, OpenItem, Person, RefundTerms, Resolution, TierDraft,
     };
     use tempfile::TempDir;
+
+    fn ticket_columns() -> [String; 2] {
+        ["Ticket".to_owned(), "Order ID".to_owned()]
+    }
 
     fn details(name: &str) -> EventDetails {
         EventDetails {
@@ -1104,10 +1111,7 @@ mod tests {
         // Regular is not a tier yet: the preview names it and the import is refused.
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let sheet = fixtures.join("import-1.ods");
-        let read = s
-            .read_ticket_sheet(&sheet, &TicketColumns::default())
-            .unwrap();
-        let batch = read.batch;
+        let batch = TicketBatch::from_table(s.read_table(&sheet, &ticket_columns()).unwrap());
         let preview = s.preview_tickets(&batch, june(1)).unwrap();
         assert_eq!(preview.unknown[0].name, "Regular");
         let err = s.import_tickets(&batch, june(1)).unwrap_err();
@@ -1157,11 +1161,8 @@ mod tests {
         let open = s.change(|b| b.delete_manual_sale(id)).unwrap();
         assert!(open.snapshot.tickets.manual_sales.is_empty());
 
-        let renamed = TicketColumns {
-            tier: "Kategorie".into(),
-            order: "Order ID".into(),
-        };
-        assert!(s.read_ticket_sheet(&sheet, &renamed).is_err());
+        let renamed = ["Kategorie".to_owned(), "Order ID".to_owned()];
+        assert!(s.read_table(&sheet, &renamed).is_err());
     }
 
     #[test]
@@ -1185,10 +1186,8 @@ mod tests {
         let june = |d| time::Date::from_calendar_date(2026, time::Month::June, d).unwrap();
         let import = |s: &mut Service, name: &str, day| {
             let path = fixtures.join(name);
-            let read = s
-                .read_ticket_sheet(&path, &TicketColumns::default())
-                .unwrap();
-            s.import_tickets(&read.batch, june(day)).unwrap()
+            let batch = TicketBatch::from_table(s.read_table(&path, &ticket_columns()).unwrap());
+            s.import_tickets(&batch, june(day)).unwrap()
         };
         import(&mut s, "import-1.ods", 1);
         let terms = RefundTerms {

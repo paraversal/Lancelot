@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use lancelot_core::{
-    BlockerOverride, EventDetails, Store, StoreError, StoreOptions, TicketColumns, TierDraft,
-    read_sheet,
+    BlockerOverride, EventDetails, NumberFormat, Store, StoreError, StoreOptions, TicketBatch,
+    TierDraft, read_table,
 };
 use lancelot_service::Service;
 use lancelot_service::api::ApiError;
@@ -71,10 +71,11 @@ fn conflict(store: &mut Store) -> Result<(), ApiError> {
         let date = date!(2026 - 06 - 01)
             .replace_day(day)
             .map_err(|e| ApiError::new("scenario", e.to_string()))?;
-        let sheet = read_sheet(file, &data, &TicketColumns::default())
+        let columns = ["Ticket".to_owned(), "Order ID".to_owned()];
+        let table = read_table(file, &data, &columns, NumberFormat::De)
             .map_err(|e| ApiError::new("scenario", e.to_string()))?;
         store
-            .import_tickets(&sheet.batch, date)
+            .import_tickets(&TicketBatch::from_table(table), date)
             .map_err(store_error)?;
     }
     Ok(())

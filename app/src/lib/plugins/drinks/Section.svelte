@@ -68,6 +68,7 @@
 			(a) => a.kind === 'expense' && a.costCentre === centre.id && a.id !== settings.deposit
 		);
 		ctx.proposeEntry({
+			kind: 'expense',
 			counterparty: supplier,
 			amount: figures.cost || null,
 			lines: category ? [{ account: category.id, costCentre: centre.id }] : []

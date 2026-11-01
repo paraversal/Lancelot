@@ -1,6 +1,6 @@
 // What the plugin keeps in the event file. A template copies the setup (a cost centre's settings
 // and the price list) and leaves out the counts. A record that doesn't fit is ignored and kept.
-import type { PluginChange, PluginRecord } from '../api';
+import type { CostCentre, PluginChange, PluginRecord } from '../api';
 
 export type CentreSettings = {
 	supplier: string | null;
@@ -94,6 +94,17 @@ export function countsOf(records: PluginRecord[], product: number): Counts {
 		manual: v.manual as number | null,
 		imported: v.imported as number | null
 	};
+}
+
+/** The cost centres the plugin is attached to that have products, with what it knows of them. */
+export function stockedCentres(records: PluginRecord[], centres: CostCentre[]) {
+	return centres.flatMap((centre) => {
+		const settings = centreSettings(records, centre.id);
+		const products = allProducts(records)
+			.filter((p) => p.centre === centre.id)
+			.map((product) => ({ product, counts: countsOf(records, product.id) }));
+		return settings && products.length ? [{ centre, settings, products }] : [];
+	});
 }
 
 /** Ids stay unique among the products that exist; a removed product's counts go with it. */

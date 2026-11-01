@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { EventSnapshot } from '#lib/api/generated/EventSnapshot.ts';
@@ -64,5 +64,42 @@ describe('Settlement report', () => {
 		expect(document.querySelectorAll('.receipt').length).toBe(files.length - pdfs + 2 * pdfs);
 		const print = screen.getByText('Print').closest('button')!;
 		expect(print.disabled).toBe(false);
+	});
+
+	function open(change: (s: EventSnapshot) => void = () => {}) {
+		const copy = structuredClone(snapshot);
+		change(copy);
+		session.update({
+			revision: Date.now(),
+			path: '/r.lancelot',
+			fileName: 'r.lancelot',
+			snapshot: copy,
+			integrity: { issues: [] },
+			backupError: null
+		});
+	}
+
+	it('prints what a plugin adds, in its frame, and can leave it out', async () => {
+		open();
+		render(Report);
+		const frame = screen.getByTestId('report-plugin');
+		expect(frame.textContent).toContain('Stock and sales');
+		expect(frame.textContent).toContain('Plugin');
+		const table = screen.getByTestId('plugin-drinks-report').textContent!;
+		expect(table).toContain('Club-Mate 0,5');
+		expect(table).toContain('851,00');
+		expect(table).toContain('812,50');
+
+		await fireEvent.click(screen.getByLabelText('Stock and sales'));
+		expect(screen.queryByTestId('report-plugin')).toBeNull();
+	});
+
+	it('leaves out a plugin that is switched off or has nothing to print', () => {
+		open((s) => {
+			s.pluginRecords = s.pluginRecords.filter((r) => !r.key.startsWith('product:'));
+		});
+		render(Report);
+		expect(screen.queryByTestId('report-plugin')).toBeNull();
+		expect(screen.queryByLabelText('Stock and sales')).toBeNull();
 	});
 });

@@ -51,7 +51,7 @@ pub use money::{Cents, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
 pub use plugin::{PluginChange, PluginRecord, PluginScope};
 pub use sales::{Profitability, SalesPoint, TierBreakEven, TierSales};
-pub use sheet::{Problem, RowProblem, Sheet, TicketColumns, read_sheet};
+pub use sheet::{Table, TableRow, read_table};
 pub use snapshot::{AccountView, EventSnapshot, PersonView, Totals, TxnView};
 pub use store::{
     BackupPolicy, ChangeLogEntry, Store, StoreError, StoreOptions, backup_time, event_uuid_of,

@@ -228,12 +228,23 @@
 		generation++;
 	}
 
-	// A plugin's proposal: an expense paid from the default account, for the treasurer to check.
+	// A plugin's proposal, for the treasurer to check. Nothing is saved until they do.
 	function fillProposal(p: EntryProposal) {
-		counterparty = p.counterparty;
-		party = snapshot.event.defaultReimbursementAccount;
+		kind = p.kind;
 		amount = p.amount;
-		if (p.lines.length) lines = p.lines.map((l) => ({ ...l, amount: null }));
+		date = p.date ?? date;
+		description = p.description ?? null;
+		notes = p.notes ?? null;
+		if (p.kind === 'transfer') {
+			party = p.from;
+			other = p.to;
+			return;
+		}
+		counterparty = p.counterparty;
+		party =
+			(p.kind === 'expense' ? p.payer : p.destination) ??
+			snapshot.event.defaultReimbursementAccount;
+		if (p.lines.length) lines = p.lines.map((l) => ({ ...l, amount: l.amount ?? null }));
 	}
 
 	// --- adding people and categories on the spot ------------------------------------

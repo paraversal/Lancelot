@@ -44,9 +44,8 @@ import type { SavedTxn } from './generated/SavedTxn';
 import type { DataSource } from './generated/DataSource';
 import type { DataSourceView } from './generated/DataSourceView';
 import type { Pulled } from './generated/Pulled';
-import type { Sheet } from './generated/Sheet';
+import type { Table } from './generated/Table';
 import type { TicketBatch } from './generated/TicketBatch';
-import type { TicketColumns } from './generated/TicketColumns';
 import type { TicketShare } from './generated/TicketShare';
 import type { TierDraft } from './generated/TierDraft';
 import type { TierId } from './generated/TierId';
@@ -214,9 +213,8 @@ export const api = {
 	/** Asks the provider for these fields; changes nothing. */
 	pullDataSource: (id: string, fields: string[]) =>
 		call<Pulled>('data_source_pull', { id, fields }),
-	/** Reads the columns of a ticket sheet; changes nothing. */
-	readTicketSheet: (path: string, columns: TicketColumns) =>
-		call<Sheet>('ticket_sheet_read', { path, columns }),
+	/** Reads these columns of a file; changes nothing. */
+	readTable: (path: string, columns: string[]) => call<Table>('table_read', { path, columns }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
 	/** What deleting an import would change; changes nothing. */
 	previewDeleteImport: (id: ImportId) => call<ImportDeletion>('import_delete_preview', { id }),

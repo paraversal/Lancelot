@@ -17,9 +17,8 @@ pub fn eur(text: &str) -> Cents {
 /// A day in June 2026, the month of the example event.
 /// A ticket sheet's tickets, read with the usual columns.
 pub fn batch(name: &str, data: &[u8]) -> TicketBatch {
-    read_sheet(name, data, &TicketColumns::default())
-        .unwrap()
-        .batch
+    let columns = ["Ticket".to_owned(), "Order ID".to_owned()];
+    TicketBatch::from_table(read_table(name, data, &columns, NumberFormat::De).unwrap())
 }
 
 pub fn june(day: u8) -> Date {

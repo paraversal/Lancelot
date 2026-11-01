@@ -159,7 +159,7 @@ pub fn run() {
             commands::data_source_set,
             commands::data_source_set_token,
             commands::data_source_pull,
-            commands::ticket_sheet_read,
+            commands::table_read,
             commands::tickets_set_enabled,
             commands::ticket_account_set,
             commands::tickets_preview,
