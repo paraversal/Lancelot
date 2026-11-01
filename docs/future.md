@@ -75,3 +75,5 @@ A new form is one `Entry` variant, with no change to the load path. Candidates, 
 ## Decided against
 
 These do not fit a tool for one treasurer, and the changes above cover the realistic cases more simply: configurable workflows and event sourcing. Multi-event, multi-user and compliance features stay out of scope (requirements §1).
+
+**Receipt OCR** was tried on 2026-11-01 with Donut and with small local vision models. It wasn't accurate enough, and loading a model and waiting for the answer takes far longer than typing the number. Receipts aren't itemised here either, so there is little to read beyond the amounts, and sums in amount fields (R-NF-8) cover adding them up.

@@ -1,6 +1,6 @@
 # Lancelot — Technical design
 
-Status: v0.3. It implements [requirements v0.12](requirements.md) and follows the [roadmap](roadmap.md). It records decisions and invariants that the code does not explain by itself. For module layout, signatures, the commands and the routes, read the code.
+Status: v0.3. It implements [requirements v0.13](requirements.md) and follows the [roadmap](roadmap.md). It records decisions and invariants that the code does not explain by itself. For module layout, signatures, the commands and the routes, read the code.
 
 ## 1. Components
 

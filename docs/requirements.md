@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.12 · 2026-11-01
+Status: draft v0.13 · 2026-11-01
 
 ## 1. Purpose
 
@@ -277,7 +277,7 @@ The Tauri approach has one real cost: the IPC boundary between Svelte and Rust. 
 
 1. **MVP**: event file, accounts, typed transaction entry with splits, attachments, persons with IBAN and netting, reimbursements and repayments, person overview, payout list, settlement report, integrity check. Ticket income is entered manually.
 2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records (now the drinks plugin), reconciliation checkpoints, templates from previous events.
-3. **Phase 3**: drink sales import from a file, SEPA XML export, polished PDF reports, receipt OCR.
+3. **Phase 3**: drink sales import from a file, SEPA XML export, polished PDF reports.
 
 ## 10. Remaining open points
 
