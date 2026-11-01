@@ -17,6 +17,7 @@
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
+	import { isOver } from '#lib/budget.ts';
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -99,6 +100,17 @@
 	const fieldError = (field: string) => (error?.field?.startsWith(field) ? error.message : null);
 
 	const figures = $derived(line ? snapshot.budget.lines.find((f) => f.line === line.id) : null);
+	const over = $derived(
+		!!line &&
+			!!figures &&
+			isOver(
+				snapshot.accounts.find((a) => a.id === line.category)?.kind === 'income'
+					? 'income'
+					: 'expense',
+				figures,
+				line.complete
+			)
+	);
 	const linked = $derived(
 		line
 			? snapshot.txns.flatMap((t) =>
@@ -166,7 +178,9 @@
 	{#if figures}
 		<div class="figures">
 			<div><span class="form-label">Estimate</span>{formatAmount(figures.estimate, format)}</div>
-			<div><span class="form-label">Actual</span>{formatAmount(figures.actual, format)}</div>
+			<div class:over>
+				<span class="form-label">Actual</span>{formatAmount(figures.actual, format)}
+			</div>
 			<div>
 				<span class="form-label">Forecast</span><strong
 					>{formatAmount(figures.forecast, format)}</strong
@@ -310,6 +324,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
+	}
+
+	.figures .over {
+		color: var(--color-attention);
 	}
 
 	.labelled {

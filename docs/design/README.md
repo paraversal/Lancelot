@@ -44,16 +44,16 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 
 ## Components
 
-| Component         | Notes                                                                                                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Button            | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`)                                                                              |
-| Filter chip       | Pill; active is an ink fill                                                                                                                                      |
-| Segmented control | Sunk track; active segment uses `marker`                                                                                                                         |
+| Component         | Notes                                                                                                                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button            | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`)                                                                                                                           |
+| Filter chip       | Pill; active is an ink fill                                                                                                                                                                                   |
+| Segmented control | Sunk track; active segment uses `marker`                                                                                                                                                                      |
 | Amount input      | Lenient parsing with a live `= …` preview, which also adds up sums such as `1,29+1,49`. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
-| Balance cell      | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled`                                                                                                      |
-| Receipt indicator | Paperclip when present, `attention` warning when missing                                                                                                         |
-| Tally             | Groups of four strokes crossed by a fifth (Strichliste). In `UI.fig` only; the app doesn't draw it.                                                              |
-| Stacked bar       | In vs. out composition, and ticket snapshots per import                                                                                                          |
+| Balance cell      | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled`                                                                                                                                                   |
+| Receipt indicator | Paperclip when present, `attention` warning when missing                                                                                                                                                      |
+| Tally             | Groups of four strokes crossed by a fifth (Strichliste). In `UI.fig` only; the app doesn't draw it.                                                                                                           |
+| Stacked bar       | In vs. out composition, and ticket snapshots per import                                                                                                                                                       |
 
 ## Screens in UI.fig
 
@@ -96,7 +96,7 @@ The app's Overview follows the Overview frame, whose hero has the result, the fo
 
 The sidebar's Cost centres section, with a separator, a label and one item per centre, is in no frame. Each centre's page reuses the Drinks hero and table rows for its result, costs, income and tagged lines. A split line in the entry panel keeps its Budget line and Cost centre side by side under its category, with a rule between lines, so each line's details read as its own. Its label says Category until there is a second line, then Split. Budget line always shows and also lists the other categories' lines, so a treasurer who thinks of the line first can start there; choosing one sets the category.
 
-Not in any frame: the entry panel's Notes and free Transfer fields, the Sells tickets and Net movement settings, the entry panel's and the budget panel's Cost centre field, Cost centres on the Budget page and in the report, and the Cost centres and Categories sections in Settings.
+Not in any frame: the entry panel's Notes and free Transfer fields, the Sells tickets and Net movement settings, the entry panel's and the budget panel's Cost centre field, Cost centres in the report, and the Cost centres and Categories sections in Settings.
 
 Settings has its two columns, then two sections across the full width. An ink rule opens each section, so it reads apart from the hairlines between rows. **Categories** flows over two columns, expenses then income, with a category's cost centre beside it, and shows no choice while the event has no cost centres. A category's Delete shows when its row is hovered or focused. **Plugins** comes last under a double rule, with a larger heading and its cards in two columns.
 
@@ -108,4 +108,14 @@ History is in no frame. It sits apart from the pages at the bottom of the sideba
 
 Reconciliation and templates are in no frame. **Statement** on each account in Where the money is opens a right-hand panel like Count: date and amount (`Net movement` for the Verein account, `Statement shows` otherwise) over the account's checkpoints with the books' figure and any difference. The note beside the account shows its latest mismatch, else its latest checkpoint. The New event panel has a **Template** field, with the counts of what comes along once an event is chosen, and Settings has a **Copy from another event** section with what is new and what is already here.
 
-Budget is not designed yet. Until it is, the app's Budget page follows the People page: a table of estimate, actual and forecast with a right-hand panel per budget line.
+Budget is designed on the file's **Update** page, apart from the older frames on Page 1, and the app's page follows it. Where it differs: the panel uses the app's shared fields, so the category's kind sits under its field, the segmented control is as wide as its options and Delete is next to Save. A closed event, in no frame, shows the result and the plan in the hero.
+
+The hero has the forecast, the plan with how far the forecast is from it, the result so far and the three lines furthest from plan, which go beside a panel. One column header stays at the top while scrolling, over Income, Expenses, Result and Cost centres, each opened by an ink rule with its totals on the same row. Under them, categories carry the dot they have on the Overview. Each line has a bar of actual against estimate in its category's colour, in `attention` once it is over, and the bars also go beside a panel. A forecast that only repeats the estimate is in `ink-muted`, so the figures already decided by real amounts stand out. While nothing is booked, the hero shows the plan with income and expenses instead. A category's `+` appears on hover and starts a line in that category. With no lines, the page has **Copy from another event**, which leads to that section in Settings, next to `+ Budget line`.
+
+| Frame              | Content                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| Budget             | During the event: hero, column header, Income and the start of Expenses                       |
+| Budget / Edit line | A line over its estimate selected; figures, quantity × price, Complete and the linked entries |
+| Budget / Planning  | Before the event: no actuals, a new line being added from a category                          |
+| Budget / Empty     | No lines yet                                                                                  |
+| Budget / Scrolled  | The end of the page: the column header held at the top, Result and Cost centres               |

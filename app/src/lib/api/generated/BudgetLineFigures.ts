@@ -2,4 +2,8 @@
 import type { BudgetLineId } from "./BudgetLineId";
 import type { Cents } from "./Cents";
 
-export type BudgetLineFigures = { line: BudgetLineId, estimate: Cents, actual: Cents, forecast: Cents, };
+export type BudgetLineFigures = { line: BudgetLineId, 
+/**
+ * What this line's forecast does to the planned result: negative when it lowers it.
+ */
+fromPlan: Cents, estimate: Cents, actual: Cents, forecast: Cents, };

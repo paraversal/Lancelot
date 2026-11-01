@@ -38,6 +38,39 @@ fn earn(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
 }
 
 #[test]
+fn how_far_the_forecast_is_from_plan_has_the_sign_of_its_effect_on_the_result() {
+    let mut book = new_book();
+    let kitchen = expense(&book, "Kitchen");
+    let donations = income(&book, "General");
+    let food = book
+        .add_budget_line(amount(kitchen, "Food", "1.000"))
+        .unwrap();
+    let gifts = book
+        .add_budget_line(amount(donations, "Gifts", "500"))
+        .unwrap();
+    let from_plan = |b: &Book, id: BudgetLineId| {
+        b.budget()
+            .lines
+            .iter()
+            .find(|l| l.line == id)
+            .unwrap()
+            .from_plan
+    };
+
+    // Spending more lowers the result. Income still short of its estimate does too.
+    spend(&mut book, vec![linked(kitchen, "1.200", food)]);
+    earn(&mut book, vec![linked(donations, "300", gifts)]);
+    assert_eq!(from_plan(&book, food), eur("-200"));
+    assert_eq!(from_plan(&book, gifts), eur("-200"));
+    assert_eq!(book.budget().from_plan, eur("-400"));
+
+    // Something unbudgeted is in the total, but belongs to no line.
+    spend(&mut book, vec![split(kitchen, "50")]);
+    assert_eq!(from_plan(&book, food), eur("-200"));
+    assert_eq!(book.budget().from_plan, eur("-450"));
+}
+
+#[test]
 fn an_expense_line_forecasts_the_larger_of_estimate_and_actual() {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
