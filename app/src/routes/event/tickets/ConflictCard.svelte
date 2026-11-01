@@ -10,7 +10,7 @@
 	import type { RemovedTickets } from '#lib/api/generated/RemovedTickets.ts';
 	import type { Resolution } from '#lib/api/generated/Resolution.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
@@ -80,7 +80,8 @@
 	const confirm = (m: ConflictMatch) =>
 		resolve({ type: 'match', cancellation: m.cancellation, count: m.count });
 
-	function submit() {
+	async function submit() {
+		await datesRead();
 		const missing = (field: string, message: string) => (error = { field, message });
 		if (n === null || Number.isNaN(n)) return missing('count', 'enter a whole number');
 		if (mode === 'correction') return resolve({ type: 'correction', count: n, note });

@@ -4,7 +4,7 @@
 	import { chooseEventFile, chooseNewEventFile } from '#lib/api/dialogs.ts';
 	import type { TemplateSummary } from '#lib/api/generated/TemplateSummary.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -17,6 +17,8 @@
 	let location = $state<string | null>(null);
 	let template = $state<{ path: string; summary: TemplateSummary } | null>(null);
 	let error = $state<string | null>(null);
+	let startsInvalid = $state(false);
+	let endsInvalid = $state(false);
 
 	const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -34,7 +36,8 @@
 		// Let the focused field commit first.
 		(document.activeElement as HTMLElement | null)?.blur();
 		await new Promise((r) => setTimeout(r));
-		if (!name) return;
+		await datesRead();
+		if (!name || startsInvalid || endsInvalid) return;
 		const path = await chooseNewEventFile(name);
 		if (!path) return;
 		try {
@@ -66,9 +69,16 @@
 			label="From"
 			value={startsOn}
 			format={session.format}
+			bind:invalid={startsInvalid}
 			oncommit={(v) => (startsOn = v)}
 		/>
-		<DateField label="To" value={endsOn} format={session.format} oncommit={(v) => (endsOn = v)} />
+		<DateField
+			label="To"
+			value={endsOn}
+			format={session.format}
+			bind:invalid={endsInvalid}
+			oncommit={(v) => (endsOn = v)}
+		/>
 	</div>
 	<TextField label="Location" value={location} oncommit={(v) => (location = v)} />
 	<div class="template">

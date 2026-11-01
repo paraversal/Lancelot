@@ -8,9 +8,17 @@ import AmountField from '#lib/components/AmountField.svelte';
 import DateField from '#lib/components/DateField.svelte';
 import EntryPanel from '#lib/entry/EntryPanel.svelte';
 import { session } from '#lib/state/session.svelte.ts';
+import NewEventPanel from '../NewEventPanel.svelte';
 import BudgetLinePanel from './budget/BudgetLinePanel.svelte';
+import ProductPanel from './centre/ProductPanel.svelte';
+import SettingsPanel from './centre/SettingsPanel.svelte';
 import CountPanel from './overview/CountPanel.svelte';
 import StatementPanel from './overview/StatementPanel.svelte';
+import MarkPaidPanel from './people/payouts/MarkPaidPanel.svelte';
+import CancellationPanel from './tickets/CancellationPanel.svelte';
+import ConflictCard from './tickets/ConflictCard.svelte';
+import ImportPanel from './tickets/ImportPanel.svelte';
+import SalePanel from './tickets/SalePanel.svelte';
 import TierPanel from './tickets/TierPanel.svelte';
 
 // Reading a field takes a round trip to the core. These hold that trip open across the click on
@@ -24,8 +32,20 @@ const api = vi.hoisted(() => ({
 	updateBudgetLine: vi.fn(),
 	setCounts: vi.fn(),
 	addReconciliation: vi.fn(),
-	updateReconciliation: vi.fn()
+	updateReconciliation: vi.fn(),
+	markPayoutsPaid: vi.fn(),
+	updateManualSale: vi.fn(),
+	updateCancellation: vi.fn(),
+	resolveConflict: vi.fn(),
+	importTickets: vi.fn(),
+	previewTickets: vi.fn(),
+	createEvent: vi.fn(),
+	updateDrinkProduct: vi.fn(),
+	setDrinkSettings: vi.fn(),
+	ticketShare: vi.fn()
 }));
+const chooseNewEventFile = vi.hoisted(() => vi.fn());
+vi.mock('#lib/api/dialogs.ts', () => ({ chooseNewEventFile, chooseEventFile: vi.fn() }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
 vi.mock('#lib/api/index.ts', async () => {
 	const actual = await vi.importActual<typeof import('#lib/api/index.ts')>('#lib/api/index.ts');
@@ -68,20 +88,32 @@ async function typeUnreadableDate(input: Element) {
 	await settle();
 }
 
-const anyCall = () =>
-	[
-		api.saveTxn,
-		api.addTier,
-		api.addBudgetLine,
-		api.updateBudgetLine,
-		api.setCounts,
-		api.addReconciliation,
-		api.updateReconciliation
-	].some((f) => f.mock.calls.length);
+const savers = () => [
+	api.addTier,
+	api.addBudgetLine,
+	api.updateBudgetLine,
+	api.setCounts,
+	api.addReconciliation,
+	api.updateReconciliation,
+	api.markPayoutsPaid,
+	api.updateManualSale,
+	api.updateCancellation,
+	api.resolveConflict,
+	api.importTickets,
+	api.createEvent,
+	api.updateDrinkProduct,
+	api.setDrinkSettings
+];
+
+const anyCall = () => [api.saveTxn, ...savers()].some((f) => f.mock.calls.length);
 
 /** Save while the read is open: nothing happens until it returns. */
-async function saveDuringRead(held: { resolve: (v: unknown) => void }, answer: unknown) {
-	await clickSave();
+async function saveDuringRead(
+	held: { resolve: (v: unknown) => void },
+	answer: unknown,
+	click: () => Promise<unknown> = clickSave
+) {
+	await click();
 	await settle();
 	expect(anyCall()).toBe(false);
 	held.resolve(answer);
@@ -102,15 +134,22 @@ beforeEach(() => {
 	});
 	const state = async () => session.event!;
 	api.saveTxn.mockImplementation(async () => ({ event: session.event!, id: 1 }));
-	for (const f of [
-		api.addTier,
-		api.addBudgetLine,
-		api.updateBudgetLine,
-		api.setCounts,
-		api.addReconciliation,
-		api.updateReconciliation
-	])
-		f.mockImplementation(state);
+	for (const f of savers()) f.mockImplementation(state);
+	api.previewTickets.mockResolvedValue({
+		filename: 'sheet.csv',
+		sha256: 'abcdefgh',
+		tickets: 0,
+		tiers: [],
+		unknown: [],
+		removed: [],
+		problems: [],
+		receiptsLost: [],
+		previous: null,
+		sameFile: false,
+		current: true
+	});
+	api.ticketShare.mockResolvedValue({ part: 0, rest: 0 });
+	chooseNewEventFile.mockResolvedValue('/new.lancelot');
 });
 
 describe('The entry panel', () => {
@@ -377,6 +416,254 @@ describe('The statement panel', () => {
 		await clickSave();
 		await settle();
 		expect(api.updateReconciliation).not.toHaveBeenCalled();
+	});
+});
+
+/** The event with one tier, one manual sale and one cancellation of it. */
+function withTickets(change: (s: EventSnapshot) => void = () => {}) {
+	const next = structuredClone(snapshot) as any;
+	next.ticketSettings.account = 1;
+	next.tickets.tiers = [
+		{
+			id: 1,
+			name: 'Early',
+			price: 2500,
+			feeBp: 0,
+			quota: null,
+			aliases: [],
+			sold: 0,
+			sheet: 0,
+			manual: 0,
+			cancelled: 0,
+			gross: 0,
+			fees: 0,
+			refunds: 0,
+			net: 0,
+			unresolved: 0
+		}
+	];
+	next.tickets.manualSales = [
+		{ id: 1, tier: 1, count: 2, destination: 2, date: '2026-06-13', reference: null, gross: 5000 }
+	];
+	next.tickets.cancellations = [
+		{
+			id: 1,
+			order: 'A1',
+			sale: null,
+			tier: 1,
+			count: 1,
+			terms: { refundBp: 10000, date: '2026-06-13', payer: null },
+			payer: 1,
+			note: null
+		}
+	];
+	change(next);
+	session.update({ ...session.event!, snapshot: next });
+}
+
+describe('Mark as paid', () => {
+	const open = () => {
+		const next = structuredClone(snapshot);
+		next.payouts.payouts[0].iban = 'DE89370400440532013000';
+		session.update({ ...session.event!, snapshot: next });
+		render(MarkPaidPanel, { onclose: () => {} });
+	};
+	const click = () => fireEvent.click(screen.getByRole('button', { name: /^Mark as paid/ }));
+
+	it('pays on the date typed just before the click', async () => {
+		open();
+		const held = hold(api.parseDate);
+		await type(screen.getByLabelText('Date'), '1.7.26');
+		await saveDuringRead(held, { date: '2026-07-01' }, click);
+		expect(api.markPayoutsPaid.mock.calls[0][1]).toBe('2026-07-01');
+	});
+
+	it('does not pay on the old date when the new one cannot be read', async () => {
+		open();
+		await typeUnreadableDate(screen.getByLabelText('Date'));
+		await click();
+		await settle();
+		expect(api.markPayoutsPaid).not.toHaveBeenCalled();
+	});
+});
+
+describe('The manual sale panel', () => {
+	const open = () => {
+		withTickets();
+		render(SalePanel, { id: 1, onopen: () => {}, onclose: () => {} });
+	};
+
+	it('saves the date typed just before Save, not the old one', async () => {
+		open();
+		const held = hold(api.parseDate);
+		await type(screen.getByLabelText('Date'), '1.7.26');
+		await saveDuringRead(held, { date: '2026-07-01' });
+		expect(api.updateManualSale.mock.calls[0][1].date).toBe('2026-07-01');
+	});
+
+	it('does not save a date it cannot read', async () => {
+		open();
+		await typeUnreadableDate(screen.getByLabelText('Date'));
+		await clickSave();
+		await settle();
+		expect(api.updateManualSale).not.toHaveBeenCalled();
+	});
+});
+
+describe('The cancellation panel', () => {
+	const open = () => {
+		withTickets();
+		render(CancellationPanel, { id: 1, onclose: () => {} });
+	};
+
+	it('saves the date typed just before Save, not the old one', async () => {
+		open();
+		const held = hold(api.parseDate);
+		await type(screen.getByLabelText('Date'), '1.7.26');
+		await saveDuringRead(held, { date: '2026-07-01' });
+		expect(api.updateCancellation.mock.calls[0][1].terms.date).toBe('2026-07-01');
+	});
+
+	it('does not save a date it cannot read', async () => {
+		open();
+		await typeUnreadableDate(screen.getByLabelText('Date'));
+		await clickSave();
+		await settle();
+		expect(api.updateCancellation).not.toHaveBeenCalled();
+	});
+});
+
+describe('A conflict card', () => {
+	const open = () => {
+		withTickets();
+		render(ConflictCard, {
+			conflict: { order: 'A1', removed: [], added: [] },
+			removed: { tier: 1, count: 1, since: 1, matches: [] }
+		} as never);
+	};
+	const click = () => fireEvent.click(screen.getByRole('button', { name: /^Resolve$/ }));
+
+	it('resolves with the date typed just before the click', async () => {
+		open();
+		const held = hold(api.parseDate);
+		await type(screen.getByLabelText('Date'), '1.7.26');
+		await saveDuringRead(held, { date: '2026-07-01' }, click);
+		expect(api.resolveConflict.mock.calls[0][2].terms.date).toBe('2026-07-01');
+	});
+
+	it('does not resolve with a date it cannot read', async () => {
+		open();
+		await typeUnreadableDate(screen.getByLabelText('Date'));
+		await click();
+		await settle();
+		expect(api.resolveConflict).not.toHaveBeenCalled();
+	});
+});
+
+describe('The import panel', () => {
+	const open = async () => {
+		withTickets();
+		render(ImportPanel, { path: '/sheet.csv', onclose: () => {}, onnewtier: () => {} });
+		await settle();
+	};
+	const date = () => screen.getByLabelText('Snapshot date');
+	const click = () => fireEvent.click(screen.getByRole('button', { name: /^Import ⌘/ }));
+
+	it('imports with the date typed just before the click', async () => {
+		await open();
+		const held = hold(api.parseDate);
+		await type(date(), '1.7.26');
+		await saveDuringRead(held, { date: '2026-07-01' }, click);
+		expect(api.importTickets.mock.calls[0][1]).toBe('2026-07-01');
+	});
+
+	it('does not import with a date it cannot read', async () => {
+		await open();
+		await typeUnreadableDate(date());
+		await click();
+		await fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
+		await settle();
+		expect(api.importTickets).not.toHaveBeenCalled();
+	});
+});
+
+describe('The new event panel', () => {
+	const click = () => fireEvent.click(screen.getByRole('button', { name: /^Create/ }));
+	const open = async () => {
+		render(NewEventPanel, { onclose: () => {} });
+		await type(screen.getByLabelText('Name'), 'Fest');
+		await settle();
+		const from = screen.getByLabelText('From') as HTMLInputElement;
+		from.focus();
+		return from;
+	};
+
+	it('creates with the date typed just before the click, before asking for a file', async () => {
+		const from = await open();
+		const typing = hold(api.parseDate);
+		await type(from, '1.7.26');
+		const leaving = hold(api.parseDate);
+		await click();
+		await settle();
+		expect(chooseNewEventFile).not.toHaveBeenCalled();
+		typing.resolve({ date: '2026-07-01' });
+		await settle();
+		expect(chooseNewEventFile).not.toHaveBeenCalled();
+		leaving.resolve({ date: '2026-07-01' });
+		await settle();
+		expect(api.createEvent.mock.calls[0][1].startsOn).toBe('2026-07-01');
+	});
+
+	it('does not create an event without the date it could not read', async () => {
+		const from = await open();
+		await typeUnreadableDate(from);
+		api.parseDate.mockRejectedValueOnce(unreadable());
+		await click();
+		await settle();
+		await settle();
+		expect(chooseNewEventFile).not.toHaveBeenCalled();
+		expect(api.createEvent).not.toHaveBeenCalled();
+	});
+});
+
+describe('The drink product panel', () => {
+	const product = { id: 1, name: 'Mate', taken: 10, returned: 0, unitPrice: 100 } as never;
+	const price = () => screen.getByLabelText('Price per unit');
+
+	it('saves the price typed just before Save, not the old one', async () => {
+		render(ProductPanel, { product, onclose: () => {} });
+		const held = hold(api.parseAmount);
+		await type(price(), '2');
+		await saveDuringRead(held, cents(200));
+		expect(api.updateDrinkProduct.mock.calls[0][1].unitPrice).toBe(200);
+	});
+
+	it('does not save a price it cannot read', async () => {
+		render(ProductPanel, { product, onclose: () => {} });
+		await typeUnreadable(price());
+		await clickSave();
+		await settle();
+		expect(api.updateDrinkProduct).not.toHaveBeenCalled();
+	});
+});
+
+describe('The drinks settings panel', () => {
+	const price = () => screen.getByLabelText('Price per Strich');
+
+	it('saves the price typed just before Save, not the old one', async () => {
+		render(SettingsPanel, { onclose: () => {} });
+		const held = hold(api.parseAmount);
+		await type(price(), '2');
+		await saveDuringRead(held, cents(200));
+		expect(api.setDrinkSettings.mock.calls[0][0].pricePerStrich).toBe(200);
+	});
+
+	it('does not clear a price it cannot read', async () => {
+		render(SettingsPanel, { onclose: () => {} });
+		await typeUnreadable(price());
+		await clickSave();
+		await settle();
+		expect(api.setDrinkSettings).not.toHaveBeenCalled();
 	});
 });
 

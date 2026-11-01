@@ -4,7 +4,7 @@
 	import { untrack } from 'svelte';
 	import { api, ApiError } from '#lib/api/index.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
@@ -23,9 +23,13 @@
 		pricePerStrich = settings.pricePerStrich;
 	});
 	let error = $state<string | null>(null);
+	let priceInvalid = $state(false);
 
 	async function save() {
 		error = null;
+		await amountsRead();
+		// A price that cannot be read must not be saved as no price at all.
+		if (priceInvalid) return;
 		try {
 			await session.change(() => api.setDrinkSettings({ ...settings, supplier, pricePerStrich }));
 			onclose();
@@ -58,6 +62,7 @@
 			label="Price per Strich"
 			value={pricePerStrich}
 			{format}
+			bind:invalid={priceInvalid}
 			oninput={(v) => (pricePerStrich = v)}
 		/>
 	</fieldset>

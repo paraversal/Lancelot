@@ -5,7 +5,7 @@
 	import { api, ApiError } from '#lib/api/index.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
 	import type { DrinkProduct } from '#lib/api/generated/DrinkProduct.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
@@ -40,6 +40,7 @@
 
 	async function save() {
 		error = null;
+		await amountsRead();
 		const t = parse(taken);
 		const r = parse(returned);
 		if (t === null) return void (error = { field: 'taken', message: 'enter a whole number' });
