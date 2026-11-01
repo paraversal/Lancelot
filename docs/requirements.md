@@ -131,7 +131,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 ### 5.5 Budget (plan vs actual)
 
 - **R-BUD-1** Budget lines per event: category, optional cost centre, description, and the estimate, either as an amount or as quantity × unit price.
-- **R-BUD-2** Actual transaction lines can be linked to a budget line (many-to-one).
+- **R-BUD-2** Actual transaction lines can be linked to a budget line (many-to-one), which must be of the line's category. The entry form offers every budget line of its kind, and choosing one from another category changes the line's category.
 - **R-BUD-3** A plan-vs-actual view per line, per category, per cost centre and in total.
 - **R-BUD-4** A **forecast** result: for each budget line, use the actual amount if it is marked complete, otherwise the cautious one of the estimate and the actual so far: the larger for an expense line, the smaller for an income line. Unbudgeted actuals are added on top.
 - **R-BUD-5** Budget lines are planning data only and never affect real balances.

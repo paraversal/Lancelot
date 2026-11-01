@@ -46,6 +46,12 @@
 
 	// --- form state, filled once from the line being edited: the page remounts the panel --
 	let category = $state<AccountId | null>(null);
+	// An income and an expense category can share a name, and the closed field shows only the name.
+	const categoryKind = $derived(
+		{ income: 'Income', expense: 'Expense' }[
+			snapshot.accounts.find((a) => a.id === category)?.kind as string
+		] ?? ''
+	);
 	let description = $state('');
 	let mode = $state<'amount' | 'quantity'>('amount');
 	let amount = $state<Cents | null>(null);
@@ -165,7 +171,9 @@
 					error = null;
 				}}
 				onadd={addCategory}
-			/>
+			>
+				{#snippet hint()}{categoryKind}{/snippet}
+			</ChoiceField>
 		</div>
 
 		<Select

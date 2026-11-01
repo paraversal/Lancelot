@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The panel's receipts: saved attachments (click to preview), files waiting to be saved,
-	// and a place to drop or pick more.
+	// and a place to drop or pick more. Read-only, they can still be previewed.
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import { attachmentUrl } from '#lib/api/index.ts';
 	import { chooseReceipts } from '#lib/api/dialogs.ts';
@@ -14,6 +14,7 @@
 		attachments,
 		pending,
 		previewing,
+		readonly = false,
 		onpreview,
 		onremove,
 		onremovePending,
@@ -23,6 +24,7 @@
 		/** Paths of files that are attached when the entry is saved. */
 		pending: string[];
 		previewing: number | null;
+		readonly?: boolean;
 		onpreview: (a: Attachment) => void;
 		onremove: (a: Attachment) => void;
 		onremovePending: (index: number) => void;
@@ -50,14 +52,16 @@
 					<small>{formatSize(a.size, session.format)}</small>
 				</span>
 			</button>
-			<button
-				type="button"
-				class="remove"
-				aria-label="Remove {a.filename}"
-				onclick={() => onremove(a)}
-			>
-				<Icon name="x" size={14} />
-			</button>
+			{#if !readonly}
+				<button
+					type="button"
+					class="remove"
+					aria-label="Remove {a.filename}"
+					onclick={() => onremove(a)}
+				>
+					<Icon name="x" size={14} />
+				</button>
+			{/if}
 		</div>
 	{/each}
 	{#each pending as path, i (path)}
@@ -76,9 +80,11 @@
 			</button>
 		</div>
 	{/each}
-	<button type="button" class="drop" onclick={async () => onadd(await chooseReceipts())}>
-		<Icon name="upload" />Drop receipt
-	</button>
+	{#if !readonly}
+		<button type="button" class="drop" onclick={async () => onadd(await chooseReceipts())}>
+			<Icon name="upload" />Drop receipt
+		</button>
+	{/if}
 </div>
 
 <style>

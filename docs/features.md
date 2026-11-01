@@ -19,7 +19,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 - Four forms: expense, income, transfer between any two accounts, and settling a person (R-TX-3).
 - One receipt can be split over several categories, and the lines must add up exactly (R-TX-2).
-- Each line can link to a budget line and carry a cost centre (R-BUD-2, R-CC-1).
+- Each line can link to a budget line and carry a cost centre. Choosing a budget line sets the line's category and cost centre (R-BUD-2, R-CC-1).
 - People and categories can be added from the form itself.
 - Entries can be edited and deleted until the event is closed. Every change is written to a change log, which the app has no page for yet (R-TX-6).
 - Amount fields accept both number formats and show what they read before saving (R-NF-8).
@@ -101,7 +101,7 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 - The Overview shows the result, money in and out by category, where the money is, the forecast and the tickets (R-SET-1, R-SET-4).
 - Open items, each leading to its fix: non-zero balances, missing receipts, statement mismatches and ticket conflicts (R-SET-5).
-- Closing is blocked by open items, and each can be accepted with a note. A closed event is read-only and shows its final balance. It can be reopened, keeping the notes (R-EVT-2, R-SET-7, R-SET-8).
+- Closing is blocked by open items, and each can be accepted with a note. A closed event is read-only, though its receipts can still be previewed, and shows its final balance. It can be reopened, keeping the notes (R-EVT-2, R-SET-7, R-SET-8).
 - The settlement report has the categories, plan against actual, each cost centre, the final balance, every entry and the receipts, and is saved as PDF from the print dialog (R-SET-2, R-SET-3, R-SET-6).
 - All transactions export as CSV, one row per line (R-SET-6).
 
