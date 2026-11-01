@@ -279,7 +279,7 @@ From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm)
 
 ### Stage 0 · Docs
 
-- [x] This section, and [FUTURE.md](FUTURE.md) for longer-term changes.
+- [x] This section, and [future.md](future.md) for longer-term changes.
 - [x] Trim the technical design to decisions and invariants, and correct what had drifted (F22). `UI.fig` stays private.
 - [x] Remove the untracked `app/pnpm-workspace.yaml`: pnpm generated it, and its exclusions are no longer needed.
 
@@ -374,4 +374,4 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 ## Next step
 
-The [refactoring stages](#refactoring) are done, apart from the decision that waits for the next event. First try the data sources in the desktop app with a real provider and a token in the keychain, which hasn't been done yet. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`), and entering it freezes the file format again. The Budget screen still needs its design (M6b). Importing drink sales from a file (M11) follows once there is a sample of the export. Longer-term changes are in [FUTURE.md](FUTURE.md).
+The [refactoring stages](#refactoring) are done, apart from the decision that waits for the next event. First try the data sources in the desktop app with a real provider and a token in the keychain, which hasn't been done yet. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`), and entering it freezes the file format again. The Budget screen still needs its design (M6b). Importing drink sales from a file (M11) follows once there is a sample of the export. Longer-term changes are in [future.md](future.md).

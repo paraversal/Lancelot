@@ -274,7 +274,7 @@ Event settings (name, dates, default reimbursement account) live inside the even
 
 ## 10. Plugins
 
-A plugin adds records, screens and proposals for one kind of group's workflow. Today plugins are **built in**: Svelte code in `app/src/lib/plugins/<id>/`, listed in `registry.ts` and shipped with the app. Nothing loads third-party code yet. The boundary is the one a sandboxed loader would need later, so adding that loader should not change a plugin much.
+A plugin adds records, screens and proposals for one kind of group's workflow. How to write one is in [Writing a plugin](plugins.md). Today plugins are **built in**: Svelte code in `app/src/lib/plugins/<id>/`, listed in `registry.ts` and shipped with the app. Nothing loads third-party code yet. The boundary is the one a sandboxed loader would need later, so adding that loader should not change a plugin much.
 
 **Rules**
 
