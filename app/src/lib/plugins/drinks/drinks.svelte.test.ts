@@ -58,11 +58,11 @@ describe('The stock and sales section', () => {
 		expect(collected).toContain('38,50 € less than logged');
 	});
 
-	it('checks an invoice that matches, without Pfand', () => {
+	it('checks an invoice that matches, without deposit', () => {
 		open();
 		render(Centre, { centre: drinksCentre() });
 		const invoice = text('plugin-drinks-invoice');
-		expect(invoice).toContain('Invoice incl. Pfand 32,00');
+		expect(invoice).toContain('Invoice incl. deposit 32,00');
 		expect(invoice).toContain('452,00');
 		expect(invoice).not.toContain('than the records');
 	});
@@ -104,15 +104,24 @@ describe('The stock and sales section', () => {
 		const proposal = takeProposal()!;
 		expect(proposal.counterparty).toBe('Hoffmann');
 		expect(proposal.amount).toBe(42000);
-		const pfand = session.event!.snapshot.accounts.find((a) => a.name === 'Pfand')!;
-		expect(proposal.lines.map((l) => l.account)).not.toContain(pfand.id);
+		const deposit = session.event!.snapshot.accounts.find((a) => a.name === 'Deposit')!;
+		expect(proposal.lines.map((l) => l.account)).not.toContain(deposit.id);
 		expect(apply).not.toHaveBeenCalled();
+	});
+
+	it('explains the optional Deposit category', async () => {
+		open();
+		render(Centre, { centre: drinksCentre() });
+		await fireEvent.click(screen.getByText('Hoffmann · commission'));
+		expect(screen.getByLabelText('Deposit category')).toBeTruthy();
+		expect(screen.getByText(/^Optional\. Expenses in this category/)).toBeTruthy();
+		expect(screen.getByRole('option', { name: 'None' })).toBeTruthy();
 	});
 
 	it('goes straight on to the invoice after asking for the supplier', async () => {
 		const withoutSupplier = (s: EventSnapshot) => {
 			const record = s.pluginRecords.find((r) => r.key.startsWith('centre:'))!;
-			record.value = { supplier: null, pfand: null };
+			record.value = { supplier: null, deposit: null };
 		};
 		open(withoutSupplier);
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockImplementation(async (_, changes) => {
@@ -254,7 +263,7 @@ describe('The plugin’s settings', () => {
 			.mockImplementation(async () => ({ event: session.event!, id: 100 }));
 		const tag = vi.spyOn(api, 'setCategoryCostCentre').mockResolvedValue(session.event!);
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockResolvedValue(session.event!);
-		const pfand = session.event!.snapshot.accounts.find((a) => a.name === 'Pfand')!;
+		const deposit = session.event!.snapshot.accounts.find((a) => a.name === 'Deposit')!;
 
 		render(Settings, { ctx: context });
 		await fireEvent.click(screen.getByText('Set up Drinks'));
@@ -262,10 +271,10 @@ describe('The plugin’s settings', () => {
 		await waitFor(() => expect(apply).toHaveBeenCalledOnce());
 		expect(centre).toHaveBeenCalledWith('Drinks');
 		expect(add.mock.calls.map((c) => c[1])).toEqual(['Drink donations', 'Drinks']);
-		expect(tag).toHaveBeenCalledWith(pfand.id, 7);
+		expect(tag).toHaveBeenCalledWith(deposit.id, 7);
 		expect(apply.mock.calls[0][1][0]).toMatchObject({
 			key: 'centre:7',
-			value: { supplier: null, pfand: pfand.id }
+			value: { supplier: null, deposit: deposit.id }
 		});
 	});
 

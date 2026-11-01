@@ -4,8 +4,8 @@ import type { PluginChange, PluginRecord } from '../api';
 
 export type CentreSettings = {
 	supplier: string | null;
-	/** The expense category of Pfand, left out of the invoice check (R-DRK-2). */
-	pfand: number | null;
+	/** The expense category of deposit, left out of the invoice check (R-DRK-2). */
+	deposit: number | null;
 };
 
 export type Product = {
@@ -52,7 +52,7 @@ export function centreSettings(records: PluginRecord[], centre: number): CentreS
 	if (!isObject(v)) return null;
 	return {
 		supplier: typeof v.supplier === 'string' ? v.supplier : null,
-		pfand: isWhole(v.pfand) ? v.pfand : null
+		deposit: isWhole(v.deposit) ? v.deposit : null
 	};
 }
 

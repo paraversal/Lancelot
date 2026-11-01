@@ -31,9 +31,9 @@ export type Row = {
 export type InvoiceCheck = {
 	/** Everything booked to the cost centre with the supplier as counterparty. */
 	amount: number;
-	/** The part of `amount` in the Pfand category. */
-	pfand: number;
-	/** `amount` without Pfand, minus the billed cost. Null without products to compare with. */
+	/** The part of `amount` in the Deposit category. */
+	deposit: number;
+	/** `amount` without deposit, minus the billed cost. Null without products to compare with. */
 	difference: number | null;
 };
 
@@ -93,8 +93,8 @@ function checkInvoice(
 		.filter((l) => l.costCentre === centre);
 	if (lines.length === 0) return null;
 	const amount = sum(lines.map((l) => l.amount));
-	const pfand = sum(lines.filter((l) => l.account === settings.pfand).map((l) => l.amount));
-	return { amount, pfand, difference: hasProducts ? amount - pfand - cost : null };
+	const deposit = sum(lines.filter((l) => l.account === settings.deposit).map((l) => l.amount));
+	return { amount, deposit, difference: hasProducts ? amount - deposit - cost : null };
 }
 
 export function computeFigures(

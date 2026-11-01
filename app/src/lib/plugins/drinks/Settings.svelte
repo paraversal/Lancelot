@@ -25,7 +25,7 @@
 	}
 
 	const toggle = (centre: number, on: boolean) =>
-		run(() => ctx.apply([setCentre(centre, on ? { supplier: null, pfand: null } : null)]));
+		run(() => ctx.apply([setCentre(centre, on ? { supplier: null, deposit: null } : null)]));
 
 	// A cost centre with the usual categories. One the event already has joins it, unless it
 	// belongs to another cost centre.
@@ -42,8 +42,8 @@
 			};
 			await category('income', 'Drink donations');
 			await category('expense', 'Drinks');
-			const pfand = await category('expense', 'Pfand');
-			await ctx.apply([setCentre(centre, { supplier: null, pfand })]);
+			const deposit = await category('expense', 'Deposit');
+			await ctx.apply([setCentre(centre, { supplier: null, deposit })]);
 		});
 
 	const move = (centre: number) =>

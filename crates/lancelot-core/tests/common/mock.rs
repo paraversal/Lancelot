@@ -119,15 +119,15 @@ pub struct Mock {
 
 pub fn build(t: &mut impl Target) -> Mock {
     // What the drinks plugin's setup creates.
-    let (centre, donations, drinks, pfand) = t.edit(|b| {
+    let (centre, donations, drinks, deposit) = t.edit(|b| {
         let centre = b.add_cost_centre("Drinks")?;
         let donations = b.add_account(AccountKind::Income, "Drink donations")?;
         let drinks = b.add_account(AccountKind::Expense, "Drinks")?;
-        let pfand = b.add_account(AccountKind::Expense, "Pfand")?;
-        for category in [donations, drinks, pfand] {
+        let deposit = b.add_account(AccountKind::Expense, "Deposit")?;
+        for category in [donations, drinks, deposit] {
             b.set_category_cost_centre(category, Some(centre))?;
         }
-        Ok((centre, donations, drinks, pfand))
+        Ok((centre, donations, drinks, deposit))
     });
     let b = t.book();
     let (verein, cash) = (asset(b, "Verein account"), asset(b, "Cash box"));
@@ -135,14 +135,14 @@ pub fn build(t: &mut impl Target) -> Mock {
     let [food, venue, tech, other, mobility] =
         ["Kitchen", "Venue", "Tech", "General", "Mobility"].map(|n| expense(b, n));
     let tag = move |account| {
-        [donations, drinks, pfand]
+        [donations, drinks, deposit]
             .contains(&account)
             .then_some(centre)
     };
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
     // The budget. The mockups have none, so it is made up: some lines over, some under, some
-    // complete, and a few receipts left unbudgeted (Pfand, cups, cables, decoration).
+    // complete, and a few receipts left unbudgeted (Deposit, cups, cables, decoration).
     let mut plan = |category, description: &str, estimate, complete| {
         t.budget(BudgetLineDraft {
             cost_centre: tag(category),
@@ -205,7 +205,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     let mut records = vec![PluginChange {
         key: format!("centre:{}", centre.0),
         scope: PluginScope::Setup,
-        value: json!({ "supplier": "Hoffmann", "pfand": pfand.0 }),
+        value: json!({ "supplier": "Hoffmann", "deposit": deposit.0 }),
     }];
     for (id, (name, taken, returned, left_over, logged, cost, donation)) in [
         ("Club-Mate 0,5", 240, 96, 4, 138, 115, 250),
@@ -244,8 +244,8 @@ pub fn build(t: &mut impl Target) -> Mock {
                 vec![
                     to(b_drinks)(drinks, "420"),
                     SplitLine {
-                        cost_centre: tag(pfand),
-                        ..split(pfand, "32")
+                        cost_centre: tag(deposit),
+                        ..split(deposit, "32")
                     },
                 ],
             ),

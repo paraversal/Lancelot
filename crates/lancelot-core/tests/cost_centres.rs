@@ -12,7 +12,7 @@ fn drinks_centre(book: &mut Book) -> CostCentreId {
     for (kind, name) in [
         (AccountKind::Income, "Drink donations"),
         (AccountKind::Expense, "Drinks"),
-        (AccountKind::Expense, "Pfand"),
+        (AccountKind::Expense, "Deposit"),
     ] {
         let category = book.add_account(kind, name).unwrap();
         book.set_category_cost_centre(category, Some(centre))
@@ -55,15 +55,15 @@ fn plan(category: AccountId, estimate: &str, centre: Option<CostCentreId>) -> Bu
     }
 }
 
-/// The Drinks frame in `UI.fig`: an invoice with Pfand, and ice.
+/// The Drinks frame in `UI.fig`: an invoice with a deposit, and ice.
 fn the_frame() -> Book {
     let mut book = new_book();
     let centre = drinks_centre(&mut book);
-    let (drinks, pfand) = (expense(&book, "Drinks"), expense(&book, "Pfand"));
+    let (drinks, deposit) = (expense(&book, "Drinks"), expense(&book, "Deposit"));
     spend(
         &mut book,
         Some("Hoffmann"),
-        vec![tagged(drinks, "420", centre), tagged(pfand, "32", centre)],
+        vec![tagged(drinks, "420", centre), tagged(deposit, "32", centre)],
     );
     let ice = book.add_account(AccountKind::Expense, "Ice").unwrap();
     spend(&mut book, Some("Aral"), vec![tagged(ice, "32", centre)]);
@@ -89,7 +89,7 @@ fn the_drinks_result_is_what_is_tagged_to_it() {
         .iter()
         .map(|c| book.account(c.category).unwrap().name.as_str())
         .collect();
-    assert_eq!(names, ["Drink donations", "Drinks", "Pfand", "Ice"]);
+    assert_eq!(names, ["Drink donations", "Drinks", "Deposit", "Ice"]);
 }
 
 #[test]

@@ -17,7 +17,7 @@
 
 	const format = $derived(ctx.format);
 	const settings = $derived(
-		centreSettings(ctx.records, centre.id) ?? { supplier: null, pfand: null }
+		centreSettings(ctx.records, centre.id) ?? { supplier: null, deposit: null }
 	);
 	const products = $derived(
 		allProducts(ctx.records)
@@ -65,7 +65,7 @@
 
 	function bookInvoice(supplier: string) {
 		const category = ctx.accounts.find(
-			(a) => a.kind === 'expense' && a.costCentre === centre.id && a.id !== settings.pfand
+			(a) => a.kind === 'expense' && a.costCentre === centre.id && a.id !== settings.deposit
 		);
 		ctx.proposeEntry({
 			counterparty: supplier,
@@ -222,7 +222,7 @@
 		{@const check = figures.invoice}
 		<div class="note-row" data-testid="plugin-drinks-invoice">
 			<span class="muted">
-				{check.pfand ? `Invoice incl. Pfand ${formatAmount(check.pfand, format)}` : 'Invoice'}
+				{check.deposit ? `Invoice incl. deposit ${formatAmount(check.deposit, format)}` : 'Invoice'}
 			</span>
 			<span class="grow"></span>
 			{#if check.difference === 0}

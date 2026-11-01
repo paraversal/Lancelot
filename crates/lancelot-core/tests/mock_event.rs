@@ -30,9 +30,9 @@ fn result_and_totals_match_the_mockups() {
     assert_eq!(total(AccountKind::Expense, "Venue"), eur("1.800"));
     assert_eq!(total(AccountKind::Expense, "Tech"), eur("610"));
     assert_eq!(total(AccountKind::Expense, "General"), eur("368,50"));
-    // The Drinks figure in the mockups is drinks plus Pfand.
+    // The Drinks figure in the mockups is drinks plus deposit.
     let drinks = total(AccountKind::Expense, "Drinks")
-        .checked_add(total(AccountKind::Expense, "Pfand"))
+        .checked_add(total(AccountKind::Expense, "Deposit"))
         .unwrap();
     assert_eq!(drinks, eur("484"));
     // Drinks result: donations minus drinks cost.

@@ -56,13 +56,13 @@ Every transaction moves an amount **from** one account **to** another. That make
 
 Account kinds:
 
-| Kind                | Examples                                   | Balance meaning                                                                                                                                                                                   |
-| ------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Asset**           | Verein account, cash box                   | Event money sitting there                                                                                                                                                                         |
-| **Person**          | One per person involved                    | Net balance. Positive: the event owes the person (advances exceed money held). Negative: the person holds event money and owes it to the event. Advances and held money cancel out automatically. |
-| **Income**          | Tickets, Drink donations, General          | Total earned per category                                                                                                                                                                         |
-| **Expense**         | Kitchen, Drinks, Pfand, Mobility, Venue, … | Total spent per category                                                                                                                                                                          |
-| **Opening balance** | One per event                              | The counterpart for opening counts (e.g. cash box at start)                                                                                                                                       |
+| Kind                | Examples                                     | Balance meaning                                                                                                                                                                                   |
+| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Asset**           | Verein account, cash box                     | Event money sitting there                                                                                                                                                                         |
+| **Person**          | One per person involved                      | Net balance. Positive: the event owes the person (advances exceed money held). Negative: the person holds event money and owes it to the event. Advances and held money cancel out automatically. |
+| **Income**          | Tickets, Drink donations, General            | Total earned per category                                                                                                                                                                         |
+| **Expense**         | Kitchen, Drinks, Deposit, Mobility, Venue, … | Total spent per category                                                                                                                                                                          |
+| **Opening balance** | One per event                                | The counterpart for opening counts (e.g. cash box at start)                                                                                                                                       |
 
 How the real flows map onto this:
 
@@ -102,7 +102,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 ### 5.2 Accounts
 
 - **R-ACC-1** Configurable asset accounts per event, each either **bank** or **cash**. They are added, renamed and switched between bank and cash in Settings. Defaults: Verein account (bank), Cash box (cash). Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
-- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, General; expenses Kitchen, Mobility, Venue, Tech, General. The drinks plugin's setup adds Drink donations, Drinks and Pfand (§5.9).
+- **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, General; expenses Kitchen, Mobility, Venue, Tech, General. The drinks plugin's setup adds Drink donations, Drinks and Deposit (§5.9).
 - **R-ACC-3** Every account shows its derived balance and its transaction history.
 - **R-ACC-4** **Reconciliation checkpoints**: the user enters "statement shows X on date D" for an asset account. Lancelot flags any mismatch with the computed balance at D. On a net-movement account this compares the net movement for the event, not the absolute balance.
 
@@ -200,13 +200,13 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 The plugin is called **Stock and sales**. It is optional: Settings → Plugins switches it per event, and it shows in a frame marked as a plugin. It can be attached to any cost centre. "Set up Drinks" creates a Drinks cost centre with its categories. Everything below is informational: it never creates transactions, and an event settles the same without it, because the real money is what was actually collected.
 
 - **R-DRK-1** Drinks are bought on commission. The supplier bills after the return, so the drinks cost is normally one invoice for the units not returned.
-- **R-DRK-2** Pfand is recorded as its own expense category. It only occurs for drinks that could not be returned because only full crates can be returned. Pfand on drinks that were sold and returned as empties is not tracked.
+- **R-DRK-2** A returnable deposit, such as Pfand in Germany, is recorded as its own expense category, which is optional: the Commission panel can name one or leave it empty. It only occurs for drinks that could not be returned because only full crates can be returned. Deposit on drinks that were sold and returned as empties is not tracked.
 - **R-DRK-3** Drink revenue is recorded as income on the cost centre, usually `Drink donations`, wherever it was collected (cash box, held account, Verein account).
 - **R-DRK-4** The cost centre's page shows cost, revenue and the result (R-CC-1). That result includes everything billed, also what is left over.
 - **R-DRK-5** Optional records per product: cost per unit, donation per unit, units taken, returned and left over, and units logged. `Billed = taken − returned`, `gone = billed − left over`, `unaccounted = gone − logged`. A blank left over counts as zero. Unaccounted is not proof of dishonesty: it can also be crew drinks or breakage.
 - **R-DRK-6** `Logged = imported + typed in`, never below zero. The typed-in part may be negative, for a correction. A sales import replaces only the imported part. It pulls from a data source set up in Settings → Plugins (technical design §10), shows the changes first, and a name that matches no product blocks it until it is mapped, which is remembered. Importing from a file is not built yet.
 - **R-DRK-7** **Expected donations** are logged × donation per unit, shown against the income actually collected. A paper list is one product, `Strich`, with its value as the donation, no stock and only a logged count. Expected donations still work; the other products show no logged figure and no unaccounted figure.
-- **R-DRK-8** **Invoice check:** the expenses tagged to the cost centre whose counterparty is the supplier, without Pfand, against the billed cost. "Book invoice" opens the normal expense form, pre-filled. Without a supplier it asks for one and goes straight on.
+- **R-DRK-8** **Invoice check:** the expenses tagged to the cost centre whose counterparty is the supplier, without the deposit, against the billed cost. "Book invoice" opens the normal expense form, pre-filled. Without a supplier it asks for one and goes straight on.
 - **R-DRK-9** Cost per drink is the cost of what is gone per unit gone, so left-over stock doesn't count.
 
 ### 5.10 Settlement report

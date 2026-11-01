@@ -16,7 +16,7 @@ use tempfile::TempDir;
 
 const SAMPLE: &str = "sample-v1.lancelot";
 /// A regenerated sample would hide a schema edited in place, so its bytes are pinned too.
-const SAMPLE_SHA256: &str = "5d26c96256eecb354d6e1e281f4cb5eef0e6de7b00b93c21fc68c7aa214d41f2";
+const SAMPLE_SHA256: &str = "9d42e35281981c5328ec3336453fb8f036a6e30f4888648c385f1dcbb6f54c73";
 
 fn sample_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

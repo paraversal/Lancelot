@@ -13,7 +13,7 @@ import {
 } from './records';
 
 const CENTRE = 1;
-const PFAND = 9;
+const DEPOSIT = 9;
 const DRINKS = 8;
 
 const item = (over: Partial<Product> & Partial<Counts>) => {
@@ -31,7 +31,7 @@ const item = (over: Partial<Product> & Partial<Counts>) => {
 	};
 };
 
-const settings = { supplier: 'Hoffmann', pfand: PFAND };
+const settings = { supplier: 'Hoffmann', deposit: DEPOSIT };
 
 const invoice = (
 	counterparty: string | null,
@@ -107,16 +107,16 @@ describe('The drink figures', () => {
 describe('The invoice check', () => {
 	const stock = [item({ taken: 4, cost: 100 })];
 
-	it('compares the invoice without Pfand with what is billed', () => {
+	it('compares the invoice without deposit with what is billed', () => {
 		const txns = [
 			invoice(' hoffmann ', [
 				{ account: DRINKS, amount: 400, costCentre: CENTRE },
-				{ account: PFAND, amount: 32, costCentre: CENTRE }
+				{ account: DEPOSIT, amount: 32, costCentre: CENTRE }
 			])
 		];
 		expect(computeFigures(CENTRE, settings, stock, txns).invoice).toEqual({
 			amount: 432,
-			pfand: 32,
+			deposit: 32,
 			difference: 0
 		});
 	});
@@ -133,7 +133,7 @@ describe('The invoice check', () => {
 		expect(noCheck([invoice('Hoffmann', [{ ...line, costCentre: null }])])).toBeNull();
 		expect(noCheck([invoice('Hoffmann', [{ ...line, costCentre: 2 }])])).toBeNull();
 		expect(noCheck([invoice('Hoffmann', [line], 'income')])).toBeNull();
-		const noSupplier = { supplier: null, pfand: null };
+		const noSupplier = { supplier: null, deposit: null };
 		expect(computeFigures(CENTRE, noSupplier, stock, [invoice(null, [line])]).invoice).toBeNull();
 	});
 
@@ -156,11 +156,11 @@ describe('The stored records', () => {
 
 	it('reads what was written', () => {
 		const records = [
-			record('centre:1', { supplier: 'Hoffmann', pfand: 9 }),
+			record('centre:1', { supplier: 'Hoffmann', deposit: 9 }),
 			record('product:3', { centre: 1, name: 'Pils', cost: 95, donation: null }),
 			record('count:3', { taken: 5, returned: 1, leftOver: null, manual: -2, imported: null })
 		];
-		expect(centreSettings(records, 1)).toEqual({ supplier: 'Hoffmann', pfand: 9 });
+		expect(centreSettings(records, 1)).toEqual({ supplier: 'Hoffmann', deposit: 9 });
 		expect(centreSettings(records, 2)).toBeNull();
 		expect(allProducts(records)).toEqual([
 			{ id: 3, centre: 1, name: 'Pils', cost: 95, donation: null }
