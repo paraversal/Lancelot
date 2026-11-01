@@ -1,6 +1,6 @@
 # Lancelot — Requirements
 
-Status: draft v0.11 · 2026-10-31
+Status: draft v0.12 · 2026-11-01
 
 ## 1. Purpose
 
@@ -140,10 +140,10 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 - **R-TKT-1** **Ticket tiers** per event: name, price, fee percentage (default 0 %, see R-TKT-10), and an optional quota. They are stored in the event file and copied by templates (R-EVT-3). This is the tier→price mapping that the ticket sheet lacks.
 - **R-TKT-2** Each tier has a list of **aliases**: the exact names used for it in the ticket sheet.
-- **R-TKT-3** **Import the ticket sheet.** The primary format is `.ods`; `.xlsx` and `.csv` are also supported because the parser handles them for free. By default the first sheet is read and each row counts as one ticket. The tier comes from the `Ticket` column and the order from the `Order ID` column. The column names can be changed in the import settings (tier column, order ID column), in case the Verein's format changes. A sale date column follows once it is read (R-TKT-8). The account the sheet's money arrives in is set next to them; it is needed only to import. These settings are saved in the event and copied by templates. Reading the sheet is the built-in **Ticket sheet** plugin, switched in Settings → Plugins; the **Ticket API** plugin pulls them from a data source instead (technical design §10), and every import goes through the same review. Off, imports already made still count and manual sales still work.
+- **R-TKT-3** **Import the ticket sheet.** The primary format is `.ods`; `.xlsx` and `.csv` are also supported because the parser handles them for free. By default the first sheet is read and each row counts as one ticket. The tier comes from the `Ticket` column and the order from the `Order ID` column. The column names can be changed in the import settings (tier column, order ID column), in case the Verein's format changes. A sale date column follows once it is read (R-TKT-8). The account the money arrives in is set in the import's review; it is needed only to import. These settings are saved in the event and copied by templates. Reading the sheet is the built-in **Ticket sheet** plugin, switched in Settings → Plugins; the **Ticket API** plugin pulls them from a data source instead (technical design §10), and every import goes through the same review. Off, imports already made still count and manual sales still work.
 - **R-TKT-19** Tickets are **optional** per event, switched in Settings. Off hides the Tickets page and the Overview block, and removes the ticket categories; a category something refers to stays as an ordinary one. It is refused while the event has tiers. Templates copy the switch.
 - **R-TKT-4** Tier names in the sheet that match no tier or alias **block the import** until the user maps them. Rows are never silently skipped. Rows that cannot be parsed are listed.
-- **R-TKT-5** **Re-import** an updated sheet: this replaces the previous import and shows a preview of what changed (e.g. "+14 Regular, −2 Early Bird") before confirming. For traceability, each import records the file name, a SHA-256 hash of the file, and the extracted rows. The file itself is **not** stored (R-TKT-17). Removed tickets create import conflicts (R-TKT-12).
+- **R-TKT-5** **Re-import** an updated sheet: this replaces the previous import and shows a preview of what changed (e.g. "+14 Regular, −2 Early Bird") before confirming. For traceability, each import records the file name and a SHA-256 hash of the file, or for a pull the data source's label and a hash of the rows, along with the extracted rows. The file itself is **not** stored (R-TKT-17). Removed tickets create import conflicts (R-TKT-12).
 - **R-TKT-6** Imported sales generate ticket income on the ticket account (default: the Verein account): one transaction per tier, worth count × tier price (gross). If the tier has a fee, the same transaction includes a line `Expense: Ticket fees` for the fee amount, so that account receives the net. These transactions are marked _imported_, cannot be edited by hand, and are regenerated on re-import.
 - **R-TKT-7** Tickets sold outside the regular channels are entered manually (tier, count, the account or person who received the money, and an optional free-text reference). They generate `Income: Tickets → that account or person` and count towards the same statistics. They never appear in the ticket sheet, so they never cause import conflicts.
 - **R-TKT-8** **Sales statistics:** tickets sold over time (cumulative, per tier and in total), revenue over time, cancellations, and sold vs quota per tier.
@@ -213,7 +213,7 @@ The plugin is called **Stock and sales**. It is optional: Settings → Plugins s
 
 - **R-SET-1** Per event: income by category, expenses by category, result.
 - **R-SET-2** Plan vs actual summary.
-- **R-SET-3** P&L per cost centre (Drinks).
+- **R-SET-3** P&L per cost centre.
 - **R-SET-4** **Final balance:** the balance per asset account (Verein account net movement, and the cash box with its closing count and any discrepancy). This is the event's final state.
 - **R-SET-5** **Open items:** persons with a non-zero net balance (in either direction), missing receipts, unresolved reconciliation mismatches, and unresolved ticket import conflicts.
 - **R-SET-6** Export as PDF (human-readable, with the receipts) and CSV (raw transactions, one row per line).
@@ -226,7 +226,7 @@ The plugin is called **Stock and sales**. It is optional: Settings → Plugins s
 - **R-COR-2** Every transaction balances to exactly zero. This is enforced when a transaction is built, before each commit by reading the write back, and whenever a file is loaded. The database's column checks stay; it has no trigger for it.
 - **R-COR-3** Splitting rule: when an amount is divided (e.g. quantity × unit price, or splitting equally), the remainder cents go to the first lines. Percentages (fees) are computed in integer arithmetic and rounded half-up (R-TKT-10). The rules are deterministic and documented.
 - **R-COR-4** All balances and reports are derived from transactions. No cached totals unless they are verified on load.
-- **R-COR-5** An **integrity check** runs on every open and save, and on demand: every transaction balances, no line points to a missing account, attachments are intact (by hash), and reimbursements do not exceed their advances. Failures are shown prominently.
+- **R-COR-5** An **integrity check** runs on every open and save, and on demand: every transaction balances, no line points to a missing account, and attachments are intact (by hash). Failures are shown prominently. A person who was reimbursed or repaid past a zero balance is a warning, not a failure, because corrections happen.
 - **R-COR-6** All calculation logic lives in a single core module with extensive unit tests and property-based tests (e.g. "for any sequence of valid transactions, the sum of all account balances is 0").
 - **R-COR-7** Single currency: EUR.
 
@@ -246,6 +246,7 @@ The plugin is called **Stock and sales**. It is optional: Settings → Plugins s
   - **Ambiguous case:** a single separator followed by exactly three digits (`1.234`, `1,234`) is read according to the user's format setting, and the hint below says so.
   - The field always shows a live preview of the interpreted value (e.g. "= €1,234.00") before it is committed. Invalid input is flagged and cannot be saved.
   - The currency sign and spaces are ignored. A leading `-` is allowed only where negative amounts make sense.
+- **R-NF-9** **Appearance** is a user setting (app-wide, not per event): System, Light or Dark, following the system by default. Printing stays light.
 
 ## 8. Proposed architecture
 
@@ -259,7 +260,7 @@ The plugin is called **Stock and sales**. It is optional: Settings → Plugins s
 | Storage      | **SQLite**, one `.lancelot` file per event, attachments as BLOBs                                            | One portable file, transactional writes, open format, trivial backup.                                   |
 | Money type   | `Cents(i64)` newtype in Rust. Crosses the IPC boundary as an integer, formatted for display in the UI only. | Rules out float errors by construction.                                                                 |
 | PDF export   | The webview's print dialog, with `typst` as an option for the polished report (M13)                         | Decided in the [technical design](technical-design.md).                                                 |
-| Sales log    | The drinks plugin; a file or API import when the app's export is known                                      | R-DRK-6. Only per-product totals are kept, so the file doesn't record who drank what.                   |
+| Sales log    | The drinks plugin, pulling from a data source; a file import when the app's export is known                 | R-DRK-6. Only per-product totals are kept, so the file doesn't record who drank what.                   |
 | Excel import | `calamine` crate in Rust (reads .xlsx/.xls/.ods)                                                            | Pure Rust, read-only, no Office installation needed.                                                    |
 | Charts       | Hand-written SVG components, no library                                                                     | The design needs only simple bars. Decided in the [technical design](technical-design.md).              |
 
@@ -275,7 +276,7 @@ The Tauri approach has one real cost: the IPC boundary between Svelte and Rust. 
 
 1. **MVP**: event file, accounts, typed transaction entry with splits, attachments, persons with IBAN and netting, reimbursements and repayments, person overview, payout list, settlement report, integrity check. Ticket income is entered manually.
 2. **Phase 2**: ticket tiers and ticket sheet import, budget and forecast, sales statistics and profitability, cost centres and Drinks P&L, per-product drink records (now the drinks plugin), reconciliation checkpoints, templates from previous events.
-3. **Phase 3**: drink sales import, SEPA XML export, polished PDF reports, receipt OCR.
+3. **Phase 3**: drink sales import from a file, SEPA XML export, polished PDF reports, receipt OCR.
 
 ## 10. Remaining open points
 

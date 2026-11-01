@@ -1,6 +1,6 @@
 # Lancelot — Roadmap
 
-Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. M9 is done: cost centres and the Drinks page, without the frame's Strichliste, which is M11. M10 is done: reconciliation checkpoints, templates and copying from another event; the Phase 2 exit still needs the next event. The [refactoring](#refactoring) comes first. It builds on [requirements v0.10](requirements.md) and the [design notes](design/README.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
+Status: v0.10. M0 to M4 are done, and M5 is done except the parallel run (M3's exit test, a stack of receipts by keyboard, is yours to try). M6 is done except matching the Budget page to its design, and M7 is done: the ticket core, the Tickets screen and conflicts. M8 is done: the statistics core, the Tickets page and the Overview. M9 is done: cost centres and the Drinks page, which became a plugin in Stage 7. M10 is done: reconciliation checkpoints, templates and copying from another event; the Phase 2 exit still needs the next event. The [refactoring](#refactoring) is done, apart from one decision that waits for that event. The roadmap builds on [requirements v0.12](requirements.md) and the [design notes](design/README.md), and what exists today is listed in [features](features.md). Requirement IDs (R-…) are listed for each milestone, so you can trace every one.
 
 ## How we work
 
@@ -11,6 +11,7 @@ Status: v0.9. M0 to M4 are done, and M5 is done except the parallel run (M3's ex
   - `cargo clippy -D warnings` passes, and `svelte-check` and the UI tests pass.
   - The integrity check passes on the milestone's test event.
   - The screens match `UI.fig`. Deviations are noted in `docs/design/README.md`.
+  - `docs/features.md` lists what was added or removed.
 - **A real event as the yardstick.** The MVP must be usable for the next event, run **in parallel with the Excel sheet**. The result is a release only when both arrive at the same final balance.
 
 ## Repository layout (target)
@@ -22,7 +23,7 @@ app/                       SvelteKit SPA (adapter-static, TypeScript)
 crates/lancelot-service/   commands on the open event, settings, API types (no Tauri dependency)
 crates/lancelot-bridge/    development only: the commands over local HTTP for a plain browser
 app/src-tauri/             Tauri 2 shell: commands, dialogs, drag-and-drop
-docs/                      requirements, roadmap, design, technical design
+docs/                      features, requirements, roadmap, future, design, technical design
 fixtures/                  ticket sheets (.ods), receipts, format cases; the sample event
 ```
 
@@ -274,7 +275,7 @@ Built in three steps, each in its own pull request.
 
 ## Refactoring
 
-From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm) of 2026-10-30, made at commit `071e403`; F-numbers refer to its findings. The stages run in order and have no deadline. `0001_initial.sql` was edited in place until Stage 6 froze the format. Balancing, integer cents and derived balances (R-COR-1 to R-COR-6) are never traded for flexibility.
+From the [architecture audit](https://claude.ai/artifact/7rTXtHaDHY5K9g423LZVBm) of 2026-10-30, made at commit `071e403`; F-numbers refer to its findings. The stages run in order and have no deadline. `0001_initial.sql` was edited in place until Stage 6 froze the format, and Stage 7 unfroze it until the first real event is entered. Balancing, integer cents and derived balances (R-COR-1 to R-COR-6) are never traded for flexibility.
 
 ### Stage 0 · Docs
 
@@ -337,7 +338,7 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 - [x] `fixtures/events/sample-v1.lancelot` is checked in, with tickets, imports, cancellations, checkpoints, drinks, attachments and a closed event: rows in every table and every transaction kind. A test keeps it opening with its figures written out (F14). From here on every schema change is a migration, and a test fails if `0001_initial.sql` is edited.
 
-### Stage 7 · Drinks as a built-in plugin
+### Stage 7 · Built-in plugins
 
 - [x] The schema is unfrozen until the first real event is entered, so `0001_initial.sql` is edited directly and the sample regenerated. The sample's money figures stay as they were written out.
 - [x] `plugin_record` and `Book::apply_plugin_changes`: records in the event file, with change log and read-back, copied by templates by scope. The core no longer knows about drinks (technical design §10).
@@ -373,4 +374,4 @@ The remaining schema changes of the refactoring landed here, as one batch.
 
 ## Next step
 
-The [refactoring stages](#refactoring) are done, apart from the decision that waits for the next event. Run that event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`). The Budget screen still needs its design (M6b). M11 follows. Longer-term changes are in [FUTURE.md](FUTURE.md).
+The [refactoring stages](#refactoring) are done, apart from the decision that waits for the next event. First try the data sources in the desktop app with a real provider and a token in the keychain, which hasn't been done yet. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`), and entering it freezes the file format again. The Budget screen still needs its design (M6b). Importing drink sales from a file (M11) follows once there is a sample of the export. Longer-term changes are in [FUTURE.md](FUTURE.md).
