@@ -2,7 +2,7 @@
 	// The right-hand panel where editing happens (no modals for routine work). Esc closes it,
 	// unless that would lose changes: then it warns once, and the next Esc goes through.
 	import type { Snippet } from 'svelte';
-	import { panelIn, shake } from '../motion/effects';
+	import { panelIn, shake, warnIn } from '../motion/effects';
 	import { level } from '../motion/mode.svelte';
 	import Icon from './Icon.svelte';
 
@@ -47,13 +47,18 @@
 		}
 		(onescape ?? onclose)();
 	}}
-	onpointerdown={() => (warned = false)}
+	onpointerdown={(e) => {
+		// Removing the warning under the pointer would let this click land on what it covers.
+		if (!(e.target instanceof Element && e.target.closest('.warning'))) warned = false;
+	}}
 />
 
 <!-- Panels slide in (A2); closing is immediate, so nothing waits on it. -->
 <aside class="panel" class:warned bind:this={panel} in:panelIn|global={{ level: level('A2') }}>
 	{#if warned}
-		<div class="warning"><p role="status">Press Esc again to discard changes</p></div>
+		<div class="warning">
+			<p role="status" in:warnIn={{ level: level('A6') }}>Press Esc again to discard changes</p>
+		</div>
 	{/if}
 	<header>
 		{#if header}{@render header()}{:else}<h2>{title}</h2>{/if}
@@ -83,22 +88,40 @@
 		box-shadow: inset 0 0 0 1px var(--color-attention);
 	}
 
-	/* Sits in the panel's top padding, so the form stays where it is. */
+	/* Takes no room, so the form stays where it is. Covers the header row, and stays at the top of
+	   the panel while it scrolls. */
 	.warning {
 		position: sticky;
 		top: 0;
 		z-index: 1;
 		height: 0;
 		margin-bottom: -18px;
+		cursor: default;
+	}
+
+	/* Paper behind the pill, so scrolled fields pass under it. Keeps the panel's outline showing. */
+	.warning::before {
+		content: '';
+		position: absolute;
+		top: calc(-1 * var(--spacing-6));
+		inset-inline: calc(1px - var(--spacing-6));
+		height: calc(var(--spacing-6) + 36px);
+		border-top: 1px solid var(--color-attention);
+		background: var(--color-paper);
 	}
 
 	.warning p {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		height: 26px;
 		margin: 0;
-		transform: translateY(calc(-100% - 2px));
-		background: var(--color-paper);
+		border-radius: var(--radius-pill);
+		background: var(--color-attention);
 		font-size: var(--type-xs);
 		font-weight: 600;
-		color: var(--color-attention);
+		color: var(--color-paper);
 	}
 
 	header {

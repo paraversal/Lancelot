@@ -214,6 +214,14 @@ describe('Esc', () => {
 		expect(warning()).toBeNull();
 	});
 
+	it('stays when the warning itself is pressed, so the press cannot reach what it covers', async () => {
+		render(EntryPanel, { ...props, txn: saved() });
+		await changeNotes();
+		await esc();
+		await fireEvent.pointerDown(warning()!);
+		expect(warning()).toBeTruthy();
+	});
+
 	it('does not discard when Esc is held down', async () => {
 		const onclose = vi.fn();
 		render(EntryPanel, { ...props, txn: saved(), onclose });
