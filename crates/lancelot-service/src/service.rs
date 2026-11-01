@@ -8,10 +8,10 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
-    DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
-    MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store, StoreError, StoreOptions, Table,
-    TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
+    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, ChangeLogEntry,
+    CopyChoice, CopySummary, DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId,
+    ImportPreview, MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store, StoreError, StoreOptions,
+    Table, TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
     format_date, list_backups, parse_amount, parse_date, parse_sum, read_book, ticket_share,
 };
 use time::OffsetDateTime;
@@ -531,6 +531,12 @@ impl Service {
         self.current().ok_or_else(ApiError::no_event)
     }
 
+    /// The open event's change log, newest first (R-TX-6).
+    pub fn change_log(&self) -> Result<Vec<ChangeLogEntry>> {
+        let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        Ok(open.store.change_log(usize::MAX)?)
+    }
+
     // --- backups -------------------------------------------------------------------------
 
     /// The backups of an event file, newest first. Works for the open event and for a file
@@ -679,6 +685,22 @@ mod tests {
 
         // The file open here is read from memory: its lock would refuse a second reader.
         assert_eq!(s.template_preview(&third).unwrap().name, "Third");
+    }
+
+    #[test]
+    fn lists_the_open_events_change_log_newest_first() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        assert_eq!(s.change_log().unwrap_err().code, "no_event_open");
+        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+            .unwrap();
+        s.add(|b| b.add_person("Kim", Person::default())).unwrap();
+
+        let log = s.change_log().unwrap();
+        assert!(log.len() > 2);
+        assert_eq!(log[0].entity, "person");
+        assert_eq!(log[1].after.as_ref().unwrap()["name"], "Kim");
+        assert!(log.windows(2).all(|w| w[0].id > w[1].id));
     }
 
     #[test]

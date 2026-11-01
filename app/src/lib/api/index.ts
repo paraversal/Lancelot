@@ -24,6 +24,7 @@ import type { ReconciliationId } from './generated/ReconciliationId';
 import type { CancellationDraft } from './generated/CancellationDraft';
 import type { CancellationEdit } from './generated/CancellationEdit';
 import type { CancellationId } from './generated/CancellationId';
+import type { ChangeLogEntry } from './generated/ChangeLogEntry';
 import type { CheckedIban } from './generated/CheckedIban';
 import type { CountInput } from './generated/CountInput';
 import type { EventDetails } from './generated/EventDetails';
@@ -129,6 +130,8 @@ export const api = {
 		call<OpenEvent>('event_set_default_reimbursement_account', { account }),
 
 	checkIntegrity: () => call<OpenEvent>('integrity_check'),
+	/** The open event's change log, newest first (R-TX-6). */
+	changeLog: () => call<ChangeLogEntry[]>('change_log_list'),
 	/** Backups of an event file: the open one, or one that cannot be opened. */
 	backups: (event: string) => call<BackupInfo[]>('backups_list', { event }),
 	restoreBackup: (event: string, backup: string, target: string) =>

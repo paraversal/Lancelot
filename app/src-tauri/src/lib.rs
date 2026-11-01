@@ -125,6 +125,7 @@ pub fn run() {
             commands::event_update,
             commands::event_set_default_reimbursement_account,
             commands::integrity_check,
+            commands::change_log_list,
             commands::backups_list,
             commands::backup_restore,
             commands::amount_parse,

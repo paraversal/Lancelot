@@ -6,8 +6,8 @@ use std::sync::Mutex;
 
 use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
-    CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
+    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, ChangeLogEntry,
+    CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
     ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange, ReconciliationId,
     Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft,
     TxnId,
@@ -135,6 +135,11 @@ pub async fn event_set_default_reimbursement_account(
 #[tauri::command]
 pub async fn integrity_check(state: State<'_, AppState>) -> Result<OpenEvent> {
     with(&state, |s| s.check_integrity())
+}
+
+#[tauri::command]
+pub async fn change_log_list(state: State<'_, AppState>) -> Result<Vec<ChangeLogEntry>> {
+    with(&state, |s| s.change_log())
 }
 
 #[tauri::command]

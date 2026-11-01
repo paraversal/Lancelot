@@ -85,6 +85,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         }
 
         "integrity_check" => json(s.check_integrity()),
+        "change_log_list" => json(s.change_log()),
         "backups_list" => json(s.backups(&arg::<PathBuf>(a, "event")?)),
         "backup_restore" => json(s.restore_backup(
             &arg::<PathBuf>(a, "event")?,

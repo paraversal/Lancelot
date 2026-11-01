@@ -14,7 +14,6 @@ First try the data sources in the desktop app with a real provider and a token i
 - [ ] Try the data sources with a real provider.
 - [ ] Enter a stack of receipts by keyboard: the 30–40 receipts of a past event in under 30 minutes (M3's exit test, yours to try).
 - [ ] Click through the native dialogs and menu in the app (M2).
-- [ ] After the next event, decide whether a small change history view is worth having. If not, reduce R-TX-6. The log keeps being written until then (F21).
 
 ## Phase 3
 
