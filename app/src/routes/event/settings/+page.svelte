@@ -176,6 +176,8 @@
 	const categories = $derived(
 		open.snapshot.accounts.filter((a) => a.kind === 'income' || a.kind === 'expense')
 	);
+	const expenses = $derived(categories.filter((a) => a.kind === 'expense'));
+	const income = $derived(categories.filter((a) => a.kind === 'income'));
 	let deletingCentre = $state<number | null>(null);
 
 	function renameCentre(id: number, input: HTMLInputElement) {
@@ -265,6 +267,33 @@
 		{:else}
 			<Button size="sm" onclick={() => (deletingAccount = a.id)}>Delete</Button>
 		{/if}
+	{/if}
+{/snippet}
+
+{#snippet categoryGroup(title: string, list: typeof categories)}
+	{#if list.length}
+		<span class="form-label group">{title}</span>
+		<ul class="accounts">
+			{#each list as a (a.id)}
+				<li>
+					<span class="name" title={a.name}>{a.name}</span>
+					<span class="delete" class:deleting={deletingAccount === a.id}>
+						{@render deleteAccount(a)}
+					</span>
+					{#if centres.length}
+						<Select
+							name="{a.name} starts in"
+							value={a.costCentre ?? 0}
+							options={centreOptions}
+							onchange={(v) =>
+								run(() =>
+									session.change(() => api.setCategoryCostCentre(a.id, v === 0 ? null : v))
+								)}
+						/>
+					{/if}
+				</li>
+			{/each}
+		</ul>
 	{/if}
 {/snippet}
 
@@ -422,64 +451,6 @@
 					{#if !closed}
 						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
 					{/if}
-					<div class="labelled">
-						<span class="form-label">Categories start in</span>
-						<ul class="accounts starts">
-							{#each categories as a (a.id)}
-								<li>
-									<span class="name"
-										>{a.name}{#if a.kind === 'income'}<span class="muted">
-												· income</span
-											>{/if}</span
-									>
-									{@render deleteAccount(a)}
-									<Select
-										name="{a.name} starts in"
-										value={a.costCentre ?? 0}
-										options={centreOptions}
-										onchange={(v) =>
-											run(() =>
-												session.change(() => api.setCategoryCostCentre(a.id, v === 0 ? null : v))
-											)}
-									/>
-								</li>
-							{/each}
-						</ul>
-					</div>
-				</section>
-
-				<section>
-					<h2>Plugins</h2>
-					<p class="plugins-note">
-						Optional additions to the app. Switching one off hides it for this event and keeps its
-						data in the file.
-					</p>
-					{#each plugins as plugin (plugin.id)}
-						{@const on = pluginEnabled(plugin.id)}
-						<PluginFrame name={plugin.name} description={plugin.description}>
-							{#snippet actions()}
-								<label class="toggle">
-									<input
-										type="checkbox"
-										checked={on}
-										onchange={(e) => {
-											const { checked } = e.currentTarget;
-											run(() => setPluginEnabled(plugin.id, checked));
-										}}
-									/>
-									On
-								</label>
-							{/snippet}
-							{#if on && (plugin.SettingsSection || plugin.dataSource)}
-								{#if plugin.SettingsSection}
-									<plugin.SettingsSection ctx={pluginContext(plugin.id)} />
-								{/if}
-								{#if plugin.dataSource}
-									<DataSourceForm id={plugin.id} spec={plugin.dataSource} />
-								{/if}
-							{/if}
-						</PluginFrame>
-					{/each}
 				</section>
 			</div>
 		</fieldset>
@@ -645,6 +616,57 @@
 		</div>
 	</div>
 
+	<fieldset class="plain" disabled={closed}>
+		<section class="wide">
+			<h2>Categories</h2>
+			{#if centres.length}
+				<p class="note">The cost centre beside a category is where its new lines start.</p>
+			{/if}
+			<div class="categories">
+				{@render categoryGroup('Expenses', expenses)}
+				{@render categoryGroup('Income', income)}
+			</div>
+		</section>
+	</fieldset>
+
+	<fieldset class="plain" disabled={closed}>
+		<section class="wide plugins">
+			<h2>Plugins</h2>
+			<p class="note">
+				Optional additions to the app. Switching one off hides it for this event and keeps its data
+				in the file.
+			</p>
+			<div class="plugin-cards">
+				{#each plugins as plugin (plugin.id)}
+					{@const on = pluginEnabled(plugin.id)}
+					<PluginFrame name={plugin.name} description={plugin.description}>
+						{#snippet actions()}
+							<label class="toggle">
+								<input
+									type="checkbox"
+									checked={on}
+									onchange={(e) => {
+										const { checked } = e.currentTarget;
+										run(() => setPluginEnabled(plugin.id, checked));
+									}}
+								/>
+								On
+							</label>
+						{/snippet}
+						{#if on && (plugin.SettingsSection || plugin.dataSource)}
+							{#if plugin.SettingsSection}
+								<plugin.SettingsSection ctx={pluginContext(plugin.id)} />
+							{/if}
+							{#if plugin.dataSource}
+								<DataSourceForm id={plugin.id} spec={plugin.dataSource} />
+							{/if}
+						{/if}
+					</PluginFrame>
+				{/each}
+			</div>
+		</section>
+	</fieldset>
+
 	{#if error}<p class="error" role="alert">{error}</p>{/if}
 </div>
 
@@ -661,34 +683,105 @@
 
 	.columns {
 		display: grid;
-		grid-template-columns: minmax(0, 480px) minmax(0, 460px);
+		grid-template-columns: repeat(2, minmax(0, 470px));
 		gap: 60px;
 	}
 
 	.stack {
 		display: flex;
 		flex-direction: column;
-		gap: 36px;
+		gap: var(--spacing-12);
 	}
 
+	/* An ink rule opens each block, so it can't be mistaken for the hairlines between its rows. */
 	section {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-4);
+		padding-top: var(--spacing-3);
+		border-top: 1px solid var(--color-ink);
 	}
 
 	h2 {
 		margin: 0;
-		padding-bottom: var(--spacing-4);
-		border-bottom: 1px solid var(--color-rule);
 		font-size: var(--type-md);
 		font-weight: 600;
 	}
 
-	.plugins-note {
+	.wide {
+		max-width: 1000px;
+		margin-top: var(--spacing-12);
+	}
+
+	/* What follows is added to the app rather than part of it: a ledger's double rule. */
+	.plugins {
+		margin-top: 72px;
+		padding-top: var(--spacing-6);
+		border-top: 3px double var(--color-ink);
+	}
+
+	.plugins h2 {
+		font-size: var(--type-lg);
+	}
+
+	.plugin-cards {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+		align-items: start;
+		gap: var(--spacing-6) 60px;
+	}
+
+	.note {
 		margin: 0;
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	/* Flows over two columns, so a long list stays short and fills the width. */
+	.categories {
+		columns: 2;
+		column-gap: 60px;
+	}
+
+	/* As tall as a row, so the rows of both columns line up. */
+	.group {
+		display: flex;
+		align-items: flex-end;
+		height: 45px;
+		padding-bottom: var(--spacing-1);
+		break-after: avoid;
+	}
+
+	.categories .accounts li {
+		flex-wrap: nowrap;
+		break-inside: avoid;
+	}
+
+	.categories span.name {
+		overflow: hidden;
+		margin-left: 0;
+		padding: 0;
+		height: auto;
+		border: none;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.categories li > :global(.field) {
+		width: 150px;
+		flex: none;
+	}
+
+	/* Like Restore on a backup: there when the row is in use. */
+	.delete {
+		display: none;
+		gap: var(--spacing-2);
+	}
+
+	.categories li:hover .delete,
+	.categories li:focus-within .delete,
+	.delete.deleting {
+		display: flex;
 	}
 
 	.labelled {
@@ -809,31 +902,8 @@
 	.accounts .balance {
 		width: 110px;
 		flex: none;
+		margin-left: auto;
 		text-align: right;
-	}
-
-	.starts li {
-		flex-wrap: nowrap;
-	}
-
-	.starts span.name {
-		flex: 1 1 0;
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		margin-left: 0;
-		padding: 0;
-		border: none;
-		white-space: nowrap;
-	}
-
-	.starts span.name:hover {
-		border: none;
-	}
-
-	.starts li > :global(.field) {
-		width: 150px;
-		flex: none;
 	}
 
 	.backups {
@@ -871,8 +941,14 @@
 		display: flex;
 	}
 
+	/* Stays in view: the page is long, and what was refused may be far above its end. */
 	.error {
+		position: sticky;
+		bottom: 0;
 		margin: var(--spacing-6) 0 0;
+		padding: var(--spacing-3) 0;
+		border-top: 1px solid var(--color-rule);
+		background: var(--color-paper);
 		font-size: var(--type-xs);
 		color: var(--color-minus);
 	}
