@@ -39,6 +39,18 @@
 	let openingInvalid = $state(false);
 	let closingDateInvalid = $state(false);
 	let closingInvalid = $state(false);
+	const values = () =>
+		JSON.stringify([
+			openingDate,
+			openingDateInvalid,
+			opening,
+			openingInvalid,
+			closingDate,
+			closingDateInvalid,
+			closing,
+			closingInvalid
+		]);
+	const clean = values();
 
 	// The books as they will be with the opening count typed so far.
 	const computed = $derived(
@@ -75,7 +87,7 @@
 	}}
 />
 
-<Panel title={name} {onclose}>
+<Panel title={name} {onclose} dirty={values() !== clean}>
 	{#if !movement}<div class="group">
 			<h3>Opening count</h3>
 			<div class="form-pair">

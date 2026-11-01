@@ -104,6 +104,23 @@
 	let dateInvalid = $state(false);
 	// By position, like the split's fields; only the lines on show count.
 	let lineInvalid = $state<boolean[]>([]);
+	// What the form held when it was filled. The kind and direction of a new entry hold nothing yet.
+	const values = () =>
+		JSON.stringify([
+			txn ? [kind, direction] : null,
+			amount,
+			amountInvalid,
+			dateInvalid,
+			lineInvalid.slice(0, lines.length).some(Boolean),
+			lines,
+			party,
+			other,
+			date,
+			counterparty,
+			description,
+			notes
+		]);
+	let clean = $state('');
 
 	function load(t: TxnView | null) {
 		error = null;
@@ -355,6 +372,7 @@
 			if (next) {
 				load(null);
 				kind = entry.type as Kind;
+				clean = values();
 				generation++;
 				onsaved(null);
 			} else onsaved(saved.id);
@@ -418,12 +436,18 @@
 			pickPerson(settle);
 		}
 		if (!txn && proposal) fillProposal(proposal);
+		clean = values();
 	});
 </script>
 
 <svelte:window onkeydown={keydown} />
 
-<Panel {onclose} {onescape}>
+<!-- Esc closes an open receipt preview first, which loses nothing. -->
+<Panel
+	{onclose}
+	{onescape}
+	dirty={previewing === null && (values() !== clean || pending.length > 0 || removed.length > 0)}
+>
 	{#snippet header()}
 		<fieldset class="plain" disabled={locked}>
 			<Segmented

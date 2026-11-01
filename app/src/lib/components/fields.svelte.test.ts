@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import AmountField from './AmountField.svelte';
 import DateField from './DateField.svelte';
 import IbanField from './IbanField.svelte';
+import TextField from './TextField.svelte';
 
 // The real parsers live in Rust; here they are replaced by fixed answers.
 vi.mock('../api', async () => {
@@ -243,6 +244,34 @@ describe('error messages', () => {
 		expect(screen.getByRole('tooltip').textContent).toBe(
 			'Enter a date as 31.12.2026 or 2026-12-31'
 		);
+	});
+});
+
+describe('Esc in a field', () => {
+	it('undoes what was typed in a text field and goes no further', async () => {
+		const oncommit = vi.fn();
+		render(TextField, { label: 'Name', value: 'Clara', oncommit });
+		const input = screen.getByLabelText<HTMLInputElement>('Name');
+		await fireEvent.input(input, { target: { value: 'Clar' } });
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
+		expect(input.value).toBe('Clara');
+		expect(oncommit).not.toHaveBeenCalled();
+	});
+
+	it('reaches the panel from a text field with nothing to undo', async () => {
+		render(TextField, { label: 'Name', value: 'Clara', oncommit() {} });
+		expect(await fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Escape' })).toBe(true);
+	});
+
+	it('undoes what was typed in an IBAN field and goes no further', async () => {
+		const oncommit = vi.fn();
+		render(IbanField, { value: null, oncommit });
+		const input = screen.getByRole<HTMLInputElement>('textbox');
+		await type(input, 'DE89');
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
+		expect(input.value).toBe('');
+		await settle();
+		expect(oncommit).not.toHaveBeenCalled();
 	});
 });
 

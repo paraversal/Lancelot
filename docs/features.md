@@ -113,4 +113,4 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 - Light, dark, or following the system. Printing stays light (R-NF-9).
 - Two number and date formats, defaulting to the system's (R-NF-6).
 - A reduced motion setting.
-- Shortcuts for new event, open, settings and close in the menu, ⌘1–9 for pages and cost centres, and Esc to close a panel (R-NF-7).
+- Shortcuts for new event, open, settings and close in the menu, ⌘1–9 for pages and cost centres, and Esc to close a panel, pressed twice if that would discard changes (R-NF-7).

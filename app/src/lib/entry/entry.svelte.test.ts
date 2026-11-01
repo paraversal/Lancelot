@@ -130,6 +130,116 @@ describe('A settle', () => {
 	});
 });
 
+describe('Esc', () => {
+	const esc = (init = {}) => fireEvent.keyDown(window, { key: 'Escape', ...init });
+	const warning = () => screen.queryByText('Press Esc again to discard changes');
+	const saved = () => snapshot.txns.find((t) => t.description === 'Reimbursement Clara')!;
+
+	function changeNotes() {
+		return fireEvent.input(screen.getByLabelText('Notes'), { target: { value: 'typed' } });
+	}
+
+	it('closes an untouched new entry', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, onclose });
+		await esc();
+		expect(onclose).toHaveBeenCalledOnce();
+	});
+
+	it('closes an untouched saved entry', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, txn: saved(), onclose });
+		await esc();
+		expect(onclose).toHaveBeenCalledOnce();
+	});
+
+	it('closes when only the kind of a new entry changed', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, onclose });
+		await fireEvent.click(screen.getByRole('radio', { name: 'Income' }));
+		await esc();
+		expect(onclose).toHaveBeenCalledOnce();
+	});
+
+	it('closes a settle filled in from the balance', async () => {
+		const onclose = vi.fn();
+		const person = snapshot.accounts.find((a) => a.name === 'Anna')!.id;
+		render(EntryPanel, { ...props, settle: person, onclose });
+		await esc();
+		expect(onclose).toHaveBeenCalledOnce();
+	});
+
+	it('warns first when there are changes, and closes on the second press', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, txn: saved(), onclose });
+		await changeNotes();
+		await esc();
+		expect(onclose).not.toHaveBeenCalled();
+		expect(warning()).toBeTruthy();
+		await esc();
+		expect(onclose).toHaveBeenCalledOnce();
+	});
+
+	it('warns about an amount that cannot be read', async () => {
+		const onclose = vi.fn();
+		vi.spyOn(api, 'parseSum').mockRejectedValue(new Error('unreadable'));
+		render(EntryPanel, { ...props, onclose });
+		await fireEvent.input(screen.getByLabelText('Amount'), { target: { value: 'abc' } });
+		await vi.waitFor(() => expect(api.parseSum).toHaveBeenCalled());
+		await new Promise((resolve) => setTimeout(resolve));
+		await esc();
+		expect(onclose).not.toHaveBeenCalled();
+		expect(warning()).toBeTruthy();
+	});
+
+	it('closes when the changes were undone by hand', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, txn: saved(), onclose });
+		await changeNotes();
+		await fireEvent.input(screen.getByLabelText('Notes'), { target: { value: '' } });
+		await esc();
+		expect(onclose).toHaveBeenCalledOnce();
+	});
+
+	it('starts over after anything else is done', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, txn: saved(), onclose });
+		await changeNotes();
+		await esc();
+		await fireEvent.keyDown(window, { key: 'a' });
+		expect(warning()).toBeNull();
+		await esc();
+		expect(onclose).not.toHaveBeenCalled();
+		await fireEvent.pointerDown(window);
+		expect(warning()).toBeNull();
+	});
+
+	it('does not discard when Esc is held down', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, txn: saved(), onclose });
+		await changeNotes();
+		await esc();
+		await esc({ repeat: true });
+		expect(onclose).not.toHaveBeenCalled();
+	});
+
+	it('warns about a receipt waiting to be attached', async () => {
+		const onclose = vi.fn();
+		render(EntryPanel, { ...props, pending: ['/tmp/receipt.pdf'], onclose });
+		await esc();
+		expect(onclose).not.toHaveBeenCalled();
+	});
+
+	it('closes an open receipt preview without a warning', async () => {
+		const onescape = vi.fn();
+		render(EntryPanel, { ...props, txn: saved(), previewing: 1, onescape });
+		await changeNotes();
+		await esc();
+		expect(onescape).toHaveBeenCalledOnce();
+		expect(warning()).toBeNull();
+	});
+});
+
 describe('A split line', () => {
 	it('offers every budget line before a category is chosen', () => {
 		render(EntryPanel, props);

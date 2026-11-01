@@ -48,6 +48,8 @@
 		aliases = [...(tier?.aliases ?? [])];
 	});
 	let priceInvalid = $state(false);
+	const values = () => JSON.stringify([name, price, priceInvalid, fee, quota, aliases, alias]);
+	const clean = values();
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
@@ -116,7 +118,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={tier ? tier.name : 'New tier'} {onclose}>
+<Panel title={tier ? tier.name : 'New tier'} {onclose} dirty={values() !== clean}>
 	<fieldset disabled={session.closed}>
 		<div class="form-field">
 			<TextField

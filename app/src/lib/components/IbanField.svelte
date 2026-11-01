@@ -71,6 +71,16 @@
 		if (checked) text = checked.formatted;
 		if (next !== value) oncommit(next);
 	}
+
+	function keydown(e: KeyboardEvent & { currentTarget: HTMLInputElement }) {
+		if (e.key === 'Enter') e.currentTarget.blur();
+		if (e.key === 'Escape' && text.replace(/\s/g, '') !== (value ?? '')) {
+			// Undoing what was typed is all this Esc does; the next one reaches the panel.
+			e.preventDefault();
+			text = value ? group(value) : '';
+			e.currentTarget.blur();
+		}
+	}
 </script>
 
 <Field {label} {id} {error}>
@@ -83,7 +93,7 @@
 		oninput={check}
 		onfocus={() => (focused = true)}
 		onblur={commit}
-		onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+		onkeydown={keydown}
 		aria-invalid={!!error}
 		aria-describedby={error ? `${id}-error` : undefined}
 	/>

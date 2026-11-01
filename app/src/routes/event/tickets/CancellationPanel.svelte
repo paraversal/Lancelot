@@ -77,6 +77,9 @@
 		payer = current?.payer ?? ticketAccount;
 		note = current?.note ?? null;
 	});
+	const values = () =>
+		JSON.stringify([source, order, tier, sale, count, percent, date, payer, note]);
+	const clean = values();
 
 	const chosenSale = $derived(source === 'sale' ? sales.find((s) => s.id === sale) : undefined);
 	const tierId = $derived(chosenSale?.tier ?? tier);
@@ -147,7 +150,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={correction ? 'Correction' : 'Cancellation'} {onclose}>
+<Panel title={correction ? 'Correction' : 'Cancellation'} {onclose} dirty={values() !== clean}>
 	<fieldset disabled={session.closed}>
 		{#if current}
 			<p class="source">
@@ -238,7 +241,12 @@
 				<strong>{formatAmount(-(refund ?? 0), format)}</strong>
 			</div>
 			<Select label="From" value={payer} options={payers} onchange={(v) => (payer = v)} />
-			<TextField label="Note" value={note} oncommit={(v) => (note = v)} />
+			<TextField
+				label="Note"
+				value={note}
+				oninput={(t) => (note = t.trim() || null)}
+				oncommit={(v) => (note = v)}
+			/>
 			{#if current && current.order !== null && current.goneNow < current.count}
 				<p class="meta">
 					{current.count - current.goneNow} still in the sheet. They stay sold until they leave it.
