@@ -69,6 +69,67 @@ describe('A closed event', () => {
 	});
 });
 
+describe('A settle', () => {
+	const person = (name: string) => snapshot.accounts.find((a) => a.name === name)!.id;
+	const saved = (description: string) => snapshot.txns.find((t) => t.description === description)!;
+
+	async function type(amount: number) {
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: amount, ambiguous: false, terms: 1 });
+		await fireEvent.input(screen.getByLabelText('Amount'), { target: { value: String(amount) } });
+		await vi.waitFor(() => expect(api.parseSum).toHaveBeenCalled());
+	}
+
+	it('starts out settling the whole balance', () => {
+		render(EntryPanel, { ...props, settle: person('Anna') });
+		expect(screen.getByText('Anna is settled')).toBeTruthy();
+	});
+
+	it('shows what is left while typing', async () => {
+		render(EntryPanel, { ...props, settle: person('Anna') });
+		await type(5000);
+		expect(await screen.findByText('Anna is still owed 162,40 €')).toBeTruthy();
+	});
+
+	it('shows what is left of a repayment', async () => {
+		render(EntryPanel, { ...props, settle: person('Bob') });
+		await type(5000);
+		expect(await screen.findByText('Bob still owes 130,00 €')).toBeTruthy();
+	});
+
+	it('marks a reimbursement that pays out too much', async () => {
+		render(EntryPanel, { ...props, settle: person('Anna') });
+		await type(30000);
+		const over = await screen.findByText('Too much: Anna would owe 87,60 €');
+		expect(over.classList.contains('over')).toBe(true);
+	});
+
+	it('marks a repayment that takes back too much', async () => {
+		render(EntryPanel, { ...props, settle: person('Bob') });
+		await type(20000);
+		expect(await screen.findByText('Too much: Bob would be owed 20,00 €')).toBeTruthy();
+	});
+
+	it('leaves out the entry being edited when it matches exactly', () => {
+		render(EntryPanel, { ...props, txn: saved('Reimbursement Clara') });
+		expect(screen.getByText('Clara is settled')).toBeTruthy();
+		expect(screen.getByText('owed')).toBeTruthy();
+	});
+
+	it('leaves out the entry being edited when it changes', async () => {
+		render(EntryPanel, { ...props, txn: saved('Reimbursement Clara') });
+		await type(9400);
+		expect(await screen.findByText('Clara is still owed 1,00 €')).toBeTruthy();
+	});
+
+	it('counts the entry being edited for anyone else', async () => {
+		render(EntryPanel, { ...props, txn: saved('Reimbursement Clara') });
+		await fireEvent.change(screen.getByLabelText('Person'), {
+			target: { value: String(person('Malte')) }
+		});
+		expect(screen.getByText('Malte is still owed 15,00 €')).toBeTruthy();
+	});
+});
+
 describe('A split line', () => {
 	it('offers every budget line before a category is chosen', () => {
 		render(EntryPanel, props);

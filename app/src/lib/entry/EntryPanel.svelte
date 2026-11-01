@@ -6,8 +6,8 @@
 
 <script lang="ts">
 	// The entry panel (R-TX-3): one form per kind of transaction. Amounts are parsed by the
-	// core; the "left" amount of a split is a display-only subtraction of whole cents, and the
-	// core checks the split against the total again when saving.
+	// core; the "left" amount of a split and a settle's preview are display-only sums of whole
+	// cents, and the core checks the split against the total again when saving.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { ApiError, api, errorMessage } from '#lib/api/index.ts';
@@ -210,8 +210,31 @@
 	const left = $derived(
 		split && amount !== null ? amount - lines.reduce((s, l) => s + (l.amount ?? 0), 0) : null
 	);
-	const net = $derived(summary(party)?.net ?? 0);
-	const overSettles = $derived(kind === 'settle' && amount !== null && amount > Math.abs(net));
+	// A person's balance without the settle being edited, so changing one reads like entering it.
+	function balanceOf(id: AccountId | null) {
+		const n = summary(id)?.net ?? 0;
+		const e = txn?.entry;
+		if (e?.type !== 'settle' || e.person !== id) return n;
+		return e.direction === 'reimburse' ? n + e.amount : n - e.amount;
+	}
+	const net = $derived(balanceOf(party));
+	const after = $derived(
+		kind !== 'settle' || party === null || amount === null
+			? null
+			: direction === 'reimburse'
+				? net - amount
+				: net + amount
+	);
+	const overshoots = $derived(
+		after !== null && (direction === 'reimburse' ? after < 0 : after > 0)
+	);
+
+	function afterText(cents: Cents) {
+		const name = byId.get(party!)?.name ?? '';
+		const figure = formatAmount(cents, format, 'magnitude');
+		if (overshoots) return `Too much: ${name} would ${cents < 0 ? 'owe' : 'be owed'} ${figure}`;
+		return cents > 0 ? `${name} is still owed ${figure}` : `${name} still owes ${figure}`;
+	}
 
 	function balanceHint(id: AccountId | null) {
 		const s = summary(id);
@@ -224,7 +247,7 @@
 
 	function pickPerson(id: AccountId) {
 		party = id;
-		const n = summary(id)?.net ?? 0;
+		const n = balanceOf(id);
 		direction = n >= 0 ? 'reimburse' : 'repay';
 		if (n !== 0 && txn === null) amount = Math.abs(n);
 		other ??= snapshot.event.defaultReimbursementAccount;
@@ -465,8 +488,12 @@
 							}}
 							oncommit={(v) => (amount = v)}
 						/>
-						{#if overSettles}
-							<span class="attention">more than {formatAmount(net, format, 'magnitude')}</span>
+						{#if after === 0}
+							<span class="after settled"
+								><Icon name="check" size={14} />{byId.get(party!)?.name} is settled</span
+							>
+						{:else if after !== null}
+							<span class="after" class:over={overshoots}>{afterText(after)}</span>
 						{/if}
 						{#if fieldError('amount')}<span class="form-error">{fieldError('amount')}</span>{/if}
 					</div>
@@ -827,9 +854,20 @@
 		align-self: flex-start;
 	}
 
-	.attention {
+	.after {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 		font-size: var(--type-xs);
-		color: var(--color-attention);
+		color: var(--color-ink-muted);
+	}
+
+	.after.settled {
+		color: var(--color-plus);
+	}
+
+	.after.over {
+		color: var(--color-minus);
 	}
 
 	.confirm {
