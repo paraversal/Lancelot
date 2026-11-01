@@ -48,6 +48,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 - Bank details with the IBAN checked as you type (R-PER-1, R-PER-2).
 - Per person: advanced, held, settled and net balance, with each line leading to its entry (R-PER-3, R-TX-5).
+- A settle shows the balance it leaves while you type, whether it is a new entry or a saved one being changed, and marks an amount that is too much (R-TX-4).
 - Payout list with account holder, IBAN, reference and amount, as CSV or PDF, with the advances behind it as an optional appendix (R-PER-4).
 - Record the whole payout list as paid in one action (R-PER-5).
 - Repayment list of the people who owe the event, with Repaid per person (R-PER-7).
@@ -112,4 +113,4 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 - Light, dark, or following the system. Printing stays light (R-NF-9).
 - Two number and date formats, defaulting to the system's (R-NF-6).
 - A reduced motion setting.
-- Shortcuts for new event, open, settings and close in the menu, ⌘1–9 for pages and cost centres, and Esc to close a panel (R-NF-7).
+- Shortcuts for new event, open, settings and close in the menu, ⌘1–9 for pages and cost centres, and Esc to close a panel, pressed twice if that would discard changes (R-NF-7).

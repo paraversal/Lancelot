@@ -75,6 +75,20 @@
 	});
 	let amountInvalid = $state(false);
 	let unitPriceInvalid = $state(false);
+	const values = () =>
+		JSON.stringify([
+			category,
+			description,
+			mode,
+			amount,
+			amountInvalid,
+			quantity,
+			unitPrice,
+			unitPriceInvalid,
+			complete,
+			costCentre
+		]);
+	const clean = values();
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
@@ -148,7 +162,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={line ? line.description : 'New budget line'} {onclose}>
+<Panel title={line ? line.description : 'New budget line'} {onclose} dirty={values() !== clean}>
 	{#if figures}
 		<div class="figures">
 			<div><span class="form-label">Estimate</span>{formatAmount(figures.estimate, format)}</div>

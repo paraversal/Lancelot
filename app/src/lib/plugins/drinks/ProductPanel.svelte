@@ -54,6 +54,19 @@
 		leftOver = text(counts.leftOver);
 		logged = text(counts.manual);
 	});
+	const values = () =>
+		JSON.stringify([
+			name,
+			cost,
+			donation,
+			costInvalid,
+			donationInvalid,
+			taken,
+			returned,
+			leftOver,
+			logged
+		]);
+	const clean = values();
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 	const fieldError = (field: string) => (error?.field === field ? error.message : null);
@@ -137,7 +150,7 @@
 	</div>
 {/snippet}
 
-<Panel title={product ? product.name : 'New product'} {onclose}>
+<Panel title={product ? product.name : 'New product'} {onclose} dirty={values() !== clean}>
 	<fieldset disabled={ctx.closed}>
 		<div class="form-field">
 			<TextField

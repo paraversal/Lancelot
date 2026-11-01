@@ -32,6 +32,8 @@
 		supplier = settings.supplier;
 		deposit = settings.deposit ?? 0;
 	});
+	const values = () => JSON.stringify([supplier, deposit]);
+	const clean = values();
 	let error = $state<string | null>(null);
 
 	const expenses = $derived(ctx.accounts.filter((a) => a.kind === 'expense'));
@@ -61,7 +63,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={forInvoice ? 'Supplier invoice' : 'Commission'} {onclose}>
+<Panel title={forInvoice ? 'Supplier invoice' : 'Commission'} {onclose} dirty={values() !== clean}>
 	<fieldset disabled={ctx.closed}>
 		<TextField
 			label="Supplier"

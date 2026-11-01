@@ -49,6 +49,8 @@
 			(e.currentTarget as HTMLElement).blur();
 		}
 		if (e.key === 'Escape') {
+			// Undoing what was typed is all this Esc does; the next one reaches the panel.
+			if (text.trim() !== (value ?? '').trim()) e.preventDefault();
 			text = value ?? '';
 			(e.currentTarget as HTMLElement).blur();
 		}

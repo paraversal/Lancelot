@@ -31,12 +31,15 @@
 	let error = $state<string | null>(null);
 	let dateInvalid = $state(false);
 	let amountInvalid = $state(false);
+	const values = () => JSON.stringify([date, dateInvalid, amount, amountInvalid]);
+	let clean = $state(values());
 
 	function reset() {
 		editing = null;
 		deleting = false;
 		date = initialDate();
 		amount = null;
+		clean = values();
 		error = null;
 		form += 1;
 	}
@@ -46,6 +49,7 @@
 		deleting = false;
 		date = r.date;
 		amount = r.amount;
+		clean = values();
 		error = null;
 		form += 1;
 	}
@@ -89,7 +93,7 @@
 	}}
 />
 
-<Panel title={details?.name ?? ''} {onclose}>
+<Panel title={details?.name ?? ''} {onclose} dirty={values() !== clean}>
 	{#key form}
 		<div class="form-pair">
 			<DateField

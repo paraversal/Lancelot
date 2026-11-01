@@ -20,6 +20,10 @@
 	let startsInvalid = $state(false);
 	let endsInvalid = $state(false);
 
+	const values = () =>
+		JSON.stringify([name, startsOn, startsInvalid, endsOn, endsInvalid, location, template]);
+	const clean = values();
+
 	const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 	async function chooseTemplate() {
@@ -56,7 +60,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Enter' && e.metaKey && create()} />
 
-<Panel title="New event" {onclose}>
+<Panel title="New event" {onclose} dirty={values() !== clean}>
 	<TextField
 		label="Name"
 		value={name}
@@ -80,7 +84,12 @@
 			oncommit={(v) => (endsOn = v)}
 		/>
 	</div>
-	<TextField label="Location" value={location} oncommit={(v) => (location = v)} />
+	<TextField
+		label="Location"
+		value={location}
+		oninput={(t) => (location = t.trim() || null)}
+		oncommit={(v) => (location = v)}
+	/>
 	<div class="template">
 		<span class="form-label">Template</span>
 		{#if template}

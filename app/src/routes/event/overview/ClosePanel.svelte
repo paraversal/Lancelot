@@ -28,6 +28,7 @@
 	untrack(() => {
 		for (const o of snapshot.event.closingOverrides) notes[key(o.item)] = o.note;
 	});
+	const clean = JSON.stringify(notes);
 	const missing = $derived(items.filter((i) => !notes[key(i)]?.trim()).length);
 
 	let confirmButton = $state<HTMLElement>();
@@ -60,7 +61,7 @@
 	}}
 />
 
-<Panel title="Close event" {onclose}>
+<Panel title="Close event" {onclose} dirty={JSON.stringify(notes) !== clean}>
 	{#each items as item, n (key(item))}
 		{@const d = describe(item, snapshot, format)}
 		<div class="item">
