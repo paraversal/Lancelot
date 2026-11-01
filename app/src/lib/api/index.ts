@@ -35,6 +35,7 @@ import type { ManualSaleId } from './generated/ManualSaleId';
 import type { OpenEvent } from './generated/OpenEvent';
 import type { PluginChange } from './generated/PluginChange';
 import type { Parsed } from './generated/Parsed';
+import type { ParsedSum } from './generated/ParsedSum';
 import type { Person } from './generated/Person';
 import type { ParsedDate } from './generated/ParsedDate';
 import type { RecentEvent } from './generated/RecentEvent';
@@ -138,6 +139,9 @@ export const api = {
 		call<TicketShare>('ticket_share', { price, bp, count }),
 	parseAmount: (input: string, allowNegative: boolean) =>
 		call<Parsed>('amount_parse', { input, allowNegative }),
+	/** What an amount field holds, which may be a sum. File cells go through `parseAmount`. */
+	parseSum: (input: string, allowNegative: boolean) =>
+		call<ParsedSum>('amount_sum', { input, allowNegative }),
 	parseDate: (input: string) => call<ParsedDate>('date_parse', { input }),
 
 	/** Saves a transaction with the files to attach (paths) and the attachments to remove. */

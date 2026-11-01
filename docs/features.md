@@ -22,7 +22,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 - Each line can link to a budget line and carry a cost centre. Choosing a budget line sets the line's category and cost centre (R-BUD-2, R-CC-1).
 - People and categories can be added from the form itself.
 - Entries can be edited and deleted until the event is closed. Every change is written to a change log, which the app has no page for yet (R-TX-6).
-- Amount fields accept both number formats and show what they read before saving (R-NF-8).
+- Amount fields accept both number formats, add up sums like `1,29+1,49`, and show what they read before saving (R-NF-8).
 
 ## Ledger
 

@@ -94,7 +94,7 @@ describe('A split line', () => {
 	});
 
 	it('stops showing a refused payer once one is chosen', async () => {
-		vi.spyOn(api, 'parseAmount').mockResolvedValue({ cents: 1200, ambiguous: false });
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 1200, ambiguous: false, terms: 1 });
 		render(EntryPanel, props);
 		await fireEvent.input(screen.getByLabelText('Amount'), { target: { value: '12' } });
 		await fireEvent.click(screen.getByRole('button', { name: /^Save(?! &)/ }));
@@ -110,7 +110,7 @@ describe('A split line', () => {
 			...session.event!,
 			revision: Date.now()
 		} as never);
-		vi.spyOn(api, 'parseAmount').mockResolvedValue({ cents: 1200, ambiguous: false });
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 1200, ambiguous: false, terms: 1 });
 		render(EntryPanel, props);
 		const van = budgetLine('Van rental');
 		await fireEvent.change(screen.getByLabelText('Paid by'), {

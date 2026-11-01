@@ -94,6 +94,7 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "amount_parse" => {
             json(s.parse_amount(&arg::<String>(a, "input")?, arg(a, "allowNegative")?))
         }
+        "amount_sum" => json(s.parse_sum(&arg::<String>(a, "input")?, arg(a, "allowNegative")?)),
         "ticket_share" => json(s.ticket_share(arg(a, "price")?, arg(a, "bp")?, arg(a, "count")?)),
         "date_parse" => json(s.parse_date(&arg::<String>(a, "input")?)),
         "txn_save" => json(s.save_txn(

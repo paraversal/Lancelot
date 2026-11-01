@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 use lancelot_core::{
     AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, CopyChoice, CopySummary,
     DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId, ImportPreview,
-    MAX_ATTACHMENT_SIZE, Parsed, Report, Store, StoreError, StoreOptions, Table, TemplateSummary,
-    TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date,
-    list_backups, parse_amount, parse_date, read_book, ticket_share,
+    MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store, StoreError, StoreOptions, Table,
+    TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
+    format_date, list_backups, parse_amount, parse_date, parse_sum, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -596,6 +596,15 @@ impl Service {
         )?)
     }
 
+    /// What an amount field holds, which may be a sum.
+    pub fn parse_sum(&self, input: &str, allow_negative: bool) -> Result<ParsedSum> {
+        Ok(parse_sum(
+            input,
+            self.file.settings.number_format,
+            allow_negative,
+        )?)
+    }
+
     /// The fee or refund a form is about to save, by the core's rule.
     pub fn ticket_share(&self, price: Cents, bp: u32, count: u32) -> Result<TicketShare> {
         ticket_share(price, bp, count).map_err(|e| DomainError::from(e).into())
@@ -789,6 +798,7 @@ mod tests {
         assert_eq!(service(&dir).settings(), settings);
 
         assert_eq!(s.parse_amount("1.234", false).unwrap().cents.get(), 123_400);
+        assert_eq!(s.parse_sum("1.234+1", false).unwrap().cents.get(), 123_500);
         settings.number_format = NumberFormat::En;
         s.update_settings(settings.clone()).unwrap();
         assert_eq!(

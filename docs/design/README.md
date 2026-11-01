@@ -49,7 +49,7 @@ Snappy, with motion that answers what a person did: presses, panels, amounts tha
 | Button            | `primary` (ink), `ghost` (rule border), optional icon and shortcut hint (`⌘↵`, `N`)                                                                              |
 | Filter chip       | Pill; active is an ink fill                                                                                                                                      |
 | Segmented control | Sunk track; active segment uses `marker`                                                                                                                         |
-| Amount input      | Lenient parsing with a live `= …` preview. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
+| Amount input      | Lenient parsing with a live `= …` preview, which also adds up sums such as `1,29+1,49`. Ambiguous input shows the preview in `attention`; invalid input gets a `minus` border and a warning icon. See R-NF-8. |
 | Balance cell      | `owed 212,40 €` / `owes 180,00 €` (attention) / `✓ settled`                                                                                                      |
 | Receipt indicator | Paperclip when present, `attention` warning when missing                                                                                                         |
 | Tally             | Groups of four strokes crossed by a fifth (Strichliste). In `UI.fig` only; the app doesn't draw it.                                                              |

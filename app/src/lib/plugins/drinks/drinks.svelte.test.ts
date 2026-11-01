@@ -193,8 +193,8 @@ describe('The stock and sales section', () => {
 
 	it('waits for an amount typed just before saving', async () => {
 		open();
-		let finish = (_: { cents: number; ambiguous: boolean }) => {};
-		vi.spyOn(api, 'parseAmount').mockImplementation(
+		let finish = (_: { cents: number; ambiguous: boolean; terms: number }) => {};
+		vi.spyOn(api, 'parseSum').mockImplementation(
 			() => new Promise((resolve) => (finish = resolve))
 		);
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockResolvedValue(session.event!);
@@ -207,14 +207,14 @@ describe('The stock and sales section', () => {
 		await fireEvent.click(screen.getByText('Save'));
 		expect(apply).not.toHaveBeenCalled();
 
-		finish({ cents: 50, ambiguous: false });
+		finish({ cents: 50, ambiguous: false, terms: 1 });
 		await waitFor(() => expect(apply).toHaveBeenCalledOnce());
 		expect(apply.mock.calls[0][1][0].value).toMatchObject({ name: 'Strich', donation: 50 });
 	});
 
 	it('does not save over an amount it cannot read', async () => {
 		open();
-		vi.spyOn(api, 'parseAmount').mockRejectedValue(new Error('not an amount'));
+		vi.spyOn(api, 'parseSum').mockRejectedValue(new Error('not an amount'));
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockResolvedValue(session.event!);
 		render(Centre, { centre: drinksCentre() });
 		await fireEvent.click(screen.getByText('Product'));

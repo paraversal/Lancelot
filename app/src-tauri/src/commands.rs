@@ -8,8 +8,9 @@ use lancelot_core::{
     AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
     BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, CopyChoice,
     CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
-    ManualSaleDraft, ManualSaleId, Parsed, Person, PluginChange, ReconciliationId, Resolution,
-    Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft, TxnId,
+    ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange, ReconciliationId,
+    Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft,
+    TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -158,6 +159,15 @@ pub async fn amount_parse(
     allow_negative: bool,
 ) -> Result<Parsed> {
     with(&state, |s| s.parse_amount(&input, allow_negative))
+}
+
+#[tauri::command]
+pub async fn amount_sum(
+    state: State<'_, AppState>,
+    input: String,
+    allow_negative: bool,
+) -> Result<ParsedSum> {
+    with(&state, |s| s.parse_sum(&input, allow_negative))
 }
 
 #[tauri::command]

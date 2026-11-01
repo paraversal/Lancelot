@@ -74,6 +74,8 @@ The parser works in these steps:
    - If it is the thousands separator of `fmt` (`1.234` in De, `1,234` in En), the amount is accepted and `ambiguous = true`, so the preview is shown in `attention`.
    - If it is the decimal separator of `fmt` (`1,234` in De, `1.234` in En), it means three decimals and is rejected as `TooManyDecimals`. A German user who types `1,234` almost certainly meant `1,23` or `12,34`, and reading it as a thousand euros would be a 1000× error.
 
+**Sums.** `AmountField` calls `parse_sum` (`amount_sum`), which splits the input at every sign after the first and reads each term with the parser above. One sign at the end is ignored, an empty term is `MissingTerm`, and the negative check applies to the total. It returns the total with the number of terms; the field keeps the typed text when there is more than one, and only the total is saved. Everything that reads a value from elsewhere, such as a file cell or a plugin's `parseAmount`, stays with `parse_amount`, so `10-12` in a spreadsheet is an error and not `-2`. The test cases live in `fixtures/amount-sum.json`.
+
 **Where the parser runs:** in Rust, behind the synchronous command `amount_parse`. A round trip takes well under a millisecond, so the live preview needs no second implementation in TypeScript. The test cases live in `fixtures/amount-input.json`, which holds input, format, the expected result and the ambiguity flag. They are read by the Rust tests, and later also by UI tests if a TypeScript fallback ever becomes necessary.
 
 ## 3. Data model

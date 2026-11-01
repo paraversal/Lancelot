@@ -24,7 +24,9 @@ pub mod snapshot;
 pub mod store;
 pub mod tickets;
 
-pub use amount::{AmountError, NumberFormat, Parsed, SignStyle, format_amount, parse_amount};
+pub use amount::{
+    AmountError, NumberFormat, Parsed, ParsedSum, SignStyle, format_amount, parse_amount, parse_sum,
+};
 pub use book::{
     Book, BookParts, CopyChoice, CopySummary, MAX_ATTACHMENT_SIZE, NextIds, Saved, TemplateSummary,
     Warning,
