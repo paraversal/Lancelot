@@ -8,7 +8,7 @@ use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::iban::Iban;
-use crate::money::Cents;
+use crate::money::{Cents, Currency};
 
 /// Identifies an account within one event. Becomes the SQLite row id in the event file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
@@ -165,6 +165,9 @@ pub struct Person {
     pub holder: Option<String>,
     pub iban: Option<Iban>,
     pub bic: Option<String>,
+    /// How they are reimbursed when it isn't a bank transfer, such as a PayPal address or cash.
+    /// While set, it applies instead of the bank details, which stay for later.
+    pub other_method: Option<String>,
     pub contact: Option<String>,
     pub notes: Option<String>,
 }
@@ -270,6 +273,8 @@ impl Event {
 #[serde(rename_all = "camelCase")]
 pub struct EventDetails {
     pub name: String,
+    /// Chosen when the event is created. Changing the details never changes it.
+    pub currency: Currency,
     #[ts(type = "string | null")]
     pub starts_on: Option<Date>,
     #[ts(type = "string | null")]

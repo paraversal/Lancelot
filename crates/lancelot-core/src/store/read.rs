@@ -164,7 +164,7 @@ pub(crate) fn txns(conn: &Connection) -> Result<Vec<Txn>, StoreError> {
 pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     let event = conn.query_row(
         "SELECT name, starts_on, ends_on, location, notes, closed_at, default_reimbursement_account_id, closing_overrides,
-                tickets_enabled, ticket_account_id
+                tickets_enabled, ticket_account_id, currency
          FROM event WHERE id = 1",
         [],
         |r| {
@@ -181,6 +181,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                     enabled: r.get(8)?,
                     account: r.get::<_, Option<i64>>(9)?.map(AccountId),
                 },
+                r.get::<_, String>(10)?,
             ))
         },
     )?;
@@ -194,10 +195,12 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         default_account,
         overrides,
         ticket_settings,
+        currency,
     ) = event;
     let event = Event {
         details: EventDetails {
             name,
+            currency: text_enum(&currency)?,
             starts_on: starts_on.as_deref().map(text_date).transpose()?,
             ends_on: ends_on.as_deref().map(text_date).transpose()?,
             location,
@@ -209,7 +212,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
     };
 
     let mut stmt = conn.prepare(
-        "SELECT account_id, holder, iban, bic, contact, notes FROM person ORDER BY account_id",
+        "SELECT account_id, holder, iban, bic, other_method, contact, notes FROM person ORDER BY account_id",
     )?;
     let rows = stmt.query_map([], |r| {
         Ok((
@@ -219,11 +222,12 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             r.get::<_, Option<String>>(3)?,
             r.get::<_, Option<String>>(4)?,
             r.get::<_, Option<String>>(5)?,
+            r.get::<_, Option<String>>(6)?,
         ))
     })?;
     let mut persons = Vec::new();
     for row in rows {
-        let (id, holder, iban, bic, contact, notes) = row?;
+        let (id, holder, iban, bic, other_method, contact, notes) = row?;
         let iban = iban
             .map(|i| {
                 validate_iban(&i)
@@ -236,6 +240,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                 holder,
                 iban,
                 bic,
+                other_method,
                 contact,
                 notes,
             },

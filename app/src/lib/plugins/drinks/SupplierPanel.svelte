@@ -7,6 +7,7 @@
 	import Panel from '../../components/Panel.svelte';
 	import Select from '../../components/Select.svelte';
 	import TextField from '../../components/TextField.svelte';
+	import { counterparties } from '../../ledger';
 	import type { PluginContext } from '../api';
 	import { type CentreSettings, setCentre } from './records';
 
@@ -69,9 +70,13 @@
 			label="Supplier"
 			value={supplier}
 			autofocus
+			suggestions={counterparties(ctx.txns)}
 			oninput={(v) => (supplier = v)}
 			oncommit={(v) => (supplier = v)}
-		/>
+		>
+			{#snippet hint()}The invoice check finds expenses on this cost centre whose Counterparty has
+				this name.{/snippet}
+		</TextField>
 		{#if !forInvoice}
 			<Select
 				label="Deposit category"

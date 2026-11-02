@@ -30,6 +30,8 @@ pub enum DomainError {
     UnknownPerson,
     #[error("at least one account is needed")]
     NoAccounts,
+    #[error("a budget can't be copied from an event in another currency")]
+    OtherCurrency,
     #[error("a name is needed")]
     EmptyName { field: String },
     #[error("this name is already used")]
@@ -125,6 +127,7 @@ impl DomainError {
             DomainError::UnknownTxn => "unknown_txn",
             DomainError::UnknownPerson => "unknown_person",
             DomainError::NoAccounts => "no_accounts",
+            DomainError::OtherCurrency => "other_currency",
             DomainError::EmptyName { .. } => "empty_name",
             DomainError::DuplicateName { .. } => "duplicate_name",
             DomainError::InvalidBic => "invalid_bic",

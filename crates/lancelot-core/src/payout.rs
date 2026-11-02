@@ -18,16 +18,26 @@ pub const REFERENCE_MAX: usize = 140;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
+#[serde(rename_all = "camelCase")]
 pub struct PayoutRow {
     pub person: AccountId,
     pub name: String,
     /// The account holder, or the person's name when none is given.
     pub holder: String,
-    /// Normalised (no spaces); `None` while the person has no IBAN.
+    /// Normalised (no spaces); `None` without an IBAN, or when another method applies.
     pub iban: Option<String>,
     pub bic: Option<String>,
+    /// The method when it isn't a bank transfer, such as a PayPal address or cash.
+    pub other_method: Option<String>,
     pub amount: Cents,
     pub reference: String,
+}
+
+impl PayoutRow {
+    /// Whether there is a way to pay this person, so that the payment can be recorded.
+    pub fn payable(&self) -> bool {
+        self.iban.is_some() || self.other_method.is_some()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
@@ -47,7 +57,7 @@ pub struct Payouts {
     /// By name.
     pub payouts: Vec<PayoutRow>,
     pub payout_total: Cents,
-    /// What "Mark as paid" records: the payouts that have an IBAN.
+    /// What "Mark as paid" can record: the payouts that have a reimbursement method.
     pub payable_total: Cents,
     pub repayments: Vec<RepaymentRow>,
     pub repayment_total: Cents,
@@ -89,6 +99,8 @@ pub fn payouts(book: &Book) -> Result<Payouts, MoneyError> {
     for (account, person) in book.persons() {
         let net = ledger.person(account.id).map(|p| p.net).unwrap_or_default();
         if net.is_positive() {
+            let other_method = person.other_method.clone();
+            let bank = other_method.is_none();
             payouts.push(PayoutRow {
                 person: account.id,
                 name: account.name.clone(),
@@ -96,8 +108,13 @@ pub fn payouts(book: &Book) -> Result<Payouts, MoneyError> {
                     .holder
                     .clone()
                     .unwrap_or_else(|| account.name.clone()),
-                iban: person.iban.as_ref().map(|i| i.as_str().to_owned()),
-                bic: person.bic.clone(),
+                iban: person
+                    .iban
+                    .as_ref()
+                    .filter(|_| bank)
+                    .map(|i| i.as_str().to_owned()),
+                bic: person.bic.clone().filter(|_| bank),
+                other_method,
                 amount: net,
                 reference: reference(event, &account.name),
             });
@@ -114,12 +131,7 @@ pub fn payouts(book: &Book) -> Result<Payouts, MoneyError> {
     repayments.sort_by_key(|r| r.name.to_lowercase());
     Ok(Payouts {
         payout_total: try_sum(payouts.iter().map(|p| p.amount))?,
-        payable_total: try_sum(
-            payouts
-                .iter()
-                .filter(|p| p.iban.is_some())
-                .map(|p| p.amount),
-        )?,
+        payable_total: try_sum(payouts.iter().filter(|p| p.payable()).map(|p| p.amount))?,
         repayment_total: try_sum(repayments.iter().map(|r| r.amount))?,
         payouts,
         repayments,
@@ -127,7 +139,7 @@ pub fn payouts(book: &Book) -> Result<Payouts, MoneyError> {
 }
 
 /// The payout list as CSV in the user's number format (see [`crate::csv`]). IBANs have no
-/// spaces, so banking tools can import them.
+/// spaces, so banking tools can import them. Only a bank transfer has a reference.
 pub fn payouts_csv(list: &Payouts, format: NumberFormat) -> String {
     let mut csv = Csv::new(format);
     csv.header(&[
@@ -135,6 +147,7 @@ pub fn payouts_csv(list: &Payouts, format: NumberFormat) -> String {
         "Account holder",
         "IBAN",
         "BIC",
+        "Other method",
         "Amount",
         "Reference",
     ]);
@@ -144,8 +157,13 @@ pub fn payouts_csv(list: &Payouts, format: NumberFormat) -> String {
             csv.text(&p.holder),
             csv.text(p.iban.as_deref().unwrap_or("")),
             csv.text(p.bic.as_deref().unwrap_or("")),
+            csv.text(p.other_method.as_deref().unwrap_or("")),
             csv.amount(p.amount),
-            csv.text(&p.reference),
+            csv.text(if p.other_method.is_some() {
+                ""
+            } else {
+                &p.reference
+            }),
         ];
         csv.row(&row);
     }
@@ -182,6 +200,7 @@ mod tests {
                 holder: "Anna Krüger".into(),
                 iban: Some("DE89370400440532013000".into()),
                 bic: None,
+                other_method: None,
                 amount: Cents::new(123_456).unwrap(),
                 reference: "Auslagen X Anna".into(),
             }],
@@ -189,7 +208,7 @@ mod tests {
         };
         assert_eq!(
             payouts_csv(&list, NumberFormat::De),
-            "Name;Account holder;IBAN;BIC;Amount;Reference\r\n\"Anna; \"\"Ani\"\"\";Anna Krüger;DE89370400440532013000;;1234,56;Auslagen X Anna\r\n"
+            "Name;Account holder;IBAN;BIC;Other method;Amount;Reference\r\n\"Anna; \"\"Ani\"\"\";Anna Krüger;DE89370400440532013000;;;1234,56;Auslagen X Anna\r\n"
         );
         assert!(payouts_csv(&list, NumberFormat::En).contains(",1234.56,"));
     }

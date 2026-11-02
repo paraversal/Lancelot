@@ -2,12 +2,21 @@ import { describe, expect, it } from 'vitest';
 
 import type { EventSnapshot } from './api/generated/EventSnapshot';
 import example from './api/fixtures/example-event.json';
-import { byCategory, byDay, counts, matches, rows } from './ledger';
+import { byCategory, byDay, counterparties, counts, matches, rows } from './ledger';
 
 // The example event from the mockups, exported by the Rust tests.
 const snapshot = example as EventSnapshot;
 const all = rows(snapshot);
 const find = (title: string) => all.find((r) => r.title === title)!;
+
+describe('counterparties', () => {
+	it('lists each name once, most used first', () => {
+		const txns = ['Metro', 'Hoffmann', ' hoffmann ', null, '', 'Aldi'].map((counterparty) => ({
+			counterparty
+		}));
+		expect(counterparties(txns)).toEqual(['Hoffmann', 'Aldi', 'Metro']);
+	});
+});
 
 describe('rows', () => {
 	it('names who paid and what for', () => {

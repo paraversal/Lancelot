@@ -208,11 +208,12 @@ impl Service {
     pub fn copy_preview(&self, path: &Path) -> Result<CopySummary> {
         let source = self.other_event(path)?;
         let open = self.open.as_ref().ok_or_else(ApiError::no_event)?;
+        let book = open.store.book();
         let choice = CopyChoice {
             persons: true,
-            budget: true,
+            budget: source.event().details.currency == book.event().details.currency,
         };
-        let summary = open.store.book().clone().copy_from(&source, choice);
+        let summary = book.clone().copy_from(&source, choice);
         summary.map_err(|e| StoreError::from(e).into())
     }
 
@@ -656,6 +657,7 @@ mod tests {
 
     fn details(name: &str) -> EventDetails {
         EventDetails {
+            currency: Default::default(),
             name: name.into(),
             starts_on: None,
             ends_on: None,
@@ -1427,13 +1429,13 @@ mod tests {
         assert!(csv.starts_with('\u{feff}'));
         assert!(
             csv.contains(
-                "Anna Krüger;Anna Krüger;DE89370400440532013000;;212,40;Auslagen Fest Anna Krueger"
+                "Anna Krüger;Anna Krüger;DE89370400440532013000;;;212,40;Auslagen Fest Anna Krueger"
             ),
             "{csv}"
         );
 
         let paid = s
-            .change(|b| b.mark_payouts_paid(verein, time::macros::date!(2026 - 06 - 20)))
+            .change(|b| b.mark_payouts_paid(verein, time::macros::date!(2026 - 06 - 20), &[anna]))
             .unwrap();
         assert!(paid.snapshot.payouts.payouts.is_empty());
         assert_eq!(paid.snapshot.persons[0].summary.net.get(), 0);

@@ -41,6 +41,7 @@ pub fn two_accounts() -> Vec<AccountDraft> {
 
 pub fn new_book() -> Book {
     let details = EventDetails {
+        currency: Default::default(),
         name: "Sommerfest 2026".into(),
         starts_on: Some(june(12)),
         ends_on: Some(june(14)),

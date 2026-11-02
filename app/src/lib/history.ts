@@ -182,6 +182,7 @@ class Describer {
 						field('Holder', v.holder),
 						field('IBAN', v.iban),
 						field('BIC', v.bic),
+						field('Other method', v.otherMethod),
 						field('Contact', v.contact),
 						field('Notes', v.notes)
 					]

@@ -1,6 +1,7 @@
 //! The frozen event file in `fixtures/events`, written by schema version 1.
-//! It is never rewritten. A file an earlier version wrote must keep opening with the same figures,
-//! so every schema change has to be a migration (technical design §3.2).
+//! Once the first real event is entered it is never rewritten: a file an earlier version wrote must
+//! keep opening with the same figures, so every schema change has to be a migration. Until then the
+//! schema is edited in place and this file is written again (technical design §3.2).
 
 mod common;
 
@@ -16,7 +17,7 @@ use tempfile::TempDir;
 
 const SAMPLE: &str = "sample-v1.lancelot";
 /// A regenerated sample would hide a schema edited in place, so its bytes are pinned too.
-const SAMPLE_SHA256: &str = "9d42e35281981c5328ec3336453fb8f036a6e30f4888648c385f1dcbb6f54c73";
+const SAMPLE_SHA256: &str = "9f15656dd1c8a13804a210c6190f99c3ec33d2fadbea992116ad44e09474bdcc";
 
 fn sample_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -92,6 +93,7 @@ fn write_the_sample() {
     let (mut store, _) = Store::create(
         &path,
         EventDetails {
+            currency: Default::default(),
             name: "Sommerfest 2026".into(),
             starts_on: Some(june(12)),
             ends_on: Some(june(14)),
@@ -113,8 +115,17 @@ fn write_the_sample() {
                     holder: Some("Anna Beispiel".into()),
                     iban: Some(validate_iban("DE89370400440532013000").unwrap()),
                     bic: Some("COBADEFFXXX".into()),
+                    other_method: None,
                     contact: Some("anna@example.invalid".into()),
                     notes: Some("Pays for the kitchen".into()),
+                },
+            )?;
+            b.update_person(
+                m.malte,
+                "Malte",
+                Person {
+                    other_method: Some("PayPal: malte@example.invalid".into()),
+                    ..Person::default()
                 },
             )?;
             b.add_cost_centre("Workshop")?;
@@ -340,7 +351,7 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let iban = book.person(anna).unwrap().iban.as_ref().unwrap();
     assert_eq!(iban.as_str(), "DE89370400440532013000");
 
-    assert_eq!(store.change_log(10_000).unwrap().len(), 103);
+    assert_eq!(store.change_log(10_000).unwrap().len(), 104);
 
     assert_eq!(book.attachments().count(), 11);
     let receipts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/receipts");

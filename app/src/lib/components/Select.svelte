@@ -14,7 +14,7 @@
 		/** The accessible name when there is no visible label. */
 		name?: string;
 		value: V;
-		options: { value: V; label: string; group?: string }[];
+		options: { value: V; label: string; group?: string; disabled?: boolean }[];
 		hint?: import('svelte').Snippet;
 		onchange: (value: V) => void;
 	} = $props();
@@ -41,10 +41,14 @@
 		{#each groups as g (g.group)}
 			{#if g.group}
 				<optgroup label={g.group}>
-					{#each g.options as o (o.value)}<option value={String(o.value)}>{o.label}</option>{/each}
+					{#each g.options as o (o.value)}<option value={String(o.value)} disabled={o.disabled}
+							>{o.label}</option
+						>{/each}
 				</optgroup>
 			{:else}
-				{#each g.options as o (o.value)}<option value={String(o.value)}>{o.label}</option>{/each}
+				{#each g.options as o (o.value)}<option value={String(o.value)} disabled={o.disabled}
+						>{o.label}</option
+					>{/each}
 			{/if}
 		{/each}
 	</select>

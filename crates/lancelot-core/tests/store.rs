@@ -37,6 +37,27 @@ fn raw(path: &Path) -> Connection {
 }
 
 #[test]
+fn the_currency_and_the_other_method_are_kept_in_the_file() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("dollars.lancelot");
+    let mut in_dollars = details();
+    in_dollars.currency = Currency::Usd;
+    let (mut store, _) =
+        Store::create(&path, in_dollars, &two_accounts(), StoreOptions::default()).unwrap();
+    let cash = Person {
+        other_method: Some("Cash".into()),
+        ..Person::default()
+    };
+    let anna = store.change(|b| b.add_person("Anna", cash)).unwrap();
+    drop(store);
+    let (reopened, report) = open(&path);
+    assert!(report.is_clean());
+    assert_eq!(reopened.book().event().details.currency, Currency::Usd);
+    let person = reopened.book().person(anna).unwrap();
+    assert_eq!(person.other_method.as_deref(), Some("Cash"));
+}
+
+#[test]
 fn a_new_file_reopens_as_the_same_book() {
     let dir = TempDir::new().unwrap();
     let (store, path) = create(&dir);
@@ -654,7 +675,7 @@ fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
     let verein = asset(store.book(), "Verein account");
 
     let n = store
-        .change(|book| book.mark_payouts_paid(verein, june(20)))
+        .change(|book| book.mark_payouts_paid(verein, june(20), &[m.anna, m.malte]))
         .unwrap();
     assert_eq!(n, 2);
     let l = store.book().ledger();

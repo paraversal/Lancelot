@@ -32,6 +32,7 @@
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import Receipts from './Receipts.svelte';
 	import { formatAmount } from '#lib/format.ts';
+	import { counterparties } from '#lib/ledger.ts';
 	import { formIn, formOut } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -698,6 +699,7 @@
 							<TextField
 								label="Counterparty"
 								value={counterparty}
+								suggestions={counterparties(snapshot.txns)}
 								oninput={(t) => (counterparty = t.trim() || null)}
 								oncommit={(v) => (counterparty = v)}
 							/>

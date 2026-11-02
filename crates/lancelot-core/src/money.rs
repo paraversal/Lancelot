@@ -1,4 +1,4 @@
-//! Money as integer cents, and the rounding and splitting rules (R-COR-1, R-COR-3).
+//! Money as integer cents, the currencies, and the rounding and splitting rules (R-COR-1, R-COR-3).
 //!
 //! There is no floating point anywhere in this module. Every operation that could overflow
 //! returns a [`MoneyError`] instead of wrapping.
@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ts_rs::TS;
 
-/// An amount in euro cents. Negative values are allowed; the meaning of the sign depends on
-/// where the amount is used (see `docs/technical-design.md`, §3.1).
+/// An amount in the smallest unit of the event's currency. Every supported [`Currency`] has 100
+/// of them to the main unit. Negative values are allowed; the meaning of the sign depends on where
+/// the amount is used (see `docs/technical-design.md`, §3.1).
 ///
 /// The absolute value never exceeds [`MAX_AMOUNT`].
 #[derive(
@@ -18,11 +19,38 @@ use ts_rs::TS;
 #[serde(try_from = "i64", into = "i64")]
 pub struct Cents(#[ts(type = "number")] i64);
 
-/// The largest absolute amount Lancelot accepts: 10 billion euros.
+/// The largest absolute amount Lancelot accepts: 10 billion of the main unit.
 ///
 /// Far beyond any event, and far below both `i64::MAX` and the 2⁵³ that a JavaScript number
 /// can hold exactly, so cents survive the trip to the UI.
 pub const MAX_AMOUNT: Cents = Cents(1_000_000_000_000);
+
+/// The currency of an event, by its ISO 4217 code (R-COR-7). The arithmetic doesn't depend on it.
+///
+/// Supporting another one with two decimals takes a line here and its symbol in `format.ts`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Currency {
+    #[default]
+    Eur,
+    Usd,
+    Gbp,
+    Chf,
+}
+
+impl Currency {
+    pub const ALL: [Currency; 4] = [Currency::Eur, Currency::Usd, Currency::Gbp, Currency::Chf];
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            Currency::Eur => "€",
+            Currency::Usd => "$",
+            Currency::Gbp => "£",
+            Currency::Chf => "CHF",
+        }
+    }
+}
 
 /// One percent in basis points.
 pub const BP_PER_PERCENT: u32 = 100;

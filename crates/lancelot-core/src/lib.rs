@@ -49,7 +49,7 @@ pub use model::{
     OpenItem, Origin, Person, PluginRecordId, Reconciliation, ReconciliationId, Role, TierId, Txn,
     TxnId, TxnKind,
 };
-pub use money::{Cents, MoneyError};
+pub use money::{Cents, Currency, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
 pub use plugin::{PluginChange, PluginRecord, PluginScope};
 pub use sales::{Profitability, SalesPoint, TierBreakEven, TierSales};

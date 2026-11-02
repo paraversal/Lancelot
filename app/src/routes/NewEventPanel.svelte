@@ -4,11 +4,14 @@
 	import { api, errorMessage } from '#lib/api/index.ts';
 	import { chooseEventFile, chooseNewEventFile } from '#lib/api/dialogs.ts';
 	import type { AssetType } from '#lib/api/generated/AssetType.ts';
+	import type { Currency } from '#lib/api/generated/Currency.ts';
 	import type { TemplateSummary } from '#lib/api/generated/TemplateSummary.ts';
 	import Button from '#lib/components/Button.svelte';
 	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
+	import Select from '#lib/components/Select.svelte';
+	import { CURRENCY_OPTIONS, currencyLabel } from '#lib/currencies.ts';
 	import TextField from '#lib/components/TextField.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -18,6 +21,7 @@
 	let startsOn = $state<string | null>(null);
 	let endsOn = $state<string | null>(null);
 	let location = $state<string | null>(null);
+	let currency = $state<Currency>('EUR');
 	let template = $state<{ path: string; summary: TemplateSummary } | null>(null);
 	let error = $state<string | null>(null);
 	let startsInvalid = $state(false);
@@ -46,7 +50,17 @@
 	}
 
 	const values = () =>
-		JSON.stringify([name, startsOn, startsInvalid, endsOn, endsInvalid, location, template, rows]);
+		JSON.stringify([
+			name,
+			startsOn,
+			startsInvalid,
+			endsOn,
+			endsInvalid,
+			location,
+			currency,
+			template,
+			rows
+		]);
 	const clean = values();
 
 	const counted = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -72,7 +86,7 @@
 		try {
 			const opened = await api.createEvent(
 				path,
-				{ name, startsOn, endsOn, location, notes: null },
+				{ name, currency, startsOn, endsOn, location, notes: null },
 				accounts,
 				template?.path ?? null
 			);
@@ -116,6 +130,23 @@
 		oninput={(t) => (location = t.trim() || null)}
 		oncommit={(v) => (location = v)}
 	/>
+	{#if template}
+		<div class="template">
+			<span class="form-label">Currency</span>
+			<span data-testid="template-currency"
+				>{currencyLabel(template.summary.currency)}, from the template</span
+			>
+		</div>
+	{:else}
+		<Select
+			label="Currency"
+			value={currency as string}
+			options={CURRENCY_OPTIONS}
+			onchange={(v) => (currency = v as Currency)}
+		>
+			{#snippet hint()}Can't be changed once the event exists.{/snippet}
+		</Select>
+	{/if}
 	<div class="template">
 		<span class="form-label">Template</span>
 		{#if template}

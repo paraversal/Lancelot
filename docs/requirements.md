@@ -94,7 +94,7 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 ### 5.1 Event
 
-- **R-EVT-1** Create an event: name, date range, location, notes.
+- **R-EVT-1** Create an event: name, currency, date range, location, notes. The currency is fixed from then on.
 - **R-EVT-2** An event is either **open** or **closed**. A closed event is read-only. Closing (R-SET-7) and reopening are explicit actions and are recorded in the change log. There are no other states: the dates show where an event stands.
 - **R-EVT-3** Create a new event from an existing one as a template. This copies accounts, categories, cost centres, budget lines and persons, but no transactions.
 - **R-EVT-4** Event settings include the **default reimbursement account** (initially the first bank account, or else the first account).
@@ -182,12 +182,12 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 ### 5.7 Persons
 
-- **R-PER-1** Per event: name, account holder, IBAN, BIC (optional), contact, notes.
+- **R-PER-1** Per event: name, reimbursement method, contact, notes. The method is a bank transfer (account holder, IBAN, optional BIC) or another way, in free text, such as a PayPal address or cash.
 - **R-PER-2** Validate the IBAN checksum and format on entry.
 - **R-PER-3** **Person overview:** per person, the total advanced, total money held, payments made (reimbursements and repayments) and the net balance, with a drill-down to each underlying transaction and its receipts.
-- **R-PER-4** **Payout list** for the Verein's treasurer, exported as PDF and CSV. It includes every person with a positive net balance: account holder, IBAN, net amount, a suggested payment reference, and the itemised advances and held money as an optional appendix.
+- **R-PER-4** **Payout list** for the Verein's treasurer, exported as PDF and CSV. It includes every person with a positive net balance: reimbursement method, net amount, for a bank transfer the account holder and a suggested payment reference, and the itemised advances and held money as an optional appendix.
 - **R-PER-7** A **repayment list** of persons with a negative net balance (they owe the event), showing the amount and the target account (default: the Verein account).
-- **R-PER-5** After the payout list has been paid, the user can record all of its reimbursements in one action.
+- **R-PER-5** After the payout list has been paid, the user can record the reimbursements of the people they tick in one action, from one account. Bank transfers start ticked. Someone with no method can't be included.
 - **R-PER-6** Optional, later: export the payout list as SEPA pain.001 XML for batch upload.
 
 ### 5.8 Cost centres
@@ -228,7 +228,7 @@ The plugin is called **Stock and sales**. It is optional: Settings → Plugins s
 - **R-COR-4** All balances and reports are derived from transactions. No cached totals unless they are verified on load.
 - **R-COR-5** An **integrity check** runs on every open and save, and on demand: every transaction balances, no line points to a missing account, and attachments are intact (by hash). Failures are shown prominently. A person who was reimbursed or repaid past a zero balance is a warning, not a failure, because corrections happen.
 - **R-COR-6** All calculation logic lives in a single core module with extensive unit tests and property-based tests (e.g. "for any sequence of valid transactions, the sum of all account balances is 0").
-- **R-COR-7** Single currency: EUR.
+- **R-COR-7** One currency per event, with no conversion: EUR, USD, GBP or CHF. Amounts are whole numbers of the smallest unit.
 
 ## 7. Non-functional requirements
 

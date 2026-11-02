@@ -55,6 +55,53 @@ async function type(input: HTMLElement, text: string) {
 	await settle();
 }
 
+describe('TextField with suggestions', () => {
+	const suggestions = ['Hoffmann', 'Metro', 'Hofladen'];
+	const open = async (text: string) => {
+		const oncommit = vi.fn();
+		render(TextField, { label: 'Counterparty', value: null, suggestions, oncommit });
+		const input = screen.getByLabelText('Counterparty');
+		await fireEvent.focus(input);
+		await fireEvent.input(input, { target: { value: text } });
+		return { input, oncommit };
+	};
+	const options = () => screen.queryAllByRole('option').map((o) => o.textContent?.trim());
+
+	it('offers what matches what is typed', async () => {
+		await open('hof');
+		expect(options()).toEqual(['Hoffmann', 'Hofladen']);
+	});
+
+	it('picks one by arrow and Enter', async () => {
+		const { input, oncommit } = await open('hof');
+		await fireEvent.keyDown(input, { key: 'ArrowDown' });
+		await fireEvent.keyDown(input, { key: 'ArrowDown' });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+		expect(oncommit).toHaveBeenCalledWith('Hofladen');
+		expect(options()).toEqual([]);
+	});
+
+	it('picks one by clicking, without committing what was half typed', async () => {
+		const { oncommit } = await open('hof');
+		await fireEvent.mouseDown(screen.getByRole('option', { name: 'Hoffmann' }));
+		expect(oncommit.mock.calls).toEqual([['Hoffmann']]);
+	});
+
+	it('keeps a new name, and Esc only closes the list', async () => {
+		const { input, oncommit } = await open('Ho');
+		await fireEvent.keyDown(input, { key: 'Escape' });
+		expect(options()).toEqual([]);
+		expect((input as HTMLInputElement).value).toBe('Ho');
+		await fireEvent.blur(input);
+		expect(oncommit).toHaveBeenCalledWith('Ho');
+	});
+
+	it('has nothing to offer for an exact match', async () => {
+		await open('metro');
+		expect(options()).toEqual([]);
+	});
+});
+
 describe('AmountField', () => {
 	it('previews what was typed and commits it', async () => {
 		const oncommit = vi.fn();

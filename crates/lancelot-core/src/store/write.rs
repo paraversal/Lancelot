@@ -217,13 +217,14 @@ pub(crate) fn persist<'a>(
         |b| b.persons().map(|(a, p)| (a.id.0, p)),
         |id, p| {
             conn.execute(
-                "INSERT OR REPLACE INTO person (account_id, holder, iban, bic, contact, notes)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT OR REPLACE INTO person (account_id, holder, iban, bic, other_method, contact, notes)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     id,
                     p.holder,
                     p.iban.as_ref().map(|i| i.as_str()),
                     p.bic,
+                    p.other_method,
                     p.contact,
                     p.notes
                 ],
@@ -241,15 +242,16 @@ pub(crate) fn persist<'a>(
         conn.execute(
             "INSERT INTO event (id, name, starts_on, ends_on, location, notes, closed_at,
                                 default_reimbursement_account_id, closing_overrides,
-                                tickets_enabled, ticket_account_id)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                                tickets_enabled, ticket_account_id, currency)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT (id) DO UPDATE SET
                name = excluded.name, starts_on = excluded.starts_on, ends_on = excluded.ends_on,
                location = excluded.location, notes = excluded.notes, closed_at = excluded.closed_at,
                default_reimbursement_account_id = excluded.default_reimbursement_account_id,
                closing_overrides = excluded.closing_overrides,
                tickets_enabled = excluded.tickets_enabled,
-               ticket_account_id = excluded.ticket_account_id",
+               ticket_account_id = excluded.ticket_account_id,
+               currency = excluded.currency",
             params![
                 d.name,
                 d.starts_on.map(date_text),
@@ -261,6 +263,7 @@ pub(crate) fn persist<'a>(
                 serde_json::to_string(&event.closing_overrides)?,
                 tickets.enabled,
                 tickets.account.map(|a| a.0),
+                enum_text(&d.currency)?,
             ],
         )?;
         match before.map(|b| b.event()) {

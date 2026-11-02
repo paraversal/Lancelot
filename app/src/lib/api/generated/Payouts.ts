@@ -9,6 +9,6 @@ export type Payouts = {
  */
 payouts: Array<PayoutRow>, payoutTotal: Cents, 
 /**
- * What "Mark as paid" records: the payouts that have an IBAN.
+ * What "Mark as paid" can record: the payouts that have a reimbursement method.
  */
 payableTotal: Cents, repayments: Array<RepaymentRow>, repaymentTotal: Cents, };
