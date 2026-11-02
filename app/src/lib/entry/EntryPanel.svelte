@@ -85,6 +85,8 @@
 	const elsewhere = $derived(!!txn && (txn.kind === 'opening' || !txn.entry));
 	const locked = $derived(session.closed || origin.type !== 'manual' || elsewhere);
 	const byId = $derived(new Map(snapshot.accounts.map((a) => [a.id, a])));
+	// A saved settle stands for money that has moved, whether Mark as paid wrote it or a person did.
+	const paid = $derived(txn?.entry?.type === 'settle' && !locked);
 
 	// --- state, filled from the transaction being edited --------------------------------
 	let kind = $state<Kind>('expense');
@@ -471,6 +473,12 @@
 				<!-- A closed event shows its entries as they are (R-EVT-2). Its receipts stay outside,
 				     so they can still be previewed. -->
 				<fieldset class="plain" disabled={locked}>
+					{#if paid}
+						<p class="paid">
+							<Icon name="warn" size={14} />This records a payment that was already made. Changing
+							it corrects the record, not the transfer.
+						</p>
+					{/if}
 					{#if kind === 'settle'}
 						<ChoiceField
 							label="Person"
@@ -790,6 +798,18 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--color-ink-muted);
+	}
+
+	.paid {
+		display: flex;
+		gap: 6px;
+		margin: 0;
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+	}
+
+	.paid :global(svg) {
+		color: var(--color-attention);
 	}
 
 	.labelled,

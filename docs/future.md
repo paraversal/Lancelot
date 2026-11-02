@@ -76,7 +76,7 @@ A new form is one `Entry` variant, with no change to the load path. Candidates, 
 
 Mark as paid (R-PER-5) writes ordinary settles, so nothing tells them apart from one typed by hand, and they can be edited like any other entry (R-TX-6). That stays: a settle records a transfer that already happened, and it has to be correctable when the record is wrong. The change log keeps every edit, and the payout list follows the new balance.
 
-The remaining risk is an accidental edit. If that turns out to happen, the entry can say so rather than lock: "Recorded by Mark as paid on 13.06. Changing this won't change the bank transfer." It needs a new `Origin` that remembers where the entry came from, which is a change to the file format.
+To guard against an accidental edit, every saved settle says that changing it corrects the record, not the transfer. If that turns out to be too vague, the entry can name its source: "Recorded by Mark as paid on 13.06." It needs a new `Origin` that remembers where the entry came from, which is a change to the file format.
 
 ## Architectural choices to revisit
 

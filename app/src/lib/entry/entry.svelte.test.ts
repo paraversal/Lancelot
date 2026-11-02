@@ -128,6 +128,36 @@ describe('A settle', () => {
 		});
 		expect(screen.getByText('Malte is still owed 15,00 €')).toBeTruthy();
 	});
+
+	describe('saying it records a payment', () => {
+		const note = () => screen.queryByText(/This records a payment that was already made/);
+
+		it('does for a saved one', () => {
+			render(EntryPanel, { ...props, txn: saved('Reimbursement Clara') });
+			expect(note()).toBeTruthy();
+		});
+
+		it('does not for a new one', () => {
+			render(EntryPanel, { ...props, settle: person('Anna') });
+			expect(note()).toBeNull();
+		});
+
+		it('does not for another kind of entry', () => {
+			render(EntryPanel, {
+				...props,
+				txn: snapshot.txns.find((t) => t.entry?.type === 'expense')!
+			});
+			expect(note()).toBeNull();
+		});
+
+		it('does not once the event is closed', () => {
+			const closed = structuredClone(snapshot);
+			closed.event.closedAt = '2026-06-20T12:00:00Z';
+			session.update({ ...session.event!, snapshot: closed, revision: Date.now() });
+			render(EntryPanel, { ...props, txn: saved('Reimbursement Clara') });
+			expect(note()).toBeNull();
+		});
+	});
 });
 
 describe('Esc', () => {
