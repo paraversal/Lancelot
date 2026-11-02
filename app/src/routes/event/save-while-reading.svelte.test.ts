@@ -472,6 +472,24 @@ describe('Mark as paid', () => {
 		expect(api.markPayoutsPaid.mock.calls[0][1]).toBe('2026-07-01');
 	});
 
+	it('records who is ticked: bank transfers from the start, other methods by choice', async () => {
+		const next = structuredClone(snapshot);
+		const [anna, malte] = next.payouts.payouts;
+		anna.iban = 'DE89370400440532013000';
+		malte.otherMethod = 'PayPal: malte@example.invalid';
+		session.update({ ...session.event!, snapshot: next });
+		render(MarkPaidPanel, { onclose: () => {} });
+
+		const box = (name: string) => screen.getByRole('checkbox', { name: new RegExp(name) });
+		expect((box('Anna') as HTMLInputElement).checked).toBe(true);
+		expect((box('Malte') as HTMLInputElement).checked).toBe(false);
+		await fireEvent.click(box('Anna'));
+		await fireEvent.click(box('Malte'));
+		await click();
+		await settle();
+		expect(api.markPayoutsPaid.mock.calls[0][2]).toEqual([malte.person]);
+	});
+
 	it('does not pay on the old date when the new one cannot be read', async () => {
 		open();
 		await typeUnreadableDate(screen.getByLabelText('Date'));
@@ -607,6 +625,7 @@ describe('The new event panel', () => {
 		leaving.resolve({ date: '2026-07-01' });
 		await settle();
 		expect(api.createEvent.mock.calls[0][1].startsOn).toBe('2026-07-01');
+		expect(api.createEvent.mock.calls[0][1].currency).toBe('EUR');
 	});
 
 	it('does not create an event without the date it could not read', async () => {

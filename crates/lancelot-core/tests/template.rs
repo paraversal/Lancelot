@@ -10,6 +10,7 @@ use tempfile::TempDir;
 
 fn details(name: &str) -> EventDetails {
     EventDetails {
+        currency: Default::default(),
         name: name.into(),
         starts_on: None,
         ends_on: None,
@@ -143,6 +144,38 @@ fn the_new_event_books_like_any_other() {
     );
     assert!(book.txn(saved).is_some());
     assert_eq!(book.ledger().balance(verein), eur("-80"));
+}
+
+#[test]
+fn a_template_brings_its_currency() {
+    let mut source_details = details("Sommerfest 2026");
+    source_details.currency = Currency::Chf;
+    let source = Book::new(source_details, &two_accounts()).unwrap();
+    let book = Book::from_template(&source, details("Sommerfest 2027")).unwrap();
+    assert_eq!(book.event().details.currency, Currency::Chf);
+}
+
+#[test]
+fn a_budget_stays_in_its_currency() {
+    let mut source_details = details("In francs");
+    source_details.currency = Currency::Chf;
+    let mut source = Book::new(source_details, &two_accounts()).unwrap();
+    source.add_person("Anna", Person::default()).unwrap();
+    let mut book = new_book();
+    let all = CopyChoice {
+        persons: true,
+        budget: true,
+    };
+    assert_eq!(
+        book.copy_from(&source, all),
+        Err(DomainError::OtherCurrency)
+    );
+    assert_eq!(book.persons().count(), 0);
+    let people = CopyChoice {
+        persons: true,
+        budget: false,
+    };
+    assert_eq!(book.copy_from(&source, people).unwrap().persons_added, 1);
 }
 
 #[test]

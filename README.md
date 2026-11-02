@@ -2,6 +2,7 @@
 
 A local desktop app for settling volunteer-run events: receipts, advances, reimbursements, tickets and drinks, in one file per event.
 
+- [User manual](docs/manual/index.html)
 - [Features](docs/features.md)
 - [Requirements](docs/requirements.md)
 - [Roadmap](docs/roadmap.md)
@@ -39,5 +40,7 @@ scripts/check.sh
 ```
 
 Full app builds for macOS, Windows and Linux run weekly and on demand (`.github/workflows/build.yml`).
+
+The [user manual](docs/manual/index.html) is a static page. To retake its screenshots with the bridge and UI running, run `pnpm manual:screenshots` in `app` (details at the top of `app/scripts/manual-screenshots.mjs`).
 
 `app/src/lib/styles/tokens.css` is copied from `docs/design/tokens.css` with `pnpm tokens`. Do not edit the copy.

@@ -32,7 +32,7 @@ Status: v0.3. It implements [requirements v0.13](requirements.md) and follows th
 ### 2.1 Representation
 
 - `Cents(i64)` is a newtype with `checked_add`, `checked_sub` and `checked_mul(i64)`. An overflow is a `DomainError::Overflow`, never a wrap.
-- It crosses the IPC boundary as a JSON number. All plausible values are far below 2⁵³, and the core rejects any amount above `MAX_AMOUNT = 10¹²` cents (10 billion €).
+- It crosses the IPC boundary as a JSON number. All plausible values are far below 2⁵³, and the core rejects any amount above `MAX_AMOUNT = 10¹²` cents (10 billion of the main unit).
 
 ### 2.2 Rounding and splitting (R-COR-3)
 

@@ -13,13 +13,17 @@ Today tickets come from a sheet or a data source, each a plugin. Other groups ma
 | Rows with no order ID | The core requires one. Conflicts are matched by (order ID, tier), so without it a removal cannot be traced to an order. Making it optional means turning conflict detection off for that event. |
 | Totals per tier only  | No orders at all, so no conflicts. Either manual sales cover it already, or a small form sets a count per tier.                                                                                 |
 
-## Currencies other than the euro
+## More currencies
 
-Everything is in euros today, written into `format_amount`, its mirror in `format.ts` and the amount parser's handling of `€`, and into a few labels. The arithmetic doesn't care: `Cents` is a whole number of the smallest unit.
+An event has one currency, set when it is created (R-COR-7). The core supports EUR, USD, GBP and CHF, and the New event list shows the other ISO codes greyed out. Another currency with two decimals takes a line in `Currency` and its symbol in `format.ts`. The arithmetic doesn't care: `Cents` is a whole number of the smallest unit.
 
-The way in is a currency per event, set when it is created and never changed, since one event is one isolated world. A currency needs a symbol, its position and a number of decimals. Two decimals cover the euro, the dollar, the pound and most others, and a base-10 limit keeps anything else out. A currency with none or three decimals, such as the yen or the Kuwaiti dinar, means `Cents` has to stop assuming two in formatting and parsing, so it is the first real test. Payout lists assume IBANs, so they need a look too, and converting between currencies stays out: an event has one.
+A currency with none or three decimals, such as the yen or the Kuwaiti dinar, means formatting and the amount parser have to stop assuming two, including how they read an ambiguous `1.234`, so it is the first real test. Converting between currencies stays out. The payment reference on a bank transfer is German whatever the currency, which translating the app would cover.
 
 The Cash box count below is the first plugin that would need the currency's denominations, so the two can share a list.
+
+## Payouts as a plugin
+
+The payout list could become an optional plugin, listing each person's method whatever it is. Reimbursement methods are in the core for now: a bank transfer or free text.
 
 ## Plugins
 

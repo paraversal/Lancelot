@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use lancelot_core::{AccountDraft, Book, DomainError, Person, TicketBatch};
+use lancelot_core::{AccountDraft, AccountId, Book, DomainError, Person, TicketBatch};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -257,7 +257,8 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "payouts_mark_paid" => {
             let account = arg(a, "account")?;
             let date = date(a)?;
-            json(s.change(|b| b.mark_payouts_paid(account, date)))
+            let people: Vec<AccountId> = arg(a, "people")?;
+            json(s.change(|b| b.mark_payouts_paid(account, date, &people)))
         }
 
         _ => Err(ApiError::new(

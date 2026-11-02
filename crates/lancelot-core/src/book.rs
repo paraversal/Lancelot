@@ -1045,7 +1045,11 @@ impl Book {
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), DomainError> {
         self.change(|book| {
-            book.event.details = clean_details(details)?;
+            let currency = book.event.details.currency;
+            book.event.details = EventDetails {
+                currency,
+                ..clean_details(details)?
+            };
             Ok(())
         })
     }
@@ -1108,22 +1112,32 @@ impl Book {
         Ok(())
     }
 
-    /// Records every reimbursement on the payout list that has an IBAN, from `account` on
-    /// `date` (R-PER-5). Returns how many were recorded.
+    /// Records the reimbursements of `people` on the payout list, from `account` on `date`
+    /// (R-PER-5). Someone with no reimbursement method can't be recorded, so they are skipped.
+    /// Returns how many were recorded.
     pub fn mark_payouts_paid(
         &mut self,
         account: AccountId,
         date: Date,
+        people: &[AccountId],
     ) -> Result<usize, DomainError> {
         let list = self.payouts.clone();
         self.change(|b| {
             let mut n = 0;
-            for p in list.payouts.iter().filter(|p| p.iban.is_some()) {
+            let chosen = list
+                .payouts
+                .iter()
+                .filter(|p| p.payable() && people.contains(&p.person));
+            for p in chosen {
                 let draft = TxnDraft {
                     date,
                     description: "Reimbursement".into(),
                     counterparty: None,
-                    notes: Some(p.reference.clone()),
+                    notes: Some(
+                        p.other_method
+                            .clone()
+                            .unwrap_or_else(|| p.reference.clone()),
+                    ),
                     entry: Entry::Settle {
                         person: p.person,
                         account,
@@ -1472,6 +1486,7 @@ fn clean_person(p: Person) -> Result<Person, DomainError> {
         holder: clean(p.holder),
         iban: p.iban,
         bic,
+        other_method: clean(p.other_method),
         contact: clean(p.contact),
         notes: clean(p.notes),
     })

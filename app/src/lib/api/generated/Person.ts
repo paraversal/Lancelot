@@ -4,4 +4,9 @@ import type { Iban } from "./Iban";
 /**
  * Bank and contact details of a person. The person's name is the name of their account.
  */
-export type Person = { holder: string | null, iban: Iban | null, bic: string | null, contact: string | null, notes: string | null, };
+export type Person = { holder: string | null, iban: Iban | null, bic: string | null, 
+/**
+ * How they are reimbursed when it isn't a bank transfer, such as a PayPal address or cash.
+ * While set, it applies instead of the bank details, which stay for later.
+ */
+otherMethod: string | null, contact: string | null, notes: string | null, };

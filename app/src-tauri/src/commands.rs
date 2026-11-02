@@ -626,9 +626,12 @@ pub async fn payouts_mark_paid(
     state: State<'_, AppState>,
     account: AccountId,
     date: String,
+    people: Vec<AccountId>,
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.change(|b| b.mark_payouts_paid(account, date)))
+    with(&state, |s| {
+        s.change(|b| b.mark_payouts_paid(account, date, &people))
+    })
 }
 
 /// Opens the print dialog for the window, e.g. to save the payout list as PDF.

@@ -100,8 +100,8 @@
 					>
 						<span class="name">
 							{p.name}
-							{#if p.summary.net > 0 && !p.iban}
-								<span class="missing"><Icon name="warn" size={14} />IBAN</span>
+							{#if p.summary.net > 0 && !p.iban && !p.otherMethod}
+								<span class="missing"><Icon name="warn" size={14} />No method</span>
 							{/if}
 						</span>
 						<span class="num">{cell(p.summary.advanced)}</span>
@@ -234,8 +234,10 @@
 
 	.missing {
 		display: inline-flex;
+		flex: none;
 		align-items: center;
 		gap: 4px;
+		white-space: nowrap;
 		font-size: var(--type-xs);
 		font-weight: 600;
 		color: var(--color-attention);

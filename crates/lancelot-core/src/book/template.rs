@@ -11,6 +11,7 @@ use crate::error::DomainError;
 use crate::model::{
     Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentreId, Event, EventDetails,
 };
+use crate::money::Currency;
 use crate::plugin::PluginScope;
 
 /// What to copy into an open event.
@@ -32,6 +33,8 @@ pub struct CopySummary {
     pub budget_lines_skipped: u32,
     pub categories_added: u32,
     pub cost_centres_added: u32,
+    /// A budget in another currency can't be copied: its amounts would mean something else.
+    pub source_currency: Currency,
 }
 
 /// What a new event gets from a template.
@@ -40,6 +43,7 @@ pub struct CopySummary {
 #[serde(rename_all = "camelCase")]
 pub struct TemplateSummary {
     pub name: String,
+    pub currency: Currency,
     pub accounts: Vec<String>,
     pub categories: u32,
     pub persons: u32,
@@ -55,7 +59,11 @@ impl Book {
         let details = clean_details(details)?;
         let mut book = source.clone();
         book.event = Event {
-            details,
+            // The prices and budget it brings along are in the source's currency.
+            details: EventDetails {
+                currency: source.event.details.currency,
+                ..details
+            },
             closed_at: None,
             closing_overrides: Vec::new(),
             ..source.event.clone()
@@ -81,6 +89,7 @@ impl Book {
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         TemplateSummary {
             name: self.event.details.name.clone(),
+            currency: self.event.details.currency,
             accounts: self
                 .accounts
                 .values()
@@ -101,14 +110,22 @@ impl Book {
 
     /// Copies persons and budget lines from another event (R-ISO-4). It never overwrites: a person
     /// with the same name and a budget line with the same category and description stay as they
-    /// are. A category or cost centre the budget needs is created when it is missing.
+    /// are. A category or cost centre the budget needs is created when it is missing. A budget
+    /// can only come from an event in the same currency.
     pub fn copy_from(
         &mut self,
         source: &Book,
         choice: CopyChoice,
     ) -> Result<CopySummary, DomainError> {
+        let source_currency = source.event.details.currency;
+        if choice.budget && source_currency != self.event.details.currency {
+            return Err(DomainError::OtherCurrency);
+        }
         self.change(|book| {
-            let mut summary = CopySummary::default();
+            let mut summary = CopySummary {
+                source_currency,
+                ..CopySummary::default()
+            };
             if choice.persons {
                 book.copy_persons(source, &mut summary);
             }

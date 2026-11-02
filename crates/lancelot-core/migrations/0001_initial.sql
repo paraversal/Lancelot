@@ -26,6 +26,7 @@ CREATE TABLE account (
 CREATE TABLE event (                   -- exactly one row
   id          INTEGER PRIMARY KEY CHECK (id = 1),
   name        TEXT NOT NULL,
+  currency    TEXT NOT NULL,           -- ISO 4217; set when the event is created and never changed
   starts_on   TEXT,                    -- ISO date
   ends_on     TEXT,
   location    TEXT,
@@ -42,6 +43,7 @@ CREATE TABLE person (                  -- 1:1 extension of an account of kind 'p
   holder     TEXT,
   iban       TEXT,                     -- normalised: no spaces, upper case
   bic        TEXT,
+  other_method TEXT,                   -- how they are reimbursed when it isn't a bank transfer
   contact    TEXT,
   notes      TEXT
 ) STRICT;

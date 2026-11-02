@@ -1,6 +1,7 @@
 {
   "event": {
     "name": "Sommerfest 2026",
+    "currency": "EUR",
     "startsOn": "2026-06-12",
     "endsOn": "2026-06-14",
     "location": null,
@@ -192,6 +193,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -227,6 +229,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -252,6 +255,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -282,6 +286,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -1315,6 +1320,7 @@
         "holder": "Anna",
         "iban": null,
         "bic": null,
+        "otherMethod": null,
         "amount": 21240,
         "reference": "Auslagen Sommerfest 2026 Anna"
       },
@@ -1324,6 +1330,7 @@
         "holder": "Malte",
         "iban": null,
         "bic": null,
+        "otherMethod": null,
         "amount": 11000,
         "reference": "Auslagen Sommerfest 2026 Malte"
       }

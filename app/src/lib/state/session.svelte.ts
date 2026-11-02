@@ -2,6 +2,7 @@
 // OpenEvent, which replaces the previous one wholesale; screens only derive from it.
 import type { AppSettings } from '../api/generated/AppSettings';
 import type { OpenEvent } from '../api/generated/OpenEvent';
+import { setEventCurrency } from '../format';
 
 import type { NumberFormat } from '../api/generated/NumberFormat';
 
@@ -25,6 +26,7 @@ class Session {
 		const current = this.event;
 		if (current && current.path === next.path && next.revision < current.revision) return;
 		if (checked || current?.path !== next.path) this.checkedAt = new Date();
+		setEventCurrency(next.snapshot.event.currency);
 		this.event = next;
 	}
 

@@ -86,20 +86,22 @@
 			{#if list.payouts.length}
 				<div class="row head">
 					<span class="person">Person</span>
-					<span class="iban">IBAN</span>
+					<span class="iban">Reimburse by</span>
 					{#if !panel}<span class="reference">Reference</span>{:else}<span class="grow"></span>{/if}
 					<span class="amount">Amount</span>
 				</div>
 				{#each list.payouts as p (p.person)}
 					<div class="row">
 						<span class="person"><strong>{p.name}</strong><small>{p.holder}</small></span>
-						{#if p.iban}
+						{#if p.otherMethod}
+							<span class="iban other">{p.otherMethod}</span>
+						{:else if p.iban}
 							<span class="iban">{group(p.iban)}</span>
 						{:else}
-							<span class="iban attention"><Icon name="warn" size={14} />No IBAN</span>
+							<span class="iban attention"><Icon name="warn" size={14} />No method</span>
 						{/if}
-						{#if !panel}<span class="reference muted">{p.reference}</span>{:else}<span class="grow"
-							></span>{/if}
+						{#if !panel}<span class="reference muted">{p.otherMethod ? '' : p.reference}</span
+							>{:else}<span class="grow"></span>{/if}
 						<strong class="amount">{formatAmount(p.amount, format)}</strong>
 					</div>
 				{/each}
@@ -185,7 +187,7 @@
 
 		<table class="list">
 			<thead>
-				<tr><th>Person</th><th>Bank</th><th>Reference</th><th class="num">Amount</th></tr>
+				<tr><th>Person</th><th>Reimburse by</th><th>Reference</th><th class="num">Amount</th></tr>
 			</thead>
 			<tbody>
 				{#each list.payouts as p (p.person)}
@@ -195,14 +197,16 @@
 							{#if p.holder !== p.name}<small>{p.holder}</small>{/if}
 						</td>
 						<td>
-							{#if p.iban}
+							{#if p.otherMethod}
+								{p.otherMethod}
+							{:else if p.iban}
 								<span class="iban">{group(p.iban)}</span>
 								{#if p.bic}<small>{p.bic}</small>{/if}
 							{:else}
-								<span class="attention">No IBAN</span>
+								<span class="attention">No method</span>
 							{/if}
 						</td>
-						<td class="reference">{p.reference}</td>
+						<td class="reference">{p.otherMethod ? '' : p.reference}</td>
 						<td class="num"><strong>{formatAmount(p.amount, format)}</strong></td>
 					</tr>
 				{/each}
@@ -331,6 +335,10 @@
 		width: 230px;
 		flex: none;
 		font-size: 13px;
+	}
+
+	.iban.other {
+		overflow-wrap: anywhere;
 	}
 
 	.reference {

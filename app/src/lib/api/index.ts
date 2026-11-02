@@ -249,8 +249,8 @@ export const api = {
 	/** Closes the event (R-SET-7): every open item needs a note in `overrides`. */
 	closeEvent: (overrides: BlockerOverride[]) => call<OpenEvent>('event_close', { overrides }),
 	reopenEvent: () => call<OpenEvent>('event_reopen'),
-	markPayoutsPaid: (account: AccountId, date: string) =>
-		call<OpenEvent>('payouts_mark_paid', { account, date }),
+	markPayoutsPaid: (account: AccountId, date: string, people: AccountId[]) =>
+		call<OpenEvent>('payouts_mark_paid', { account, date, people }),
 	/** The print dialog, e.g. to save the payout list as PDF. */
 	print: async () => (isTauri() ? call<void>('print_window') : window.print())
 };

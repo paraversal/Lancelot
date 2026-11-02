@@ -210,7 +210,7 @@ fn the_payout_list_and_the_repayment_list() {
         [("Anna".into(), eur("212,40")), ("Malte".into(), eur("110"))]
     );
     assert_eq!(list.payout_total, eur("322,40"));
-    // Nobody in the example has an IBAN yet, so nothing is payable.
+    // Nobody in the example has a reimbursement method yet, so nothing is payable.
     assert_eq!(list.payable_total, Cents::ZERO);
     assert_eq!(list.repayments.len(), 1);
     assert_eq!(

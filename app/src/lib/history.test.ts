@@ -148,6 +148,7 @@ describe('historyChanges', () => {
 		const details = {
 			holder: null,
 			iban: null,
+			otherMethod: null,
 			bic: null,
 			contact: 'clara@example.org',
 			notes: null

@@ -28,6 +28,7 @@ fn store_error(e: StoreError) -> ApiError {
 
 fn details(name: &str) -> EventDetails {
     EventDetails {
+        currency: Default::default(),
         name: name.to_owned(),
         starts_on: Some(date!(2026 - 06 - 12)),
         ends_on: Some(date!(2026 - 06 - 14)),

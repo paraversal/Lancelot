@@ -877,6 +877,7 @@ mod tests {
     #[test]
     fn a_fee_category_with_the_name_is_reused() {
         let details = EventDetails {
+            currency: Default::default(),
             name: "E".into(),
             starts_on: None,
             ends_on: None,

@@ -21,7 +21,7 @@
 	import type { Cents } from '../api/generated/Cents';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
 	import type { ParsedSum } from '../api/generated/ParsedSum';
-	import { formatAmount } from '../format';
+	import { formatAmount, formatPlain } from '../format';
 	import Field from './Field.svelte';
 
 	let {
@@ -65,7 +65,7 @@
 	onDestroy(() => (gone = true));
 
 	function canonical(c: Cents | null) {
-		return c === null ? '' : formatAmount(c, format, 'plain').replace(/\s?€/, '').replace('€', '');
+		return c === null ? '' : formatPlain(c, format);
 	}
 
 	// Reset only when the value or format really changed (see TextField).

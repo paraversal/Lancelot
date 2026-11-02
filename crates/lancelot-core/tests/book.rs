@@ -31,6 +31,7 @@ fn new_event_has_default_accounts() {
 #[test]
 fn event_needs_a_name() {
     let details = EventDetails {
+        currency: Default::default(),
         name: "  ".into(),
         starts_on: None,
         ends_on: None,
@@ -146,6 +147,7 @@ fn person_details_are_cleaned_and_checked() {
                 holder: Some(" Anna Example ".into()),
                 iban: Some(iban.clone()),
                 bic: Some("cobadeffxxx".into()),
+                other_method: Some(" ".into()),
                 contact: Some("".into()),
                 notes: None,
             },
@@ -155,6 +157,7 @@ fn person_details_are_cleaned_and_checked() {
     assert_eq!(p.holder.as_deref(), Some("Anna Example"));
     assert_eq!(p.bic.as_deref(), Some("COBADEFFXXX"));
     assert_eq!(p.contact, None);
+    assert_eq!(p.other_method, None);
     assert_eq!(p.iban, Some(iban));
 
     let bad = Person {
@@ -707,9 +710,15 @@ fn marking_payouts_paid_settles_only_those_with_an_iban() {
         };
         book.save_txn(&draft, None).unwrap();
     }
-    assert_eq!(book.mark_payouts_paid(verein, june(20)), Ok(1));
+    // Bob has no method, so asking for Bob too records only Anna.
+    assert_eq!(
+        book.mark_payouts_paid(verein, june(20), &[anna, bob]),
+        Ok(1)
+    );
     assert!(book.ledger().person(anna).unwrap().net.is_zero());
     assert_eq!(book.ledger().person(bob).unwrap().net, eur("20,00"));
+    assert!(!book.payouts().payouts[0].payable());
+    assert_eq!(book.payouts().payable_total, Cents::ZERO);
 }
 
 #[test]
@@ -796,4 +805,81 @@ fn reopening_keeps_the_notes_for_closing_again() {
     book.close(kept.clone(), OffsetDateTime::UNIX_EPOCH)
         .unwrap();
     assert_eq!(book.event().closing_overrides, kept);
+}
+
+#[test]
+fn another_method_applies_instead_of_the_bank_details_and_can_be_marked_paid() {
+    let mut book = new_book();
+    let kitchen = category(&book, AccountKind::Expense, "Kitchen");
+    let verein = book
+        .account_by_name(AccountKind::Asset, "Verein account")
+        .unwrap()
+        .id;
+    let paypal = Person {
+        iban: Some(validate_iban("DE89370400440532013000").unwrap()),
+        bic: Some("COBADEFFXXX".into()),
+        other_method: Some(" PayPal: anna@example.invalid ".into()),
+        ..Person::default()
+    };
+    let anna = book.add_person("Anna", paypal).unwrap();
+    let bank = Person {
+        iban: Some(validate_iban("DE02120300000000202051").unwrap()),
+        ..Person::default()
+    };
+    let bob = book.add_person("Bob", bank).unwrap();
+    for payer in [anna, bob] {
+        let draft = TxnDraft {
+            date: june(13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: Entry::Expense {
+                payer,
+                lines: vec![SplitLine {
+                    account: kitchen,
+                    amount: eur("20,00"),
+                    budget_line: None,
+                    cost_centre: None,
+                }],
+            },
+            total: None,
+        };
+        book.save_txn(&draft, None).unwrap();
+    }
+
+    let row = book.payouts().payouts[0].clone();
+    assert_eq!(row.iban, None);
+    assert_eq!(row.bic, None);
+    assert_eq!(
+        row.other_method.as_deref(),
+        Some("PayPal: anna@example.invalid")
+    );
+    assert_eq!(book.payouts().payable_total, eur("40,00"));
+    let csv = payouts_csv(book.payouts(), NumberFormat::De);
+    assert!(
+        csv.contains("Anna;Anna;;;PayPal: anna@example.invalid;20,00;\r\n"),
+        "{csv}"
+    );
+
+    // Only who was asked for, and the entry says how the money went.
+    assert_eq!(book.mark_payouts_paid(verein, june(20), &[anna]), Ok(1));
+    assert!(book.ledger().person(anna).unwrap().net.is_zero());
+    assert_eq!(book.ledger().person(bob).unwrap().net, eur("20,00"));
+    let settle = book.txns().last().unwrap();
+    assert_eq!(
+        settle.notes.as_deref(),
+        Some("PayPal: anna@example.invalid")
+    );
+}
+
+#[test]
+fn the_currency_is_set_at_creation_and_never_changes() {
+    let mut book = new_book();
+    let mut details = book.event().details.clone();
+    assert_eq!(details.currency, Currency::Eur);
+    details.currency = Currency::Usd;
+    details.location = Some("Elsewhere".into());
+    book.update_event(details).unwrap();
+    assert_eq!(book.event().details.currency, Currency::Eur);
+    assert_eq!(book.event().details.location.as_deref(), Some("Elsewhere"));
 }

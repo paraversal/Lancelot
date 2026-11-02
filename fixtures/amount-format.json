@@ -646,5 +646,61 @@
   "format": "en",
   "sign": "magnitude",
   "text": "€10,000,000,000.00"
+ },
+ {
+  "cents": -123456,
+  "currency": "USD",
+  "format": "de",
+  "sign": "plain",
+  "text": "−1.234,56 $"
+ },
+ {
+  "cents": -123456,
+  "currency": "USD",
+  "format": "en",
+  "sign": "plain",
+  "text": "−$1,234.56"
+ },
+ {
+  "cents": 5,
+  "currency": "USD",
+  "format": "en",
+  "sign": "always",
+  "text": "+$0.05"
+ },
+ {
+  "cents": 123456,
+  "currency": "GBP",
+  "format": "de",
+  "sign": "magnitude",
+  "text": "1.234,56 £"
+ },
+ {
+  "cents": -123456,
+  "currency": "GBP",
+  "format": "en",
+  "sign": "magnitude",
+  "text": "£1,234.56"
+ },
+ {
+  "cents": 123456,
+  "currency": "CHF",
+  "format": "de",
+  "sign": "plain",
+  "text": "1.234,56 CHF"
+ },
+ {
+  "cents": -123456,
+  "currency": "CHF",
+  "format": "en",
+  "sign": "plain",
+  "text": "−CHF 1,234.56"
+ },
+ {
+  "cents": 5,
+  "currency": "CHF",
+  "format": "en",
+  "sign": "always",
+  "text": "+CHF 0.05"
  }
 ]
