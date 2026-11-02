@@ -119,6 +119,13 @@ describe('The stock and sales section', () => {
 		expect(screen.getByRole('option', { name: 'None' })).toBeTruthy();
 	});
 
+	it('asks for the cost per unit without deposit', async () => {
+		open();
+		render(Centre, { centre: drinksCentre() });
+		await fireEvent.click(screen.getByText('Club-Mate 0,5'));
+		expect(screen.getByText('Without deposit, such as Pfand.')).toBeTruthy();
+	});
+
 	it('goes straight on to the invoice after asking for the supplier', async () => {
 		const withoutSupplier = (s: EventSnapshot) => {
 			const record = s.pluginRecords.find((r) => r.key.startsWith('centre:'))!;

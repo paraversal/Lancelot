@@ -171,6 +171,7 @@
 					bind:invalid={costInvalid}
 					oninput={(v) => (cost = v)}
 				/>
+				<span class="hint">Without deposit, such as Pfand.</span>
 				{#if fieldError('cost')}<span class="form-error">{fieldError('cost')}</span>{/if}
 			</div>
 			<div class="form-field">

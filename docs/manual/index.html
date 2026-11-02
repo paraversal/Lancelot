@@ -521,7 +521,7 @@ pnpm tauri build --bundles app</code></pre></li>
 <ol class="steps">
   <li>In <strong>Settings → Plugins → Stock and sales</strong>, click <strong>Set up Drinks</strong>. This creates a Drinks cost centre with the categories Drink donations, Drinks and Deposit.</li>
   <li>Open <strong>Drinks</strong> in the sidebar, and click <strong>Commission</strong> at the top of the section. Enter the <strong>Supplier</strong>, and if you have one, the category that holds a returnable deposit, such as Pfand.</li>
-  <li>Click <strong>+ Product</strong> and enter its <strong>Cost per unit</strong> and <strong>Donation per unit</strong>.</li>
+  <li>Click <strong>+ Product</strong> and enter its <strong>Cost per unit</strong>, without deposit, and its <strong>Donation per unit</strong>.</li>
 </ol>
 <figure>
   <a href="images/drinks.png"><img src="images/drinks.png" width="1280" height="960" loading="lazy" alt="The Drinks page with result, cost and income, and a product table with billed, left over, logged, gap, cost and expected."></a>
@@ -551,7 +551,7 @@ pnpm tauri build --bundles app</code></pre></li>
     </ul>
   </li>
   <li>Enter the donations you collected as normal <strong>Income</strong>, in the Drink donations category.</li>
-  <li>When the supplier's invoice arrives, click <strong>Book invoice</strong>. It opens a filled-in expense form to check and save.</li>
+  <li>When the supplier's invoice arrives, click <strong>Book invoice</strong>. It opens an expense form filled in from your records, so compare the amount with the real invoice. Put any deposit on its own line in the deposit category, then save.</li>
 </ol>
 <figure>
   <a href="images/product.png"><img src="images/product.png" width="1280" height="800" loading="lazy" alt="The product panel for Club-Mate, with cost, donation and the four counts."></a>
@@ -562,7 +562,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <tr><th style="width:24%">Column</th><th>Meaning</th></tr>
   <tr><td><strong>Billed</strong></td><td>Taken minus returned.</td></tr>
   <tr><td><strong>Gap</strong></td><td>Billed, minus left over, minus logged. This can be crew drinks or breakage, so it's no proof of anyone's dishonesty.</td></tr>
-  <tr><td><strong>Cost</strong></td><td>Billed × cost per unit. The total is what the invoice should say.</td></tr>
+  <tr><td><strong>Cost</strong></td><td>Billed × cost per unit. The total is what the invoice should say without deposit.</td></tr>
   <tr><td><strong>Expected</strong></td><td>Logged × donation per unit, shown against what you collected.</td></tr>
   <tr><td><strong>Per drink</strong></td><td>The cost of what's gone, per unit gone. Leftovers don't count.</td></tr>
 </table></div>
