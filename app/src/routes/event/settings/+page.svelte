@@ -534,7 +534,7 @@
 			</section>
 
 			{#if !closed}
-				<section>
+				<section id="copy">
 					<h2>Copy from another event</h2>
 					{#if source}
 						<div class="line">

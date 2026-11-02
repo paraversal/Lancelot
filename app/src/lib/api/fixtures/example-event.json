@@ -1450,55 +1450,64 @@
         "line": 1,
         "estimate": 650000,
         "actual": 652750,
-        "forecast": 652750
+        "forecast": 652750,
+        "fromPlan": 2750
       },
       {
         "line": 2,
         "estimate": 70000,
         "actual": 81250,
-        "forecast": 70000
+        "forecast": 70000,
+        "fromPlan": 0
       },
       {
         "line": 3,
         "estimate": 180000,
         "actual": 180000,
-        "forecast": 180000
+        "forecast": 180000,
+        "fromPlan": 0
       },
       {
         "line": 4,
         "estimate": 110000,
         "actual": 109850,
-        "forecast": 109850
+        "forecast": 109850,
+        "fromPlan": 150
       },
       {
         "line": 5,
         "estimate": 75000,
         "actual": 100150,
-        "forecast": 100150
+        "forecast": 100150,
+        "fromPlan": -25150
       },
       {
         "line": 6,
         "estimate": 42000,
         "actual": 42000,
-        "forecast": 42000
+        "forecast": 42000,
+        "fromPlan": 0
       },
       {
         "line": 7,
         "estimate": 45000,
         "actual": 50000,
-        "forecast": 50000
+        "forecast": 50000,
+        "fromPlan": -5000
       },
       {
         "line": 8,
         "estimate": 22500,
         "actual": 22500,
-        "forecast": 22500
+        "forecast": 22500,
+        "fromPlan": 0
       },
       {
         "line": 9,
         "estimate": 15000,
         "actual": 0,
-        "forecast": 15000
+        "forecast": 15000,
+        "fromPlan": 0
       }
     ],
     "categories": [
@@ -1588,6 +1597,7 @@
       "actual": 202750,
       "forecast": 176500
     },
+    "fromPlan": -54000,
     "costCentres": [
       {
         "costCentre": 1,

@@ -58,7 +58,9 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 - Budget lines as an amount or as quantity × unit price, each of which can be marked complete (R-BUD-1).
 - Plan against actual per line, category and cost centre, and in total, with what isn't budgeted (R-BUD-3).
 - A cautious forecast of the result, on the Budget page and the Overview (R-BUD-4).
-- The Budget page was built before its design, so it may still change to match one.
+- How far the forecast is from the plan, and the three lines furthest from it, each opening the line.
+- A bar per line of actual against estimate, and a forecast that only repeats the estimate is muted.
+- Start a line from its category, and copy from another event while there are no lines yet.
 
 ## Tickets
 
