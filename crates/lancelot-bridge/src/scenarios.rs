@@ -11,7 +11,7 @@ use lancelot_service::api::ApiError;
 use rusqlite::Connection;
 use time::macros::date;
 
-use crate::common::{eur, mock};
+use crate::common::{eur, mock, two_accounts};
 
 /// The start screen with its recent events; nothing open. The state the bridge starts in.
 pub const START: &str = "start";
@@ -37,8 +37,13 @@ fn details(name: &str) -> EventDetails {
 }
 
 fn example(path: &Path, name: &str) -> Result<Store, ApiError> {
-    let (mut store, _) =
-        Store::create(path, details(name), StoreOptions::default()).map_err(store_error)?;
+    let (mut store, _) = Store::create(
+        path,
+        details(name),
+        &two_accounts(),
+        StoreOptions::default(),
+    )
+    .map_err(store_error)?;
     mock::build(&mut store);
     Ok(store)
 }
@@ -138,7 +143,11 @@ pub fn load(service: &mut Service, dir: &Path, scenario: &str) -> Result<Option<
     match scenario {
         START => {}
         "empty" => {
-            service.create_event(&dir.join("neues-fest.lancelot"), details("Neues Fest"))?;
+            service.create_event(
+                &dir.join("neues-fest.lancelot"),
+                details("Neues Fest"),
+                &two_accounts(),
+            )?;
         }
         _ => {
             service.open_event(&example_path)?;

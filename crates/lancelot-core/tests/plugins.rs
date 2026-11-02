@@ -132,7 +132,8 @@ fn records_survive_saving_and_are_logged() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("event.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let change = |changes| move |b: &mut Book| b.apply_plugin_changes("drinks".into(), changes);
 
     store

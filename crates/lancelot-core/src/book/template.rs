@@ -9,7 +9,7 @@ use ts_rs::TS;
 use super::{Book, clean_details};
 use crate::error::DomainError;
 use crate::model::{
-    Account, AccountId, BudgetLine, BudgetLineId, CostCentreId, Event, EventDetails,
+    Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentreId, Event, EventDetails,
 };
 use crate::plugin::PluginScope;
 
@@ -40,6 +40,7 @@ pub struct CopySummary {
 #[serde(rename_all = "camelCase")]
 pub struct TemplateSummary {
     pub name: String,
+    pub accounts: Vec<String>,
     pub categories: u32,
     pub persons: u32,
     pub budget_lines: u32,
@@ -80,6 +81,12 @@ impl Book {
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         TemplateSummary {
             name: self.event.details.name.clone(),
+            accounts: self
+                .accounts
+                .values()
+                .filter(|a| a.kind == AccountKind::Asset)
+                .map(|a| a.name.clone())
+                .collect(),
             categories: count(
                 self.accounts
                     .values()

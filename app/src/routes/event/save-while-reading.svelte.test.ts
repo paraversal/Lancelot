@@ -586,6 +586,7 @@ describe('The new event panel', () => {
 	const open = async () => {
 		render(NewEventPanel, { onclose: () => {} });
 		await type(screen.getByLabelText('Name'), 'Fest');
+		await type(screen.getByLabelText('Account name'), 'Bank');
 		await settle();
 		const from = screen.getByLabelText('From') as HTMLInputElement;
 		from.focus();
@@ -617,6 +618,38 @@ describe('The new event panel', () => {
 		await settle();
 		expect(chooseNewEventFile).not.toHaveBeenCalled();
 		expect(api.createEvent).not.toHaveBeenCalled();
+	});
+
+	it('needs a named account, and leaves empty rows out', async () => {
+		await open();
+		const create = () => screen.getByRole('button', { name: /^Create/ }) as HTMLButtonElement;
+		expect(create().disabled).toBe(false);
+
+		await fireEvent.click(screen.getByRole('button', { name: /Account$/ }));
+		await settle();
+		await click();
+		await settle();
+		await settle();
+		expect(api.createEvent.mock.calls[0][2]).toEqual([{ name: 'Bank', assetType: 'bank' }]);
+
+		const [first] = screen.getAllByLabelText('Account name');
+		await fireEvent.input(first, { target: { value: '  ' } });
+		await settle();
+		expect(create().disabled).toBe(true);
+	});
+
+	it('says when two accounts have the same name, before asking for a file', async () => {
+		await open();
+		await fireEvent.click(screen.getByRole('button', { name: /Account$/ }));
+		await settle();
+		const [, second] = screen.getAllByLabelText('Account name');
+		await fireEvent.input(second, { target: { value: 'BANK' } });
+		await settle();
+		expect(screen.getByText('Two accounts have the same name')).toBeTruthy();
+		await click();
+		await settle();
+		await settle();
+		expect(chooseNewEventFile).not.toHaveBeenCalled();
 	});
 });
 

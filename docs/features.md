@@ -6,7 +6,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 ## Event files
 
-- Create an event with a name, dates, location and notes, and edit them later (R-EVT-1).
+- Create an event with a name, dates, location, notes and its accounts, and edit them later (R-EVT-1).
 - Each event is one `.lancelot` file holding everything, receipts included (R-ISO-1, R-ATT-2, R-NF-4).
 - The start screen lists recent events, with New and Open.
 - A file that is already open elsewhere or damaged says so, instead of failing silently.
@@ -38,7 +38,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 ## Accounts and categories
 
-- Bank and cash accounts, added and renamed in Settings. An account can count net movement only, for one whose real total doesn't matter (R-ACC-1, R-ISO-3).
+- Bank and cash accounts, named when an event is created and added or renamed in Settings. An event always has at least one. An account can count net movement only, for one whose real total doesn't matter (R-ACC-1, R-ISO-3).
 - Income and expense categories, which can name the cost centre their new lines start in (R-ACC-2).
 - Opening and closing counts per account, with the difference shown (R-ISO-3).
 - Statement checkpoints: enter what a statement showed on a date, and any mismatch becomes an open item (R-ACC-4).

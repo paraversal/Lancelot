@@ -21,7 +21,8 @@ fn details() -> EventDetails {
 
 fn create(dir: &TempDir) -> (Store, PathBuf) {
     let path = dir.path().join("sommerfest.lancelot");
-    let (store, report) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    let (store, report) =
+        Store::create(&path, details(), &two_accounts(), StoreOptions::default()).unwrap();
     assert!(report.is_clean(), "{report:?}");
     (store, path)
 }
@@ -160,7 +161,7 @@ fn never_overwrites_an_existing_file() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("notes.lancelot");
     std::fs::write(&path, "important").unwrap();
-    let err = Store::create(&path, details(), StoreOptions::default())
+    let err = Store::create(&path, details(), &two_accounts(), StoreOptions::default())
         .err()
         .unwrap();
     assert_eq!(err.code(), "already_exists");
@@ -476,7 +477,7 @@ fn backups_on_open_after_the_interval_and_pruned() {
     let dir = TempDir::new().unwrap();
     let (now, options, backups) = clock();
     let path = dir.path().join("sommerfest.lancelot");
-    let (mut store, _) = Store::create(&path, details(), options).unwrap();
+    let (mut store, _) = Store::create(&path, details(), &two_accounts(), options).unwrap();
     let uuid = store.event_uuid().to_owned();
     let count = || list_backups(backups.path(), &uuid).unwrap().len();
     assert_eq!(count(), 1, "a backup on open");
@@ -720,7 +721,7 @@ fn a_closed_event_reopens_closed_and_read_only() {
     let (at, options, _backups) = clock();
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("e.lancelot");
-    let (mut store, _) = Store::create(&path, details(), options.clone()).unwrap();
+    let (mut store, _) = Store::create(&path, details(), &two_accounts(), options.clone()).unwrap();
     let cash = asset(store.book(), "Cash box");
     store
         .change(|book| book.set_closing_count(cash, june(14), Cents::ZERO))
@@ -751,7 +752,8 @@ fn a_mistyped_person_or_category_can_go_while_nothing_refers_to_it() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("delete.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let typo = store
         .change(|book| book.add_person("Aña", Person::default()))
         .unwrap();
@@ -819,7 +821,8 @@ fn a_mistyped_person_or_category_can_go_while_nothing_refers_to_it() {
 fn a_write_is_read_back_before_it_counts() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("e.lancelot");
-    let (store, _) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    let (store, _) =
+        Store::create(&path, details(), &two_accounts(), StoreOptions::default()).unwrap();
     drop(store);
     // The schema is read when a connection opens, so the trigger goes in before the store does.
     let extra = raw(&path);
@@ -848,7 +851,8 @@ fn a_write_is_read_back_before_it_counts() {
 fn a_generated_entry_written_wrong_is_caught_although_loading_regenerates_it() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("e.lancelot");
-    let (store, _) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    let (store, _) =
+        Store::create(&path, details(), &two_accounts(), StoreOptions::default()).unwrap();
     drop(store);
     let extra = raw(&path);
     extra
@@ -893,7 +897,8 @@ fn a_generated_entry_written_wrong_is_caught_although_loading_regenerates_it() {
 fn a_foreign_key_left_dangling_stops_the_commit() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("e.lancelot");
-    let (store, _) = Store::create(&path, details(), StoreOptions::default()).unwrap();
+    let (store, _) =
+        Store::create(&path, details(), &two_accounts(), StoreOptions::default()).unwrap();
     drop(store);
     let extra = raw(&path);
     extra
@@ -1020,4 +1025,26 @@ fn a_new_file_has_no_triggers_and_lines_are_checked_on_opening() {
         )
         .unwrap();
     assert_eq!(triggers, 0);
+}
+
+#[test]
+fn an_event_with_a_single_cash_account_opens_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("e.lancelot");
+    let till = [AccountDraft {
+        name: "Till".into(),
+        asset_type: AssetType::Cash,
+    }];
+    drop(Store::create(&path, details(), &till, StoreOptions::default()).unwrap());
+
+    let (store, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(!report.has_errors());
+    let id = asset(store.book(), "Till");
+    assert_eq!(store.book().event().default_reimbursement_account, id);
+    assert!(
+        store
+            .book()
+            .account_by_name(AccountKind::Asset, "Cash box")
+            .is_none()
+    );
 }

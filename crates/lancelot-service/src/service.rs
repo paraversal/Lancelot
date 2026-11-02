@@ -8,11 +8,12 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
 use lancelot_core::{
-    AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents, ChangeLogEntry,
-    CopyChoice, CopySummary, DomainError, EventDetails, EventSnapshot, ImportDeletion, ImportId,
-    ImportPreview, MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store, StoreError, StoreOptions,
-    Table, TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of,
-    format_date, list_backups, parse_amount, parse_date, parse_sum, read_book, ticket_share,
+    AccountDraft, AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents,
+    ChangeLogEntry, CopyChoice, CopySummary, DomainError, EventDetails, EventSnapshot,
+    ImportDeletion, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store,
+    StoreError, StoreOptions, Table, TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId,
+    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date, parse_sum,
+    read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -166,9 +167,14 @@ impl Service {
         }
     }
 
-    pub fn create_event(&mut self, path: &Path, details: EventDetails) -> Result<OpenEvent> {
+    pub fn create_event(
+        &mut self,
+        path: &Path,
+        details: EventDetails,
+        accounts: &[AccountDraft],
+    ) -> Result<OpenEvent> {
         self.close_file();
-        let (store, integrity) = Store::create(path, details, self.options())?;
+        let (store, integrity) = Store::create(path, details, accounts, self.options())?;
         self.adopt(store, integrity)
     }
 
@@ -637,6 +643,17 @@ mod tests {
         ["Ticket".to_owned(), "Order ID".to_owned()]
     }
 
+    fn accounts() -> Vec<AccountDraft> {
+        let draft = |name: &str, asset_type| AccountDraft {
+            name: name.to_owned(),
+            asset_type,
+        };
+        vec![
+            draft("Verein account", AssetType::Bank),
+            draft("Cash box", AssetType::Cash),
+        ]
+    }
+
     fn details(name: &str) -> EventDetails {
         EventDetails {
             name: name.into(),
@@ -656,11 +673,12 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
         let old = dir.path().join("old.lancelot");
-        s.create_event(&old, details("Old")).unwrap();
+        s.create_event(&old, details("Old"), &accounts()).unwrap();
         s.add(|b| b.add_person("Kim", Person::default())).unwrap();
         s.close_file();
 
         let summary = s.template_preview(&old).unwrap();
+        assert_eq!(summary.accounts, ["Verein account", "Cash box"]);
         assert_eq!((summary.name.as_str(), summary.persons), ("Old", 1));
 
         let new = dir.path().join("new.lancelot");
@@ -670,7 +688,8 @@ mod tests {
         s.close_file();
 
         let third = dir.path().join("third.lancelot");
-        s.create_event(&third, details("Third")).unwrap();
+        s.create_event(&third, details("Third"), &accounts())
+            .unwrap();
         let preview = s.copy_preview(&old).unwrap();
         assert_eq!(preview.persons_added, 1);
         assert_eq!(s.current().unwrap().snapshot.persons.len(), 0);
@@ -692,7 +711,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
         assert_eq!(s.change_log().unwrap_err().code, "no_event_open");
-        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+        s.create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
         s.add(|b| b.add_person("Kim", Person::default())).unwrap();
 
@@ -708,7 +727,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
         let open = s
-            .create_event(&dir.path().join("e.lancelot"), details("E"))
+            .create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
         let verein = open.snapshot.event.default_reimbursement_account;
         let amount = lancelot_core::parse_amount("12,00", lancelot_core::NumberFormat::De, true)
@@ -741,7 +760,9 @@ mod tests {
         let mut s = service(&dir);
         assert!(s.current().is_none());
 
-        let open = s.create_event(&path, details("Sommerfest")).unwrap();
+        let open = s
+            .create_event(&path, details("Sommerfest"), &accounts())
+            .unwrap();
         assert_eq!(
             (open.revision, open.file_name.as_str()),
             (1, "sommerfest.lancelot")
@@ -779,7 +800,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("old.lancelot");
         let mut s = service(&dir);
-        s.create_event(&path, details("Old")).unwrap();
+        s.create_event(&path, details("Old"), &accounts()).unwrap();
         s.close_file();
         std::fs::remove_file(&path).unwrap();
         assert!(!s.recent_events()[0].exists);
@@ -792,14 +813,18 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("e.lancelot");
         let mut s = service(&dir);
-        let err = s.create_event(&path, details("  ")).unwrap_err();
+        let err = s
+            .create_event(&path, details("  "), &accounts())
+            .unwrap_err();
         assert_eq!(
             (err.code.as_str(), err.field.as_deref()),
             ("empty_name", Some("name"))
         );
-        s.create_event(&path, details("E")).unwrap();
+        s.create_event(&path, details("E"), &accounts()).unwrap();
         assert_eq!(
-            s.create_event(&path, details("E")).unwrap_err().code,
+            s.create_event(&path, details("E"), &accounts())
+                .unwrap_err()
+                .code,
             "already_exists"
         );
 
@@ -842,7 +867,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("e.lancelot");
         let mut s = service(&dir);
-        s.create_event(&path, details("Before")).unwrap();
+        s.create_event(&path, details("Before"), &accounts())
+            .unwrap();
         let backups = s.backups(&path).unwrap();
         assert_eq!(backups.len(), 1);
         assert!(backups[0].taken_at.is_some());
@@ -875,7 +901,8 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("damaged.lancelot");
         let mut s = service(&dir);
-        s.create_event(&path, details("Winterfest")).unwrap();
+        s.create_event(&path, details("Winterfest"), &accounts())
+            .unwrap();
         s.close_file();
 
         // Break the file behind Lancelot's back: a line of a transaction that does not exist.
@@ -904,7 +931,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("e.lancelot");
         let mut s = service(&dir);
-        let open = s.create_event(&path, details("E")).unwrap();
+        let open = s.create_event(&path, details("E"), &accounts()).unwrap();
         let category = |name: &str| {
             open.snapshot
                 .accounts
@@ -981,7 +1008,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("e.lancelot");
         let mut s = service(&dir);
-        let open = s.create_event(&path, details("E")).unwrap();
+        let open = s.create_event(&path, details("E"), &accounts()).unwrap();
         let id_of = |name: &str| {
             open.snapshot
                 .accounts
@@ -1046,7 +1073,7 @@ mod tests {
     fn updates_people_and_checks_ibans() {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
-        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+        s.create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
         let anna = s
             .add(|b| b.add_person("Anna", Person::default()))
@@ -1080,7 +1107,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
         let open = s
-            .create_event(&dir.path().join("e.lancelot"), details("E"))
+            .create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
         let kitchen = open
             .snapshot
@@ -1128,7 +1155,7 @@ mod tests {
     fn imports_ticket_sheets_and_records_manual_sales() {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
-        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+        s.create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
         let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/tickets");
         let tier = |name: &str, price| TierDraft {
@@ -1201,7 +1228,7 @@ mod tests {
     fn resolves_ticket_conflicts_and_records_cancellations() {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
-        s.create_event(&dir.path().join("e.lancelot"), details("E"))
+        s.create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
         let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/tickets");
         let tier = |name: &str, price| TierDraft {
@@ -1354,7 +1381,7 @@ mod tests {
         settings.number_format = lancelot_core::NumberFormat::De;
         s.update_settings(settings).unwrap();
         let open = s
-            .create_event(&dir.path().join("e.lancelot"), details("Fest"))
+            .create_event(&dir.path().join("e.lancelot"), details("Fest"), &accounts())
             .unwrap();
         let id_of = |name: &str| {
             open.snapshot
@@ -1416,7 +1443,7 @@ mod tests {
     fn adds_cash_accounts_and_saves_both_counts_at_once() {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
-        s.create_event(&dir.path().join("e.lancelot"), details("Fest"))
+        s.create_event(&dir.path().join("e.lancelot"), details("Fest"), &accounts())
             .unwrap();
         let bar = s.add(|b| b.add_asset("Bar till", AssetType::Cash)).unwrap();
         let account = bar
@@ -1474,7 +1501,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let mut s = service(&dir);
         let open = s
-            .create_event(&dir.path().join("e.lancelot"), details("Fest"))
+            .create_event(&dir.path().join("e.lancelot"), details("Fest"), &accounts())
             .unwrap();
         let cash = open
             .snapshot

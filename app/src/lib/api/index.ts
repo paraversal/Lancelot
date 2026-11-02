@@ -3,6 +3,7 @@
 import { convertFileSrc, invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
 
 import type { AccountId } from './generated/AccountId';
+import type { AccountDraft } from './generated/AccountDraft';
 import type { AccountKind } from './generated/AccountKind';
 import type { Attachment } from './generated/Attachment';
 import type { AssetType } from './generated/AssetType';
@@ -113,9 +114,13 @@ export const api = {
 	recentEvents: () => call<RecentEvent[]>('recent_events'),
 	forgetRecent: (path: string) => call<RecentEvent[]>('recent_forget', { path }),
 
-	/** With a template, the new event starts with that event's setup (R-EVT-3). */
-	createEvent: (path: string, details: EventDetails, template: string | null = null) =>
-		call<OpenEvent>('event_create', { path, details, template }),
+	/** With a template, the new event starts with that event's setup instead (R-EVT-3). */
+	createEvent: (
+		path: string,
+		details: EventDetails,
+		accounts: AccountDraft[],
+		template: string | null = null
+	) => call<OpenEvent>('event_create', { path, details, accounts, template }),
 	templatePreview: (path: string) => call<TemplateSummary>('template_preview', { path }),
 	/** What copying everything from that event would add; changes nothing. */
 	copyPreview: (path: string) => call<CopySummary>('copy_preview', { path }),

@@ -224,7 +224,8 @@ fn checkpoints_survive_the_file_and_are_logged() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("e.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let verein = asset(store.book(), "Verein account");
 
     let a = store
@@ -348,7 +349,8 @@ fn a_negative_count_survives_the_file_and_a_negative_opening_is_refused() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("count.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let verein = asset(store.book(), "Verein account");
     let cash = asset(store.book(), "Cash box");
     store
@@ -398,7 +400,7 @@ mod properties {
             let dir = TempDir::new().unwrap();
             let path = dir.path().join("p.lancelot");
             let details = new_book().event().details.clone();
-            let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+            let (mut store, _) = Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
             for (name, price, fee_bp) in [("Early Bird", "25", 0), ("Regular", "32", 250)] {
                 store.change(|book| book.add_tier(TierDraft {
                     name: name.into(),

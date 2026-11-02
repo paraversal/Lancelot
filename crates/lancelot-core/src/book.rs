@@ -14,10 +14,10 @@ use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{Ledger, LedgerInput, TicketIncome};
 use crate::model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
-    BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId, Estimate,
-    Event, EventDetails, Line, OpenItem, Person, PluginRecordId, Reconciliation, ReconciliationId,
-    Role, Txn, TxnId, TxnKind,
+    Account, AccountDraft, AccountId, AccountKind, AssetType, Attachment, AttachmentId,
+    BlockerOverride, BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre,
+    CostCentreId, Estimate, Event, EventDetails, Line, OpenItem, Person, PluginRecordId,
+    Reconciliation, ReconciliationId, Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
@@ -126,8 +126,10 @@ pub enum Warning {
 }
 
 impl Book {
-    /// A new event with the default accounts and categories (R-EVT-1, R-ACC-1, R-ACC-2).
-    pub fn new(details: EventDetails) -> Result<Book, DomainError> {
+    /// A new event with the given accounts and the default categories (R-EVT-1, R-ACC-1, R-ACC-2).
+    /// Reimbursements and ticket money start out at the first bank account, or else the first
+    /// account (R-EVT-4), and a bank account starts out counting net movement only (R-ISO-2).
+    pub fn new(details: EventDetails, accounts: &[AccountDraft]) -> Result<Book, DomainError> {
         let details = clean_details(details)?;
         let mut book = Book {
             event: Event {
@@ -172,8 +174,21 @@ impl Book {
             payouts: Payouts::default(),
             profitability: None,
         };
-        let verein = book.insert_account(AccountKind::Asset, "Verein account", None);
-        let cash = book.insert_account(AccountKind::Asset, "Cash box", None);
+        for draft in accounts {
+            let name = book.unique_name(AccountKind::Asset, &draft.name, None)?;
+            let id = book.insert_account(AccountKind::Asset, &name, None);
+            if let Some(a) = book.accounts.get_mut(&id) {
+                a.asset_type = Some(draft.asset_type);
+                a.net_movement = draft.asset_type == AssetType::Bank;
+            }
+        }
+        let main = book
+            .accounts
+            .values()
+            .find(|a| a.asset_type == Some(AssetType::Bank))
+            .or_else(|| book.accounts.values().next())
+            .ok_or(DomainError::NoAccounts)?
+            .id;
         book.insert_account(AccountKind::Opening, "Opening balance", None);
         for name in DEFAULT_INCOME {
             let role = (*name == "Tickets").then_some(Role::Tickets);
@@ -182,14 +197,8 @@ impl Book {
         for name in DEFAULT_EXPENSE {
             book.insert_account(AccountKind::Expense, name, None);
         }
-        if let Some(a) = book.accounts.get_mut(&verein) {
-            a.net_movement = true;
-        }
-        if let Some(a) = book.accounts.get_mut(&cash) {
-            a.asset_type = Some(AssetType::Cash);
-        }
-        book.ticket_settings.account = Some(verein);
-        book.event.default_reimbursement_account = verein;
+        book.ticket_settings.account = Some(main);
+        book.event.default_reimbursement_account = main;
         book.recompute()?;
         Ok(book)
     }

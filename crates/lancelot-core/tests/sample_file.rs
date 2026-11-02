@@ -98,6 +98,7 @@ fn write_the_sample() {
             location: Some("Festwiese".into()),
             notes: Some("The sample of the event file format.".into()),
         },
+        &two_accounts(),
         options(),
     )
     .unwrap();
@@ -245,7 +246,15 @@ fn a_new_file_has_the_schema_of_the_migrated_sample() {
     let migrated = copy_of_sample(&dir);
     drop(opened(&migrated));
     let new = dir.path().join("new.lancelot");
-    drop(Store::create(&new, new_book().event().details.clone(), options()).unwrap());
+    drop(
+        Store::create(
+            &new,
+            new_book().event().details.clone(),
+            &two_accounts(),
+            options(),
+        )
+        .unwrap(),
+    );
 
     let (migrated, new) = (read_only(&migrated), read_only(&new));
     assert_eq!(schema(&migrated), schema(&new));

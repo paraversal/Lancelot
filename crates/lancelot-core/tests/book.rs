@@ -37,7 +37,60 @@ fn event_needs_a_name() {
         location: None,
         notes: None,
     };
-    assert_eq!(Book::new(details).unwrap_err().code(), "empty_name");
+    assert_eq!(
+        Book::new(details, &two_accounts()).unwrap_err().code(),
+        "empty_name"
+    );
+}
+
+fn account(name: &str, asset_type: AssetType) -> AccountDraft {
+    AccountDraft {
+        name: name.into(),
+        asset_type,
+    }
+}
+
+fn start_with(accounts: &[AccountDraft]) -> Result<Book, DomainError> {
+    Book::new(new_book().event().details.clone(), accounts)
+}
+
+#[test]
+fn event_needs_an_account_with_a_free_name() {
+    let code = |accounts: &[AccountDraft]| start_with(accounts).unwrap_err().code();
+    assert_eq!(code(&[]), "no_accounts");
+    assert_eq!(code(&[account(" ", AssetType::Bank)]), "empty_name");
+    assert_eq!(
+        code(&[
+            account("Giro", AssetType::Bank),
+            account("GIRO ", AssetType::Cash)
+        ]),
+        "duplicate_name"
+    );
+}
+
+#[test]
+fn money_starts_out_at_the_first_bank_account() {
+    let book = start_with(&[
+        account("Till", AssetType::Cash),
+        account("Giro", AssetType::Bank),
+        account("Savings", AssetType::Bank),
+    ])
+    .unwrap();
+    let giro = asset(&book, "Giro");
+    assert_eq!(book.event().default_reimbursement_account, giro);
+    assert_eq!(book.ticket_settings().account, Some(giro));
+    assert!(book.account(giro).unwrap().net_movement);
+    let till = book.account(asset(&book, "Till")).unwrap();
+    assert_eq!(till.asset_type, Some(AssetType::Cash));
+    assert!(!till.net_movement);
+}
+
+#[test]
+fn a_cash_account_alone_is_enough() {
+    let book = start_with(&[account("Till", AssetType::Cash)]).unwrap();
+    let till = asset(&book, "Till");
+    assert_eq!(book.event().default_reimbursement_account, till);
+    assert_eq!(book.ticket_settings().account, Some(till));
 }
 
 #[test]
