@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, ChangeLogEntry,
-    CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
-    ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange, ReconciliationId,
-    Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft,
-    TxnId,
+    AccountDraft, AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride,
+    BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents,
+    ChangeLogEntry, CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId,
+    ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange,
+    ReconciliationId, Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft,
+    TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -69,11 +69,12 @@ pub async fn event_create(
     state: State<'_, AppState>,
     path: PathBuf,
     details: EventDetails,
+    accounts: Vec<AccountDraft>,
     template: Option<PathBuf>,
 ) -> Result<OpenEvent> {
     with(&state, |s| match &template {
         Some(template) => s.create_event_from(&path, details, template),
-        None => s.create_event(&path, details),
+        None => s.create_event(&path, details, &accounts),
     })
 }
 

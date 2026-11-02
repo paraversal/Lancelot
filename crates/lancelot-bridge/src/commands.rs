@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use lancelot_core::{Book, DomainError, Person, TicketBatch};
+use lancelot_core::{AccountDraft, Book, DomainError, Person, TicketBatch};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -62,9 +62,10 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "event_create" => {
             let path: PathBuf = arg(a, "path")?;
             let details = arg(a, "details")?;
+            let accounts: Vec<AccountDraft> = arg(a, "accounts")?;
             json(match arg::<Option<PathBuf>>(a, "template")? {
                 Some(template) => s.create_event_from(&path, details, &template),
-                None => s.create_event(&path, details),
+                None => s.create_event(&path, details, &accounts),
             })
         }
         "template_preview" => json(s.template_preview(&arg::<PathBuf>(a, "path")?)),

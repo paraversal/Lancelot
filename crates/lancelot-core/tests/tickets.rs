@@ -388,7 +388,8 @@ fn tickets_survive_saving_and_reopening() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let regular = store
         .change(|book| book.add_tier(tier("Regular", "32", 250)))
         .unwrap();
@@ -449,7 +450,8 @@ fn tickets_survive_saving_and_reopening() {
 fn imported_file(dir: &TempDir) -> (std::path::PathBuf, Store) {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     store
         .change(|book| book.add_tier(tier("Early Bird", "25", 0)))
         .unwrap();
@@ -1223,7 +1225,8 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let regular = store
         .change(|book| book.add_tier(tier("Regular", "32", 250)))
         .unwrap();
@@ -1302,7 +1305,8 @@ fn a_file_with_a_cancellation_of_tickets_it_never_had_does_not_open() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let regular = store
         .change(|book| book.add_tier(tier("Regular", "32", 0)))
         .unwrap();

@@ -131,6 +131,15 @@ pub enum AssetType {
     Cash,
 }
 
+/// An asset account a new event starts with.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountDraft {
+    pub name: String,
+    pub asset_type: AssetType,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 #[serde(rename_all = "camelCase")]

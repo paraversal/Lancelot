@@ -337,7 +337,13 @@ fn copied_data_is_written_to_the_file() {
     let dir = TempDir::new().unwrap();
     let source = last_year();
     let path = dir.path().join("new.lancelot");
-    let (mut store, _) = Store::create(&path, details("New"), StoreOptions::default()).unwrap();
+    let (mut store, _) = Store::create(
+        &path,
+        details("New"),
+        &two_accounts(),
+        StoreOptions::default(),
+    )
+    .unwrap();
     store
         .change(|book| {
             book.copy_from(

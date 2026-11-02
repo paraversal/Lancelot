@@ -28,6 +28,8 @@ pub enum DomainError {
     UnknownTxn,
     #[error("unknown person")]
     UnknownPerson,
+    #[error("at least one account is needed")]
+    NoAccounts,
     #[error("a name is needed")]
     EmptyName { field: String },
     #[error("this name is already used")]
@@ -122,6 +124,7 @@ impl DomainError {
             DomainError::MissingNote => "missing_note",
             DomainError::UnknownTxn => "unknown_txn",
             DomainError::UnknownPerson => "unknown_person",
+            DomainError::NoAccounts => "no_accounts",
             DomainError::EmptyName { .. } => "empty_name",
             DomainError::DuplicateName { .. } => "duplicate_name",
             DomainError::InvalidBic => "invalid_bic",

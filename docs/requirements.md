@@ -97,11 +97,11 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 - **R-EVT-1** Create an event: name, date range, location, notes.
 - **R-EVT-2** An event is either **open** or **closed**. A closed event is read-only. Closing (R-SET-7) and reopening are explicit actions and are recorded in the change log. There are no other states: the dates show where an event stands.
 - **R-EVT-3** Create a new event from an existing one as a template. This copies accounts, categories, cost centres, budget lines and persons, but no transactions.
-- **R-EVT-4** Event settings include the **default reimbursement account** (initially the Verein account).
+- **R-EVT-4** Event settings include the **default reimbursement account** (initially the first bank account, or else the first account).
 
 ### 5.2 Accounts
 
-- **R-ACC-1** Configurable asset accounts per event, each either **bank** or **cash**. They are added, renamed and switched between bank and cash in Settings. Defaults: Verein account (bank), Cash box (cash). Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
+- **R-ACC-1** Configurable asset accounts per event, each either **bank** or **cash**. A new event needs at least one, named when it is created unless a template brings its own (R-EVT-3). They are added, renamed and switched between bank and cash in Settings. A bank account starts out counting net movement only (R-ISO-2). Money in persons' private bank accounts is not an asset account. It is tracked through the person's balance (§4.1).
 - **R-ACC-2** Configurable income and expense categories. Defaults: income Tickets, General; expenses Kitchen, Mobility, Venue, Tech, General. The drinks plugin's setup adds Drink donations, Drinks and Deposit (§5.9).
 - **R-ACC-3** Every account shows its derived balance and its transaction history.
 - **R-ACC-4** **Reconciliation checkpoints**: the user enters "statement shows X on date D" for an asset account. Lancelot flags any mismatch with the computed balance at D. On a net-movement account this compares the net movement for the event, not the absolute balance.

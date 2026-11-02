@@ -340,7 +340,8 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("budget.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
 
     let kitchen = expense(store.book(), "Kitchen");
     let drinks = expense(store.book(), "General");

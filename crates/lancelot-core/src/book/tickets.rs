@@ -872,18 +872,22 @@ pub(super) fn check_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::EventDetails;
+    use crate::model::{AccountDraft, AssetType, EventDetails};
 
     #[test]
     fn a_fee_category_with_the_name_is_reused() {
-        let mut book = Book::new(EventDetails {
+        let details = EventDetails {
             name: "E".into(),
             starts_on: None,
             ends_on: None,
             location: None,
             notes: None,
-        })
-        .unwrap();
+        };
+        let accounts = [AccountDraft {
+            name: "Bank".into(),
+            asset_type: AssetType::Bank,
+        }];
+        let mut book = Book::new(details, &accounts).unwrap();
         let own = book
             .add_account(AccountKind::Expense, "ticket fees")
             .unwrap();
