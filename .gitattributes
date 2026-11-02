@@ -2,3 +2,7 @@
 fixtures/tickets/** -text
 # The frozen event files keep their bytes.
 fixtures/events/** binary
+# The sample holds these receipts, and is compared with them byte for byte.
+fixtures/receipts/** binary
+# Migrations are compiled in and end up verbatim in every new event file's schema.
+crates/lancelot-core/migrations/** text eol=lf
