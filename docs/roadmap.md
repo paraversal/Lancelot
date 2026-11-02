@@ -19,7 +19,6 @@ First try the data sources in the desktop app with a real provider and a token i
 - **M11 · Drink sales import.** The pull from a data source is done, with a preview, name matching and only per-product totals (R-DRK-6). Importing from a file is left, and needs a sample of the drinks app's export.
 - **M12 · SEPA.** Export the payout list as pain.001 XML (R-PER-6).
 - **M13 · Polished reports.** A typeset settlement PDF that follows the design system.
-- **User manual.** How the event's money is modelled (accounts, people, counts) and how to run an event from opening count to closing, for treasurers who did not build it.
 
 ## Open decisions and dependencies
 
@@ -73,6 +72,10 @@ fixtures/                  ticket sheets (.ods), receipts, format cases; the sam
 - **M8 · Ticket statistics and profitability.** Sales over time, places against the quota and break-even, on the Tickets page and the Overview (R-TKT-8, R-TKT-9).
 - **M9 · Cost centres and Drinks.** Cost centre tags with a P&L and plan vs actual, and the Drinks page, which became a plugin in Stage 7 (R-CC-1, R-CC-2, R-BUD-3, R-SET-3, R-DRK-1 to R-DRK-6).
 - **M10 · Reconciliation and templates.** Statement checkpoints, new events from a template, and copying from another event (R-ACC-4, R-ISO-2, R-ISO-4, R-SET-5, R-EVT-3).
+
+### User manual
+
+Version 1 is in [docs/manual](manual/index.html): what the app is for and what it can't do yet, how the event's money is modelled, and how to run an event from the first budget line to closing, for treasurers who did not build it. Hosting it on GitHub Pages is still to do.
 
 ### Refactoring
 

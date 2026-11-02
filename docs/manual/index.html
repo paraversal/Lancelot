@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lancelot manual</title>
+<meta name="description" content="How to plan and settle a volunteer-run event with Lancelot, from the first budget line to the closed event.">
+<style>
+@font-face { font-family: "Familjen Grotesk"; font-weight: 400; font-display: swap; src: url(fonts/familjen-grotesk-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Familjen Grotesk"; font-weight: 600; font-display: swap; src: url(fonts/familjen-grotesk-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Familjen Grotesk"; font-weight: 400; font-display: swap; src: url(fonts/familjen-grotesk-latin-ext-400-normal.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Familjen Grotesk"; font-weight: 600; font-display: swap; src: url(fonts/familjen-grotesk-latin-ext-600-normal.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+
+/* The app's colours, from docs/design/tokens.css and app/src/lib/styles/theme.css. */
+:root {
+  --paper: #f6f1e7; --paper-sunk: #ece5d6; --field: #ffffff; --ink: #1e1b16; --ink-muted: #5e574c;
+  --rule: #dcd3c2; --marker: #f5d547; --on-marker: #1e1b16; --plus: #2e7a4b; --minus: #b23a2b; --attention: #8c480c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1e1b16; --paper-sunk: #16140f; --field: #2a261f; --ink: #f1ebdd; --ink-muted: #b8af9e;
+    --rule: #3a352b; --marker: #f5d547; --on-marker: #1e1b16; --plus: #6cbf8a; --minus: #eb8274; --attention: #e5a45c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1e1b16; --paper-sunk: #16140f; --field: #2a261f; --ink: #f1ebdd; --ink-muted: #b8af9e;
+  --rule: #3a352b; --marker: #f5d547; --on-marker: #1e1b16; --plus: #6cbf8a; --minus: #eb8274; --attention: #e5a45c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 17px/1.6 "Familjen Grotesk", system-ui, sans-serif; }
+
+.layout { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 100vh; }
+.toc { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 28px 16px 40px; background: var(--paper-sunk); font-size: 14px; line-height: 1.35; }
+.toc summary { display: none; }
+.toc .brand { display: block; padding: 0 10px 18px; font-size: 18px; font-weight: 600; color: inherit; text-decoration: none; }
+.toc h2 { margin: 18px 0 4px; padding: 0 10px; font-size: 12px; font-weight: 400; color: var(--ink-muted); }
+.toc ul { margin: 0; padding: 0; list-style: none; }
+.toc li a { display: block; padding: 6px 10px; border-radius: 6px; color: inherit; text-decoration: none; }
+.toc li a:hover { background: color-mix(in srgb, var(--rule) 60%, transparent); }
+.toc li a.current { background: var(--marker); color: var(--on-marker); font-weight: 600; }
+
+main { width: 100%; max-width: 860px; margin: 0 auto; padding: 56px 40px 120px; }
+header.title { padding-bottom: 28px; border-bottom: 2px solid var(--ink); }
+header.title .kicker { margin: 0 0 6px; font-size: 14px; color: var(--ink-muted); }
+h1 { margin: 0; font-size: 44px; line-height: 1.1; font-weight: 600; letter-spacing: -0.01em; }
+header.title .lead { margin: 16px 0 0; font-size: 20px; line-height: 1.45; }
+.part { margin: 72px 0 0; padding-top: 14px; border-top: 2px solid var(--ink); font-size: 14px; font-weight: 400; color: var(--ink-muted); }
+h2.chapter { margin: 56px 0 12px; font-size: 28px; line-height: 1.2; font-weight: 600; }
+.part + h2.chapter { margin-top: 12px; }
+h3 { margin: 32px 0 6px; font-size: 19px; line-height: 1.3; font-weight: 600; }
+p { margin: 0 0 14px; }
+ul, ol { margin: 0 0 16px; padding-left: 24px; }
+li { margin-bottom: 6px; }
+a { color: inherit; text-underline-offset: 2px; }
+strong, b { font-weight: 600; }
+code { padding: 1px 5px; border-radius: 4px; background: var(--paper-sunk); font: 0.88em ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+pre { margin: 0 0 16px; padding: 12px 14px; overflow-x: auto; border-radius: 8px; background: var(--paper-sunk); font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+pre code { padding: 0; background: none; font: inherit; }
+kbd { display: inline-block; min-width: 1.5em; padding: 0 5px; border: 1px solid var(--rule); border-bottom-width: 2px; border-radius: 5px; background: var(--field); font: 0.84em "Familjen Grotesk", system-ui, sans-serif; text-align: center; white-space: nowrap; }
+
+ol.steps { list-style: none; padding: 0; counter-reset: step; }
+ol.steps > li { position: relative; margin-bottom: 10px; padding-left: 38px; counter-increment: step; }
+ol.steps > li::before { content: counter(step); position: absolute; left: 0; top: 2px; width: 25px; height: 25px; border-radius: 50%; background: var(--marker); color: var(--on-marker); font-size: 14px; font-weight: 600; line-height: 25px; text-align: center; }
+
+.note { margin: 18px 0; padding: 12px 16px; border-left: 3px solid var(--rule); background: var(--paper-sunk); border-radius: 0 8px 8px 0; font-size: 16px; }
+.note.warn { border-left-color: var(--attention); }
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+.note strong:first-child { display: block; margin-bottom: 2px; }
+
+figure { margin: 22px 0 26px; }
+figure a { display: block; }
+figure img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); border-radius: 8px; cursor: zoom-in; }
+figcaption { margin-top: 8px; font-size: 14px; line-height: 1.45; color: var(--ink-muted); }
+.table-wrap { overflow-x: auto; margin: 0 0 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 15.5px; line-height: 1.4; }
+th { padding: 6px 12px 6px 0; border-bottom: 1px solid var(--ink); font-weight: 600; text-align: left; vertical-align: bottom; }
+td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
+.timeline { margin: 18px 0 26px; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.timeline li { display: grid; grid-template-columns: 112px 1fr; gap: 12px; margin: 0; padding: 9px 0; border-bottom: 1px solid var(--rule); font-size: 16px; }
+.timeline .when { color: var(--ink-muted); font-size: 14px; padding-top: 2px; }
+
+dialog { max-width: 96vw; max-height: 96vh; padding: 0; border: 0; border-radius: 8px; background: none; }
+dialog::backdrop { background: rgb(0 0 0 / 0.72); }
+dialog img { display: block; max-width: 96vw; max-height: 96vh; cursor: zoom-out; }
+
+@media (max-width: 900px) {
+  body { font-size: 16px; }
+  .layout { display: block; }
+  .toc { position: static; height: auto; padding: 12px 16px; }
+  .toc summary { display: block; padding: 6px 0; font-weight: 600; cursor: pointer; }
+  .toc .brand { display: none; }
+  main { padding: 32px 16px 80px; }
+  h1 { font-size: 36px; }
+  h2.chapter { font-size: 24px; }
+  .two { grid-template-columns: minmax(0, 1fr); }
+  .timeline li { grid-template-columns: 88px 1fr; }
+}
+@media print {
+  .toc { display: none; }
+  .layout { display: block; }
+  main { max-width: none; padding: 0; }
+  figure, .note, table { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<details class="toc" id="toc" open>
+  <summary>Contents</summary>
+  <a class="brand" href="#top">Lancelot</a>
+  <h2>About</h2>
+  <ul>
+    <li><a href="#why">Why it exists</a></li>
+    <li><a href="#for">Who it is for</a></li>
+    <li><a href="#not-for">Who it is not for</a></li>
+    <li><a href="#can">What it can do</a></li>
+    <li><a href="#cannot">What it cannot do</a></li>
+  </ul>
+  <h2>Getting started</h2>
+  <ul>
+    <li><a href="#install">Install it</a></li>
+    <li><a href="#ideas">Six ideas to know</a></li>
+    <li><a href="#window">Find your way around</a></li>
+  </ul>
+  <h2>Running an event</h2>
+  <ul>
+    <li><a href="#timeline">The event at a glance</a></li>
+    <li><a href="#create">1. Create the event</a></li>
+    <li><a href="#setup">2. Set it up</a></li>
+    <li><a href="#budget">3. Plan the budget</a></li>
+    <li><a href="#people">4. Add people</a></li>
+    <li><a href="#opening">5. Count the cash</a></li>
+    <li><a href="#entries">6. Enter the money</a></li>
+    <li><a href="#tickets">7. Bring in tickets</a></li>
+    <li><a href="#drinks">8. Track drinks and stock</a></li>
+    <li><a href="#check">9. Check against reality</a></li>
+    <li><a href="#payouts">10. Pay people back</a></li>
+    <li><a href="#close">11. Report and close</a></li>
+  </ul>
+  <h2>Reference</h2>
+  <ul>
+    <li><a href="#file">Your file and backups</a></li>
+    <li><a href="#sources">Data sources</a></li>
+    <li><a href="#amounts">Typing amounts</a></li>
+    <li><a href="#keys">Keyboard shortcuts</a></li>
+    <li><a href="#trouble">When something looks wrong</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ul>
+</details>
+
+<main id="top">
+<header class="title">
+  <p class="kicker">User manual, version 1 · November 2026 · for Lancelot 0.1, a pre-release</p>
+  <h1>Lancelot</h1>
+  <p class="lead">A desktop app for settling volunteer-run events: receipts, advances, reimbursements, tickets and drinks, in one file per event.</p>
+</header>
+
+<p class="part">About Lancelot</p>
+
+<h2 class="chapter" id="why">Why it exists</h2>
+<p>Someone in a volunteer group ends up holding the money for the summer party. People pay for groceries with their own cards. Tickets arrive at one account, donations land in a cash box, and one person sold a few tickets and was paid privately. Afterwards, a shared spreadsheet has to answer three questions: what did we make, who is owed what, and can we prove it?</p>
+<p>Spreadsheets can do this, but they let a wrong formula or a forgotten line go unnoticed. Lancelot exists so that the treasurer can:</p>
+<ul>
+  <li><strong>Plan</strong> the event with estimated costs, and see where it is heading.</li>
+  <li><strong>Record</strong> every real movement of money, with the receipt attached.</li>
+  <li><strong>Settle</strong> the event: the result, who is owed what, and proof that every cent is accounted for.</li>
+  <li><strong>Reimburse</strong> everyone who advanced money, correctly and without forgetting anyone.</li>
+</ul>
+<p>You fill in simple forms: who paid, for what, how much. Underneath, every entry moves money from one place to another, so money can't appear or vanish, and each balance is worked out from the entries instead of being typed in. Amounts are kept in whole cents, so nothing is lost to rounding.</p>
+
+<h2 class="chapter" id="for">Who it is for</h2>
+<ul>
+  <li><strong>The one treasurer of a volunteer-run event</strong>, such as a festival, party, conference or camp, who works on one computer.</li>
+  <li><strong>Groups where volunteers advance money</strong> and have to be paid back, or hold money that has to come back to the event.</li>
+  <li><strong>Events of roughly this size:</strong> up to about 100 entries and 100 receipts, which is what the app was designed around. Larger events may work, but haven't been tried.</li>
+  <li><strong>People comfortable with computers, not necessarily with bookkeeping.</strong> You never see debit or credit.</li>
+</ul>
+<p>Tickets, budgets, cost centres and drinks are all optional. An event can be just a few receipts and a payout list.</p>
+
+<h2 class="chapter" id="not-for">Who it is not for</h2>
+<ul>
+  <li><strong>Anyone who needs formal accounting.</strong> Lancelot doesn't do tax returns or legally compliant bookkeeping such as GoBD. Its report is proof for your group, not for the tax office.</li>
+  <li><strong>Teams who want to work together in the app.</strong> One event file is open in one place at a time, with no accounts or sharing.</li>
+  <li><strong>Organisations tracking money across years.</strong> Each event stands alone. Carried-over profit, overheads and multi-year reports stay outside the app.</li>
+  <li><strong>Events in a currency it doesn't support.</strong> An event can be in euros, US dollars, pounds or Swiss francs, in one currency only, with no conversion.</li>
+  <li><strong>Anyone who needs a finished, supported product today.</strong> See the status note below.</li>
+</ul>
+
+<div class="note warn">
+  <strong>Lancelot hasn't settled a real event yet</strong>
+  <p>The sums are heavily tested, but the first real event is still to come. For your first event, keep your spreadsheet running alongside it and check that both reach the same final balance to the cent. Expect rough edges, and keep your original receipts.</p>
+</div>
+
+<h2 class="chapter" id="can">What it can do today</h2>
+<div class="table-wrap"><table>
+  <tr><th style="width:27%">Area</th><th>What you get</th></tr>
+  <tr><td><strong>Event file</strong></td><td>One <code>.lancelot</code> file per event, receipts included. Automatic backups and an integrity check on every open and save. Start from an earlier event as a template.</td></tr>
+  <tr><td><strong>Entries</strong></td><td>Expense, income, transfer and settle forms. Split one receipt over several categories. Add up sums inside an amount field. Every change is kept in a searchable history.</td></tr>
+  <tr><td><strong>Receipts</strong></td><td>Any number of files per entry, stored in the event file. Preview them, find expenses with none, and drop a file on the window to start an expense.</td></tr>
+  <tr><td><strong>People</strong></td><td>One balance per person, netting what they advanced against what they hold. Reimbursement by bank transfer, with an IBAN check, or any other way. Payout list as PDF or CSV, repayment list, and marking paid who you choose in one go.</td></tr>
+  <tr><td><strong>Budget</strong></td><td>Plan against actual per line, category and cost centre, with a cautious forecast of the result.</td></tr>
+  <tr><td><strong>Tickets</strong></td><td>Tiers with price, fee and quota. Import <code>.ods</code>, <code>.xlsx</code> or <code>.csv</code> sheets with a review of what changed. Conflicts when tickets disappear, refunds, manual sales, a sales chart and break-even.</td></tr>
+  <tr><td><strong>Stock and sales</strong></td><td>For drinks on commission: billed units, the gap against what people logged, expected against collected donations, and an invoice check.</td></tr>
+  <tr><td><strong>Settling</strong></td><td>Cash counts and bank statement checks, a list of open items, a settlement report with receipts, a CSV of all transactions, and closing the event.</td></tr>
+  <tr><td><strong>Your computer</strong></td><td>Works fully offline. Light and dark appearance, two number formats and keyboard shortcuts for entering a stack of receipts.</td></tr>
+</table></div>
+
+<h2 class="chapter" id="cannot">What it cannot do</h2>
+<h3>Not yet</h3>
+<ul>
+  <li><strong>Be downloaded.</strong> There are no installers or signed releases, so you have to <a href="#install">build it yourself</a>.</li>
+  <li><strong>Send payments or export a bank file.</strong> SEPA XML export is planned. For now you hand over the payout list or type the transfers yourself.</li>
+  <li><strong>Import drink sales from a file.</strong> Counts are typed in, or pulled from a data source.</li>
+  <li><strong>Be relied on for data sources.</strong> Pulling tickets and drink counts works in the desktop app against a test service, but hasn't been tried with a real provider.</li>
+  <li><strong>Produce a typeset report.</strong> The report is printed to PDF through the system's print dialog.</li>
+  <li><strong>Use real sale dates for tickets.</strong> The sales chart is built from the dates of your imports.</li>
+  <li><strong>Hold a receipt without an entry.</strong> Each receipt belongs to an entry, so a pile of unbooked receipts stays outside the app.</li>
+  <li><strong>Undo.</strong> History shows every change with its before and after, but you correct mistakes by hand.</li>
+</ul>
+<h3>Not planned</h3>
+<ul>
+  <li>Several users at once, or anything spanning several events.</li>
+  <li>Legal or tax bookkeeping compliance.</li>
+  <li>Reading receipts automatically. It was tried, and typing the number was faster and more accurate.</li>
+</ul>
+<p>The app's screens are in English only. More currencies and third-party plugins are ideas for later, not commitments.</p>
+
+<p class="part">Getting started</p>
+
+<h2 class="chapter" id="install">Install it</h2>
+<p>Lancelot is built for macOS first. It also builds for Windows and Linux, but those get less use. Until there are downloads, building it takes a little setup at the command line, and access to the source code, which is currently private.</p>
+<ol class="steps">
+  <li>Install <a href="https://rustup.rs">Rust</a> (1.90 or newer), <a href="https://nodejs.org">Node 24</a> and pnpm 12. On a Mac, also run <code>xcode-select --install</code>.</li>
+  <li>Get the source code and open a terminal in its folder.</li>
+  <li>Build the app:
+<pre><code>cd app
+pnpm install
+pnpm tauri build --bundles app</code></pre></li>
+  <li>Move <code>target/release/bundle/macos/Lancelot.app</code> to your Applications folder, and open it.</li>
+</ol>
+<div class="note"><strong>Try it on a made-up event first</strong><p>Create a throwaway event and enter a few invented receipts before you trust it with a real one. Nothing leaves your computer, and you can delete the file afterwards.</p></div>
+
+<h2 class="chapter" id="ideas">Six ideas to know</h2>
+<div class="table-wrap"><table>
+  <tr><th style="width:22%">Idea</th><th>What it means</th><th style="width:28%">Example</th></tr>
+  <tr><td><strong>Event</strong></td><td>One self-contained world in one file. It knows nothing about events before or after it.</td><td>Sommerfest 2026</td></tr>
+  <tr><td><strong>Account</strong></td><td>A real place where the event's money sits: <b>bank</b> or <b>cash</b>.</td><td>Verein account, Cash box</td></tr>
+  <tr><td><strong>Person</strong></td><td>Someone who advanced money or holds event money. Both net into one balance.</td><td>Bob advanced 120 € and holds 300 €, so Bob owes 180 €.</td></tr>
+  <tr><td><strong>Category</strong></td><td>What kind of income or expense a line is.</td><td>Kitchen, Venue, Tickets</td></tr>
+  <tr><td><strong>Budget line</strong></td><td>A planned amount. Planning never changes a real balance.</td><td>Hall rent, 1.800 €</td></tr>
+  <tr><td><strong>Cost centre</strong></td><td>An optional part of the event with its own result.</td><td>Drinks</td></tr>
+</table></div>
+<p>Money in someone's private account or pocket is not an account. It is that person holding event money, and it shows in their balance.</p>
+<p>One rule explains the balances: the <strong>result</strong> is income minus expenses, and it always equals what's in your accounts, plus what people hold, minus what people are owed, minus any opening counts. The Overview shows that sum line by line.</p>
+
+<h2 class="chapter" id="window">Find your way around</h2>
+<figure>
+  <a href="images/overview.png"><img src="images/overview.png" width="1280" height="1000" loading="lazy" alt="The Overview: result, income and expenses at the top, bars by category, where the money is, and the open items."></a>
+  <figcaption>The Overview of the made-up Sommerfest 2026. Every screenshot in this manual uses invented data.</figcaption>
+</figure>
+<ul>
+  <li>The <strong>sidebar</strong> lists the pages: Overview, Ledger, People, Tickets and Budget, then one page per cost centre.</li>
+  <li>At the bottom of the sidebar are <strong>History</strong> and the <strong>file name</strong>, which opens Settings.</li>
+  <li>Editing happens in a <strong>panel on the right</strong>. <kbd>Esc</kbd> closes it. If that would discard changes, it warns you first, and a second <kbd>Esc</kbd> goes through.</li>
+  <li>Frames marked <strong>Plugin</strong> are optional extras you can switch off per event.</li>
+  <li>Almost every figure leads somewhere. Open items go to their fix, and a person's lines go to the entries behind them.</li>
+</ul>
+<p>Shortcuts are shown for a Mac. On Windows and Linux, use <kbd>Ctrl</kbd> instead of <kbd>⌘</kbd>.</p>
+
+<p class="part">Running an event</p>
+
+<h2 class="chapter" id="timeline">The event at a glance</h2>
+<p>Here is the order that works for most events. Skip the chapters you don't need.</p>
+<ul class="timeline">
+  <li><span class="when">Months before</span><span><a href="#create">Create the event</a>, <a href="#setup">set it up</a>, <a href="#budget">plan the budget</a> and <a href="#people">add people</a>.</span></li>
+  <li><span class="when">Ticket sales</span><span><a href="#tickets">Import each new ticket sheet</a> and resolve any conflicts.</span></li>
+  <li><span class="when">Before doors</span><span><a href="#opening">Count the cash</a> you start with.</span></li>
+  <li><span class="when">During</span><span><a href="#entries">Enter receipts</a> as they come, or collect them for later.</span></li>
+  <li><span class="when">Afterwards</span><span>Enter the rest, finish <a href="#drinks">drinks and stock</a>, and <a href="#check">count the cash and check the statement</a>.</span></li>
+  <li><span class="when">Settling</span><span><a href="#payouts">Pay people back</a>, collect what's owed, then <a href="#close">print the report and close</a>.</span></li>
+</ul>
+
+<h2 class="chapter" id="create">1. Create the event</h2>
+<figure>
+  <a href="images/new-event.png"><img src="images/new-event.png" width="1280" height="800" loading="lazy" alt="The start screen with the New event panel open and its fields filled in."></a>
+  <figcaption>The start screen lists your recent events. New event opens on the right.</figcaption>
+</figure>
+<ol class="steps">
+  <li>Click <strong>New event</strong> (<kbd>⇧⌘N</kbd>).</li>
+  <li>Enter the <strong>Name</strong>. Dates and location are optional, and you can change them later.</li>
+  <li>Under <strong>Accounts</strong>, name each real place the money sits and choose <strong>Bank</strong> or <strong>Cash</strong>. You need at least one. Use <strong>+ Account</strong> for more.</li>
+  <li>Check the <strong>Currency</strong>. It can't be changed once the event exists. The list shows every currency, with the ones Lancelot can't handle yet greyed out under <strong>Unsupported</strong>.</li>
+  <li>Click <strong>Create</strong> (<kbd>⌘↵</kbd>), then choose where to save the file.</li>
+</ol>
+<div class="note"><strong>Done this before?</strong><p>Under <strong>Template</strong>, choose an earlier event. The new event copies its accounts, categories, cost centres, budget lines, people and ticket tiers, but no money. It also takes that event's currency, because its prices and budget are in it. The two files stay independent afterwards.</p></div>
+<figure>
+  <a href="images/overview-empty.png"><img src="images/overview-empty.png" width="1280" height="800" loading="lazy" alt="The Overview of a new event, with everything at zero and one open item: Cash box not counted."></a>
+  <figcaption>A new event. “Cash box not counted” stays open until you enter the closing count at the end, so don't worry about it yet.</figcaption>
+</figure>
+
+<h2 class="chapter" id="setup">2. Set it up</h2>
+<p>Click the file name at the bottom of the sidebar, or press <kbd>⌘,</kbd>, to open Settings. The defaults are fine for many events. Changes save as you make them.</p>
+<figure>
+  <a href="images/settings.png"><img src="images/settings.png" width="1280" height="900" loading="lazy" alt="Settings: the event's details, accounts, display options, the file with its integrity check, and backups."></a>
+  <figcaption>Settings holds the event, its accounts, the display options, the file and its backups.</figcaption>
+</figure>
+<div class="table-wrap"><table>
+  <tr><th style="width:30%">Setting</th><th>When to change it</th></tr>
+  <tr><td><strong>Reimburse from</strong></td><td>The account that settles normally come from. It starts as the first bank account.</td></tr>
+  <tr><td><strong>Sells tickets</strong></td><td>Switch it off if the event has no tickets. This hides the Tickets page, and only works while the event has no tiers.</td></tr>
+  <tr><td><strong>Net movement</strong></td><td>On for an account whose real total doesn't matter, such as a shared bank account that holds other money too. Lancelot then only tracks what this event changed. Bank accounts start with it on.</td></tr>
+  <tr><td><strong>Cost centres</strong></td><td>Add one for each part of the event that needs its own result. A new event has none.</td></tr>
+  <tr><td><strong>Categories</strong></td><td>Set which cost centre a category's new lines start in. New categories are added from the entry and budget forms.</td></tr>
+  <tr><td><strong>Plugins</strong></td><td>Switch off what you don't use. Their data stays in the file.</td></tr>
+  <tr><td><strong>Copy from another event</strong></td><td>Bring people and budget lines into this event. It never overwrites, and the other file is only read. A budget can only come from an event in the same currency.</td></tr>
+</table></div>
+<p>The default categories are Tickets and General for income, and Kitchen, Mobility, Venue, Tech and General for expenses.</p>
+<figure>
+  <a href="images/settings-plugins.png"><img src="images/settings-plugins.png" width="1280" height="900" loading="lazy" alt="The lower part of Settings: a category list with a cost centre beside each, and the plugins with their switches."></a>
+  <figcaption>Further down Settings: the categories and the plugins. All plugins start switched on.</figcaption>
+</figure>
+
+<h2 class="chapter" id="budget">3. Plan the budget</h2>
+<p>A budget is optional, and it never changes a real balance. It gives you a forecast and shows where you're drifting from the plan.</p>
+<figure>
+  <a href="images/budget.png"><img src="images/budget.png" width="1280" height="900" loading="lazy" alt="The Budget page: forecast, plan, result so far, the lines furthest from plan, and a table of estimate, actual and forecast."></a>
+  <figcaption>The forecast at the top, the lines furthest from plan beside it, and every line below.</figcaption>
+</figure>
+<ol class="steps">
+  <li>On <strong>Budget</strong>, click <strong>Budget line</strong> or press <kbd>N</kbd>.</li>
+  <li>Choose a <strong>Category</strong> and, if you use them, a <strong>Cost centre</strong>.</li>
+  <li>Enter a <strong>Description</strong> and an <strong>Estimate</strong>, either as an amount or as quantity × unit price.</li>
+  <li>Click <strong>Save</strong> (<kbd>⌘↵</kbd>).</li>
+  <li>Later, tick <strong>Complete</strong> when no more money will come in or go out on that line.</li>
+</ol>
+<figure>
+  <a href="images/budget-line.png"><img src="images/budget-line.png" width="1280" height="800" loading="lazy" alt="The new budget line panel, with a quantity of 4 at a unit price of 120 euros."></a>
+  <figcaption>An estimate as quantity × unit price.</figcaption>
+</figure>
+<h3>How the forecast works</h3>
+<p>It's deliberately cautious, so it may look worse than you expect:</p>
+<ul>
+  <li>A line marked <strong>Complete</strong> counts with its actual amount.</li>
+  <li>An open <strong>expense</strong> line counts with the larger of estimate and actual.</li>
+  <li>An open <strong>income</strong> line counts with the smaller of estimate and actual.</li>
+  <li>Anything not budgeted is added on top.</li>
+</ul>
+
+<h2 class="chapter" id="people">4. Add people</h2>
+<p>Add anyone who will advance or hold money. You can also add someone on the spot from any entry form, by choosing <strong>New person…</strong>.</p>
+<ol class="steps">
+  <li>On <strong>People</strong>, click <strong>+ Person</strong> and enter a name.</li>
+  <li>Open the person and click <strong>Edit</strong>.</li>
+  <li>Under <strong>Reimburse by</strong>, choose how they get their money back:
+    <ul>
+      <li><strong>Bank transfer:</strong> add the <strong>IBAN</strong>, which is checked as you type, and if it differs from their name, the <strong>Account holder</strong>. The BIC is optional.</li>
+      <li><strong>Other:</strong> say how under <strong>Method</strong>, such as a PayPal address or “Cash”. Any bank details stay in the file, and come back if you switch.</li>
+    </ul>
+  </li>
+  <li>Contact and notes are optional.</li>
+  <li>Click <strong>Done</strong>.</li>
+</ol>
+<figure>
+  <a href="images/person-edit.png"><img src="images/person-edit.png" width="1280" height="800" loading="lazy" alt="The person panel in editing mode, with name, Reimburse by set to Bank transfer, account holder, IBAN, BIC, contact and notes."></a>
+  <figcaption>A person's details. The IBAN's checksum and format are checked as you type.</figcaption>
+</figure>
+<div class="note"><strong>Ask early how people want their money</strong><p>Someone with no method can't be included in <a href="#payouts">Mark as paid</a>, and the People page flags anyone who is owed money and has none. You can still record a payment to them by hand with <strong>Settle</strong>.</p></div>
+
+<h2 class="chapter" id="opening">5. Count the cash</h2>
+<p>A cash box exists before the event and after it. Lancelot only sees what's in it at the start and the end. So before anything happens, count it:</p>
+<ol class="steps">
+  <li>On the <strong>Overview</strong>, under <strong>Where the money is</strong>, click <strong>Count</strong> next to the cash account.</li>
+  <li>Under <strong>Opening count</strong>, enter the date and the amount.</li>
+  <li>Click <strong>Save</strong> and leave the closing count empty for now.</li>
+</ol>
+<figure>
+  <a href="images/count-opening.png"><img src="images/count-opening.png" width="1280" height="800" loading="lazy" alt="The count panel for the cash box, with an opening count of 150 euros and In the books showing 150 euros."></a>
+  <figcaption>An opening count isn't income. It doesn't change the result.</figcaption>
+</figure>
+<p>A bank account with <strong>Net movement</strong> on has no opening count. Lancelot starts it from zero and follows only this event's money.</p>
+
+<h2 class="chapter" id="entries">6. Enter the money</h2>
+<p>Press <kbd>N</kbd> or click <strong>New entry</strong>. There are four forms, and choosing the right one is most of the work:</p>
+<div class="table-wrap"><table>
+  <tr><th style="width:16%">Form</th><th style="width:40%">Use it when</th><th>Example</th></tr>
+  <tr><td><strong>Expense</strong></td><td>Event money was spent. <b>Paid by</b> is an account, or a person who advanced it.</td><td>Anna buys food on a private card: Paid by Anna, Kitchen.</td></tr>
+  <tr><td><strong>Income</strong></td><td>The event earned money. <b>Received by</b> is an account, or a person who now holds it.</td><td>A donation goes in the cash box: Received by Cash box, General.</td></tr>
+  <tr><td><strong>Transfer</strong></td><td>Money moved, but wasn't earned or spent.</td><td>Anna puts 200 € of private money into the box: From Anna, To Cash box. Anna is now owed 200 €.</td></tr>
+  <tr><td><strong>Settle</strong></td><td>A person's balance was paid, in either direction.</td><td>Reimburse Anna from the Verein account, or Bob repays the money held.</td></tr>
+</table></div>
+
+<h3>Enter an expense</h3>
+<figure>
+  <a href="images/entry-expense.png"><img src="images/entry-expense.png" width="1280" height="900" loading="lazy" alt="The Ledger with the entry panel open: an amount typed as a sum, Paid by Anna, the category Kitchen, and a description."></a>
+  <figcaption>An expense. The amount field adds up what you type and shows the total on the right.</figcaption>
+</figure>
+<ol class="steps">
+  <li>Press <kbd>N</kbd>. <strong>Expense</strong> is already selected.</li>
+  <li>Type the <strong>Amount</strong>. Sums such as <code>1,29+1,49</code> work too.</li>
+  <li>Choose <strong>Paid by</strong>. If it's a person, the panel shows their balance.</li>
+  <li>Choose the <strong>Category</strong>, or pick <strong>New category…</strong> at the end of the list.</li>
+  <li>If it belongs to one, choose the <strong>Budget line</strong>. This also sets the line's category and cost centre.</li>
+  <li>Check the <strong>Date</strong>, and add a <strong>Counterparty</strong> (the shop or supplier) and a <strong>Description</strong>. Names you've used before are suggested as you type.</li>
+  <li>Add the receipt under <strong>Receipt</strong>: drop the file there, or click to choose one.</li>
+  <li>Click <strong>Save</strong> (<kbd>⌘↵</kbd>), or <strong>Save &amp; next</strong> (<kbd>⇧⌘↵</kbd>) to go straight on. The next form keeps the date and payer, which helps with a stack of receipts.</li>
+</ol>
+
+<h3>Split one receipt</h3>
+<p>When a receipt covers several categories, click <strong>+ Line</strong>. Give each line its category and amount, until the counter above reads <strong>0,00 € left</strong>. The lines have to add up exactly before you can save.</p>
+<figure>
+  <a href="images/entry-split.png"><img src="images/entry-split.png" width="1280" height="900" loading="lazy" alt="The entry panel with a split: 30 euros Kitchen and 17,98 euros General, and 0,00 euros left."></a>
+  <figcaption>A split over two categories, with nothing left to assign.</figcaption>
+</figure>
+
+<h3>Add receipts</h3>
+<ul>
+  <li><strong>Start from the file:</strong> drop a file on the window to start an expense with it attached.</li>
+  <li><strong>Add to an entry:</strong> drop a file on an open entry.</li>
+  <li><strong>Any format works:</strong> PNG, JPG, HEIC, PDF or anything else is stored as it is.</li>
+  <li><strong>Look at one:</strong> open the entry to preview a receipt, open it in another app, or export it.</li>
+</ul>
+<p>Receipts are stored in the event file, so it grows with them.</p>
+
+<h3>Work with the ledger</h3>
+<figure>
+  <a href="images/ledger.png"><img src="images/ledger.png" width="1280" height="800" loading="lazy" alt="The Ledger, listing entries by day with category, payer, amount and a receipt symbol."></a>
+  <figcaption>A warning triangle marks an expense with no receipt.</figcaption>
+</figure>
+<ul>
+  <li>Group by <strong>Day</strong> or <strong>Category</strong>, search, or filter by type.</li>
+  <li><strong>No receipt</strong> shows the expenses still missing one.</li>
+  <li>Move with <kbd>↑</kbd> <kbd>↓</kbd> and open an entry with <kbd>↵</kbd>.</li>
+  <li>Open an entry to edit or delete it. Each change is written to <strong>History</strong>, with its before and after values.</li>
+</ul>
+<p>Entries that come from tickets are locked, and are changed on the Tickets page.</p>
+<figure>
+  <a href="images/history.png"><img src="images/history.png" width="1280" height="800" loading="lazy" alt="The History page, listing each change with its time and values."></a>
+  <figcaption>History, at the bottom of the sidebar. It records changes, but can't undo them.</figcaption>
+</figure>
+
+<h2 class="chapter" id="tickets">7. Bring in tickets</h2>
+<p>Skip this chapter if you don't sell tickets, or if typing them in as income is enough. Tickets typed into the Tickets category show on this page as their own line.</p>
+
+<h3>Create your tiers</h3>
+<ol class="steps">
+  <li>On <strong>Tickets</strong>, click <strong>+ Tier</strong>.</li>
+  <li>Enter the <strong>Name</strong> and <strong>Price</strong>. <strong>Fee</strong> is the platform's percentage, and <strong>Quota</strong> the number of places. Both are optional.</li>
+  <li>Under <strong>Names in the sheet</strong>, add any other spelling your ticket sheet uses for this tier.</li>
+  <li>Click <strong>Save</strong>.</li>
+</ol>
+<figure>
+  <a href="images/tier.png"><img src="images/tier.png" width="1280" height="800" loading="lazy" alt="The new tier panel for Early Bird, at 25 euros with a quota of 50."></a>
+  <figcaption>A tier. The ticket screenshots use a second made-up event, Neues Fest.</figcaption>
+</figure>
+
+<h3>Import a ticket sheet</h3>
+<p>The sheet needs one row per ticket, with a column for the tier and one for the order ID. By default these are called <code>Ticket</code> and <code>Order ID</code>. Click <strong>Reads Ticket · Order ID</strong> to change the names. Lancelot reads only those two columns, so names and email addresses in the file are never stored.</p>
+<ol class="steps">
+  <li>Click <strong>Import sheet</strong> and choose an <code>.ods</code>, <code>.xlsx</code> or <code>.csv</code> file, or drop it on the page.</li>
+  <li>If rows can't be read, they're listed first. Fix the file, or continue with <strong>Review import</strong>.</li>
+  <li>Choose where the money arrives under <strong>Money arrives in</strong>.</li>
+  <li>Set the <strong>Snapshot date</strong> to the date the sheet was exported. These dates build your sales chart.</li>
+  <li>Check the changes, then click <strong>Import</strong>.</li>
+</ol>
+<figure>
+  <a href="images/sheet-problems.png"><img src="images/sheet-problems.png" width="1280" height="800" loading="lazy" alt="The Ticket sheet panel listing one row that could not be read because it has no order ID."></a>
+  <figcaption>Rows are never skipped silently. This one has no order ID.</figcaption>
+</figure>
+<p>If a tier name in the sheet matches nothing, the import is blocked until you map it. Choose <strong>Alias of…</strong> if it's another name for an existing tier, or <strong>New tier</strong> if it isn't. Lancelot remembers the mapping.</p>
+<figure>
+  <a href="images/import-unknown.png"><img src="images/import-unknown.png" width="1280" height="800" loading="lazy" alt="The Review import panel with an unknown tier called Supporter, and the Import button disabled."></a>
+  <figcaption>“Supporter” isn't a tier yet, so Import stays disabled.</figcaption>
+</figure>
+<p>Import each new sheet as sales go on. Each one replaces the last, and the review shows what changed. The income is generated for you, per tier, with fees as their own line. If you import an older sheet, it only adds to the chart.</p>
+
+<h3>Resolve conflicts</h3>
+<p>When a ticket that was in the last sheet is gone from the new one, Lancelot won't guess why. It creates a <strong>conflict</strong> and shows a badge in the sidebar. Until it's resolved, that ticket counts as not sold.</p>
+<figure>
+  <a href="images/import-conflict.png"><img src="images/import-conflict.png" width="1280" height="800" loading="lazy" alt="The Review import panel for a second sheet, showing what was added and removed per tier, and which orders become conflicts."></a>
+  <figcaption>The review warns you which orders will become conflicts before you import.</figcaption>
+</figure>
+<figure>
+  <a href="images/tickets-conflicts.png"><img src="images/tickets-conflicts.png" width="1280" height="1000" loading="lazy" alt="The Tickets page showing two conflict cards, one for each order, with Refund and Correction options."></a>
+  <figcaption>Conflicts, grouped by order.</figcaption>
+</figure>
+<p>For each one, choose:</p>
+<ul>
+  <li><strong>Refund</strong> if the ticket was really cancelled. Enter the percentage refunded, from 0 to 100, the date and who paid. The event keeps the rest. Platform fees aren't refunded.</li>
+  <li><strong>Correction</strong> if it was never really sold, such as a mistake in the sheet. There's no income and no refund.</li>
+  <li><strong>Confirm</strong>, offered when it matches a cancellation you already recorded by hand.</li>
+</ul>
+<p>If an order has several tickets, the <strong>Tickets</strong> field lets you resolve only some of them, and a second time for the rest. An order that moved to another tier shows the removal and the addition together. That's usually a correction.</p>
+<figure>
+  <a href="images/tickets.png"><img src="images/tickets.png" width="1280" height="1000" loading="lazy" alt="The Tickets page with tiers, fees and refunds, ticket income, resolved cancellations and a sales chart."></a>
+  <figcaption>After resolving: tiers, fees, refunds and the sales over time.</figcaption>
+</figure>
+
+<h3>Manual sales and cancellations</h3>
+<ul>
+  <li><strong>Manual sale</strong> is for tickets sold outside the regular channels. Enter the tier, the count, who received the money, the date and an optional reference. If a person received it, it shows up in their balance.</li>
+  <li><strong>+ Cancellation</strong> records a cancellation without waiting for the sheet to change, on an order ID or a manual sale. If the order disappears later, the conflict offers to match it, so nothing counts twice.</li>
+</ul>
+<figure>
+  <a href="images/manual-sale.png"><img src="images/manual-sale.png" width="1280" height="800" loading="lazy" alt="The Manual sale panel, with a tier, a count of 3, and the total."></a>
+  <figcaption>A manual sale counts towards the same totals, but never causes a conflict.</figcaption>
+</figure>
+<p>Once there's a budget, the page also shows <strong>Break-even</strong>: the amount still missing against the forecast, and about how many tickets would close it.</p>
+<p>To change or delete an import, click the import line at the top of the page, such as <strong>Import 2 · 8 Jun</strong>. Deleting one previews what it will change first.</p>
+
+<h2 class="chapter" id="drinks">8. Track drinks and stock</h2>
+<p>The <strong>Stock and sales</strong> plugin is for goods taken on commission: you take crates from a supplier, return what's unsold and pay for the rest. It's only for checking, and <strong>never creates entries</strong>. Real money still goes in through the normal forms, and an event settles the same without it.</p>
+<h3>Set it up</h3>
+<ol class="steps">
+  <li>In <strong>Settings → Plugins → Stock and sales</strong>, click <strong>Set up Drinks</strong>. This creates a Drinks cost centre with the categories Drink donations, Drinks and Deposit.</li>
+  <li>Open <strong>Drinks</strong> in the sidebar, and click <strong>Commission</strong> at the top of the section. Enter the <strong>Supplier</strong>, and if you have one, the category that holds a returnable deposit, such as Pfand.</li>
+  <li>Click <strong>+ Product</strong> and enter its <strong>Cost per unit</strong> and <strong>Donation per unit</strong>.</li>
+</ol>
+<figure>
+  <a href="images/drinks.png"><img src="images/drinks.png" width="1280" height="960" loading="lazy" alt="The Drinks page with result, cost and income, and a product table with billed, left over, logged, gap, cost and expected."></a>
+  <figcaption>The Drinks cost centre, with the plugin's table and the lines tagged to it.</figcaption>
+</figure>
+<h3>Several suppliers</h3>
+<p>A cost centre has one supplier, with its own products and invoice check. If your drinks come from two independent suppliers, give each one its own cost centre.</p>
+<ol class="steps">
+  <li>In <strong>Settings → Cost centres</strong>, add one per supplier, such as <strong>Drinks Hoffmann</strong> and <strong>Drinks Krüger</strong>.</li>
+  <li>In <strong>Settings → Plugins → Stock and sales</strong>, tick both under <strong>Show on these cost centres</strong>. <strong>Set up Drinks</strong> is only a shortcut for one cost centre called Drinks, so you don't need it here.</li>
+  <li>Open each one in the sidebar, click <strong>Commission</strong> to enter its supplier, and add the products you get from them.</li>
+  <li>Both can share a category such as Drinks. A category starts its lines in one cost centre, so check the <strong>Cost centre</strong> on each expense and donation line, because that's how money reaches the right supplier's figures.</li>
+</ol>
+<figure>
+  <a href="images/drinks-suppliers.png"><img src="images/drinks-suppliers.png" width="1280" height="900" loading="lazy" alt="Settings, Stock and sales: the cost centres Drinks Hoffmann and Drinks Krüger are both ticked."></a>
+  <figcaption>Two cost centres, one per supplier. Each shows its own table and invoice check, and there's no combined drinks total.</figcaption>
+</figure>
+<div class="note"><strong>The invoice check goes by name</strong><p>It looks for expenses on the cost centre whose <strong>Counterparty</strong> matches the supplier, ignoring capitals. Everywhere else the counterparty is only information, but here “Hoffman” won't count as “Hoffmann”. <strong>Book invoice</strong> fills in the name for you, and typing one offers the names already used.</p></div>
+<h3>After the event</h3>
+<ol class="steps">
+  <li>Open each product and fill in the counts:
+    <ul>
+      <li><strong>Taken:</strong> received from the supplier.</li>
+      <li><strong>Returned:</strong> given back, and not billed.</li>
+      <li><strong>Left over:</strong> paid for, but still here.</li>
+      <li><strong>Logged:</strong> what people logged as taken.</li>
+    </ul>
+  </li>
+  <li>Enter the donations you collected as normal <strong>Income</strong>, in the Drink donations category.</li>
+  <li>When the supplier's invoice arrives, click <strong>Book invoice</strong>. It opens a filled-in expense form to check and save.</li>
+</ol>
+<figure>
+  <a href="images/product.png"><img src="images/product.png" width="1280" height="800" loading="lazy" alt="The product panel for Club-Mate, with cost, donation and the four counts."></a>
+  <figcaption>A product's costs and counts.</figcaption>
+</figure>
+<h3>Read the table</h3>
+<div class="table-wrap"><table>
+  <tr><th style="width:24%">Column</th><th>Meaning</th></tr>
+  <tr><td><strong>Billed</strong></td><td>Taken minus returned.</td></tr>
+  <tr><td><strong>Gap</strong></td><td>Billed, minus left over, minus logged. This can be crew drinks or breakage, so it's no proof of anyone's dishonesty.</td></tr>
+  <tr><td><strong>Cost</strong></td><td>Billed × cost per unit. The total is what the invoice should say.</td></tr>
+  <tr><td><strong>Expected</strong></td><td>Logged × donation per unit, shown against what you collected.</td></tr>
+  <tr><td><strong>Per drink</strong></td><td>The cost of what's gone, per unit gone. Leftovers don't count.</td></tr>
+</table></div>
+<div class="note"><strong>Using a paper tally?</strong><p>Create one product called <code>Strich</code>, with the value of a tally mark as its donation and only a logged count. Expected donations still work.</p></div>
+<p>The plugin works for other goods too. In Settings, attach it to any cost centre.</p>
+
+<h2 class="chapter" id="check">9. Check against reality</h2>
+<h3>Count the cash at the end</h3>
+<ol class="steps">
+  <li>On the <strong>Overview</strong>, click <strong>Count</strong> next to the cash account.</li>
+  <li>Enter what's really there as the <strong>Closing count</strong>.</li>
+  <li>Compare it with <strong>In the books</strong>. The panel shows either <strong>Matches the books</strong> or the difference.</li>
+</ol>
+<figure>
+  <a href="images/count-closing.png"><img src="images/count-closing.png" width="1280" height="800" loading="lazy" alt="The count panel for the cash box: closing count 410 euros against 412,90 euros in the books, 2,90 euros less than recorded."></a>
+  <figcaption>2,90 € less than recorded. The difference stays visible, and becomes an open item.</figcaption>
+</figure>
+<p>If it doesn't match, look for a missing entry first. A difference you can't explain can be accepted with a note when you close.</p>
+
+<h3>Check a bank statement</h3>
+<ol class="steps">
+  <li>Click <strong>Statement</strong> next to the account.</li>
+  <li>Enter the date and what the statement shows. For a net movement account, enter how much the event's money changed the account, not its total balance.</li>
+  <li>Click <strong>Add</strong>. A mismatch becomes an open item.</li>
+</ol>
+<figure>
+  <a href="images/statement.png"><img src="images/statement.png" width="1280" height="800" loading="lazy" alt="The statement panel for the Verein account, listing a checkpoint that matches the books."></a>
+  <figcaption>Statements stay listed, so you can add one whenever you get a new one.</figcaption>
+</figure>
+
+<h2 class="chapter" id="payouts">10. Pay people back</h2>
+<figure>
+  <a href="images/people.png"><img src="images/people.png" width="1280" height="560" loading="lazy" alt="The People page, listing each person's advanced, held and settled amounts and balance, with warnings for missing reimbursement methods."></a>
+  <figcaption>Anna is owed money, Bob owes the event, Clara is settled. A warning marks anyone owed money with no reimbursement method.</figcaption>
+</figure>
+<p>Click a person to see each line behind their balance, and go from there to its entry.</p>
+<figure>
+  <a href="images/person.png"><img src="images/person.png" width="1280" height="800" loading="lazy" alt="The person panel for Anna, showing no reimbursement method, the amount owed, and the entries behind it with a running balance."></a>
+  <figcaption>Everything behind Anna's balance, with a running total.</figcaption>
+</figure>
+<div class="note warn"><strong>Lancelot doesn't move money</strong><p>A settle <em>records</em> a payment that already happened. Make the transfer first, or hand over the list, and then record it. Changing a saved settle later corrects the record, not the transfer.</p></div>
+
+<h3>Pay everyone at once</h3>
+<ol class="steps">
+  <li>On <strong>People</strong>, click <strong>Payouts</strong>.</li>
+  <li>Check the list. It has each person's reimbursement method and the amount, and for a bank transfer the account holder and a suggested reference.</li>
+  <li>Click <strong>PDF</strong> or <strong>CSV</strong> to save it. Tick <strong>With advances and payments</strong> to add the details as an appendix to the PDF.</li>
+  <li>Make the transfers, or give the list to whoever does.</li>
+  <li>Once they're paid, click <strong>Mark as paid</strong>. Tick who you paid, choose the account and date, and confirm. Bank transfers start ticked, and other methods are yours to tick.</li>
+  <li>If the money came from different accounts, such as the bank for some and the cash box for others, do it once per account, ticking only the people paid from that one.</li>
+</ol>
+<figure>
+  <a href="images/mark-paid.png"><img src="images/mark-paid.png" width="1280" height="640" loading="lazy" alt="The Payouts page with a bank transfer for Anna and PayPal for Malte, a repayment for Bob, and the Mark as paid panel open with Anna ticked."></a>
+  <figcaption>Mark as paid writes one settle per ticked person, from the one account you choose. Anyone with no method is named in the panel.</figcaption>
+</figure>
+<h3>Pay one person, or a part</h3>
+<ol class="steps">
+  <li>Open the person on <strong>People</strong> and click <strong>Settle</strong>.</li>
+  <li>Change the amount if it's a partial payment. The panel shows the balance it leaves, and warns you if it's too much.</li>
+  <li>Check the account under <strong>From</strong>, and click <strong>Save</strong>.</li>
+</ol>
+<figure>
+  <a href="images/entry-settle.png"><img src="images/entry-settle.png" width="1280" height="800" loading="lazy" alt="The Settle form for Anna, reimbursing 212,40 euros from the Verein account, showing that Anna is then settled."></a>
+  <figcaption>The amount starts at the full balance.</figcaption>
+</figure>
+<h3>Collect from people who owe the event</h3>
+<p>Under <strong>Repayments</strong> on the Payouts page, click <strong>Repaid</strong> once the money has arrived. It opens a settle in the Repay direction.</p>
+
+<h2 class="chapter" id="close">11. Report and close</h2>
+<h3>Clear the open items</h3>
+<p>The <strong>Open</strong> list on the Overview shows what's unfinished. Each item leads to its fix:</p>
+<ul>
+  <li>A person who is owed money, or holds it.</li>
+  <li>An expense with no receipt.</li>
+  <li>A cash account with no closing count, or with a difference.</li>
+  <li>A statement that doesn't match.</li>
+  <li>A ticket conflict that isn't resolved.</li>
+</ul>
+<h3>Print the report</h3>
+<ol class="steps">
+  <li>On the <strong>Overview</strong>, click <strong>Report</strong>.</li>
+  <li>Choose whether to include <strong>Stock and sales</strong> and <strong>Receipts</strong> in the toolbar.</li>
+  <li>Click <strong>Print</strong> (<kbd>⌘P</kbd>), and choose to save as PDF in the print dialog.</li>
+</ol>
+<figure>
+  <a href="images/report.png"><img src="images/report.png" width="1280" height="1000" loading="lazy" alt="The settlement report: result, income, expenses, status, and plan against actual."></a>
+  <figcaption>The report has the categories, plan against actual, cost centres, the final balance, every entry, and the receipts.</figcaption>
+</figure>
+<p>The <strong>CSV</strong> button on the Overview exports all transactions, one row per line, for use in a spreadsheet. It's also the easiest way to compare with one in your first parallel run.</p>
+<h3>Close the event</h3>
+<ol class="steps">
+  <li>Click <strong>Close event</strong> on the Overview.</li>
+  <li>If anything is still open, write in <strong>Why it is fine</strong> for each item. The button stays disabled until each has a note.</li>
+  <li>Click <strong>Close event</strong> (<kbd>⌘↵</kbd>).</li>
+</ol>
+<figure>
+  <a href="images/close.png"><img src="images/close.png" width="1280" height="800" loading="lazy" alt="The Close event panel, with a note written for each open item."></a>
+  <figcaption>You can close with items open, but you have to say why. The notes stay with the event.</figcaption>
+</figure>
+<p>A closed event is read-only and shows its final balance for good. Receipts can still be previewed. What happens to the money afterwards, such as moving a surplus elsewhere, is outside Lancelot.</p>
+<figure>
+  <a href="images/overview-closed.png"><img src="images/overview-closed.png" width="1280" height="800" loading="lazy" alt="The Overview of a closed event, with its final balance and the items accepted when closing, each with its note."></a>
+  <figcaption>A closed event, with the final balance and what was accepted when closing.</figcaption>
+</figure>
+<p>Found a mistake? Go to <strong>Settings → Status → Reopen</strong>. Your notes are kept for when you close it again, and both steps appear in History.</p>
+
+<p class="part">Reference</p>
+
+<h2 class="chapter" id="file">Your file and backups</h2>
+<ul>
+  <li><strong>One file holds everything:</strong> entries, receipts, people and history. To see where it is, go to <strong>Settings → File → Show in Finder</strong>.</li>
+  <li><strong>It's an open format.</strong> A <code>.lancelot</code> file is a SQLite database, readable without Lancelot.</li>
+  <li><strong>There's no Save command for the file.</strong> Each change is written as soon as you save it in a panel.</li>
+  <li><strong>Backups are automatic.</strong> Lancelot keeps the last 20 versions of each event. Change the number under <strong>Settings → Backups</strong>, and click <strong>Restore</strong> to go back to one.</li>
+  <li><strong>Integrity is checked</strong> on every open and save. <strong>Settings → File → Check again</strong> runs it on demand, and any problem shows in a banner.</li>
+  <li><strong>It holds personal data:</strong> IBANs, names and receipts. Treat the file as you would a folder of bank details. Order IDs are the only buyer data it takes from a ticket sheet.</li>
+</ul>
+<p>Close the event (<kbd>⌘W</kbd>) before you copy, move or email its file, so that the copy is complete.</p>
+
+<h2 class="chapter" id="sources">Data sources</h2>
+<div class="note warn"><strong>Not yet tried with a real provider</strong><p>The <strong>Ticket API</strong> and <strong>Stock and sales</strong> plugins can pull from a web service. This has worked in the desktop app against a test service, but not with a real provider. Check the results carefully, and don't depend on this for a real event yet.</p></div>
+<ol class="steps">
+  <li>In <strong>Settings → Plugins</strong>, click <strong>Set up</strong> under the plugin.</li>
+  <li>Enter a <strong>Name</strong>, the <strong>URL</strong>, the <strong>Auth header</strong> and the <strong>Token</strong>, which is the header's whole value, such as <code>Bearer abc123</code>.</li>
+  <li>Under <strong>What the provider calls things</strong>, enter the field names your provider uses.</li>
+  <li>Click <strong>Save and test</strong>, and check the sample rows it shows.</li>
+  <li>Use <strong>Pull tickets</strong> on the Tickets page, or <strong>Pull logged</strong> on the cost centre page. You always review the changes first, and a failed pull changes nothing.</li>
+</ol>
+<figure>
+  <a href="images/data-source.png"><img src="images/data-source.png" width="1280" height="900" loading="lazy" alt="The data source form under the Stock and sales plugin, with fields for name, URL, auth header, token and field names."></a>
+  <figcaption>Details stay on this computer for all events, and the token goes in the system's keychain. Neither is in the event file, so a source must be set up again on another computer.</figcaption>
+</figure>
+<p>Pulling is the only thing in Lancelot that uses the network.</p>
+
+<h2 class="chapter" id="amounts">Typing amounts</h2>
+<p>Amount fields accept both number formats, whichever one you display, and always show what they read before you save.</p>
+<div class="table-wrap"><table>
+  <tr><th style="width:30%">You type</th><th style="width:26%">It reads</th><th>Why</th></tr>
+  <tr><td><code>12,5</code> or <code>12.5</code></td><td>12,50 €</td><td>A last separator with 1–2 digits after it is the decimal point.</td></tr>
+  <tr><td><code>1.234,56</code> or <code>1,234.56</code></td><td>1.234,56 €</td><td>The other separators group thousands.</td></tr>
+  <tr><td><code>1.234</code> or <code>1,234</code></td><td>Depends</td><td>This is ambiguous, so it follows your number format. Check the hint.</td></tr>
+  <tr><td><code>$12.50</code></td><td>12,50 €</td><td>Currency symbols and spaces are ignored. Amounts are always in the event's currency.</td></tr>
+  <tr><td><code>1,29+1,49</code></td><td>2,78 €</td><td>Fields add up sums with <code>+</code> and <code>-</code>. Only the total is saved.</td></tr>
+  <tr><td><code>1,2345</code> or <code>1.23.4</code></td><td>Refused</td><td>Nothing is silently rounded or guessed.</td></tr>
+</table></div>
+<p>Choose how numbers and dates are displayed in <strong>Settings → Display</strong>. The choice applies to all your events.</p>
+
+<h2 class="chapter" id="keys">Keyboard shortcuts</h2>
+<div class="two">
+<div class="table-wrap"><table>
+  <tr><th colspan="2">Anywhere</th></tr>
+  <tr><td><kbd>⇧⌘N</kbd></td><td>New event</td></tr>
+  <tr><td><kbd>⌘O</kbd></td><td>Open an event</td></tr>
+  <tr><td><kbd>⌘W</kbd></td><td>Close the file</td></tr>
+  <tr><td><kbd>⌘,</kbd></td><td>Settings</td></tr>
+  <tr><td><kbd>⌘1</kbd>–<kbd>⌘9</kbd></td><td>Pages and cost centres</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Close the panel</td></tr>
+</table></div>
+<div class="table-wrap"><table>
+  <tr><th colspan="2">Entering</th></tr>
+  <tr><td><kbd>N</kbd></td><td>New entry, budget line or product</td></tr>
+  <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Move through the ledger</td></tr>
+  <tr><td><kbd>↵</kbd></td><td>Open the selected entry</td></tr>
+  <tr><td><kbd>⌘↵</kbd></td><td>Save the panel</td></tr>
+  <tr><td><kbd>⇧⌘↵</kbd></td><td>Save and start the next entry</td></tr>
+  <tr><td><kbd>⌘P</kbd></td><td>Print the report</td></tr>
+</table></div>
+</div>
+
+<h2 class="chapter" id="trouble">When something looks wrong</h2>
+<h3>“Open in another window”</h3>
+<p>The file is already open elsewhere. Close it there first.</p>
+<h3>“Damaged” when opening a file</h3>
+<p>The integrity check found a problem. The panel lists the issues and the backups, and <strong>Restore</strong> goes back to one. Keep the damaged file until you've checked the restored one.</p>
+<h3>“Not found” in the recent list</h3>
+<p>The file was moved or deleted. Use <strong>Open</strong> to find it again, and the small × to remove the old line.</p>
+<h3>Save does nothing, or an amount is refused</h3>
+<p>Look for a field marked in red. For a split, check that the counter reads <strong>0,00 € left</strong>.</p>
+<h3>I can't delete a person, account or tier</h3>
+<p>Something still refers to it. Only people, accounts and tiers that nothing uses can be deleted.</p>
+<h3>I can't switch off tickets</h3>
+<p>The event still has tiers. Delete them first, which requires that nothing uses them.</p>
+<h3>An entry can't be edited</h3>
+<p>It came from tickets or an opening count. The panel has a button to the place where it's changed. If everything is locked, the event is closed, and you can <a href="#close">reopen it</a>.</p>
+<h3>Mark as paid is disabled</h3>
+<p>Nobody on the list has a reimbursement method, or nobody is ticked. Add methods on the <a href="#people">People</a> page.</p>
+<h3>The forecast is lower than I expected</h3>
+<p>It's meant to be cautious. Mark finished lines as <strong>Complete</strong> so that they count with their actual amount.</p>
+
+<h2 class="chapter" id="glossary">Glossary</h2>
+<div class="table-wrap"><table>
+  <tr><th style="width:28%">Term</th><th>Meaning</th></tr>
+  <tr><td><strong>Advance (Auslage)</strong></td><td>A payment from someone's private money on the event's behalf. The event now owes them.</td></tr>
+  <tr><td><strong>Alias</strong></td><td>Another name for a tier in the ticket sheet.</td></tr>
+  <tr><td><strong>Commission goods (Kommissionsware)</strong></td><td>Goods taken with the right to return what's unsold. You pay only for what you keep.</td></tr>
+  <tr><td><strong>Conflict</strong></td><td>A ticket that was in the last sheet and is gone from the new one, waiting for your decision.</td></tr>
+  <tr><td><strong>Counterparty</strong></td><td>The shop or supplier on an entry. Usually it's only information, but the Stock and sales invoice check finds a supplier's invoices by this name.</td></tr>
+  <tr><td><strong>Final balance</strong></td><td>Where the money is when the event closes.</td></tr>
+  <tr><td><strong>Net movement</strong></td><td>Tracking only how much the event changed an account, and not its total.</td></tr>
+  <tr><td><strong>Open item</strong></td><td>Something unfinished that blocks closing, until it's fixed or accepted with a note.</td></tr>
+  <tr><td><strong>Result</strong></td><td>Income minus expenses.</td></tr>
+  <tr><td><strong>Settle</strong></td><td>Recording that a person's balance was paid, as a reimbursement or a repayment.</td></tr>
+  <tr><td><strong>Snapshot date</strong></td><td>The date an import stands for. The latest one is the current sheet.</td></tr>
+  <tr><td><strong>Strich</strong></td><td>A tally mark on a paper list, worth a fixed amount.</td></tr>
+  <tr><td><strong>Tier</strong></td><td>A ticket type with a fixed price, such as Early Bird.</td></tr>
+  <tr><td><strong>Verein account</strong></td><td>In the examples, the bank account of an association that handles the group's money.</td></tr>
+</table></div>
+</main>
+</div>
+
+<dialog id="zoom" aria-label="Enlarged screenshot"><img alt=""></dialog>
+
+<script>
+(function () {
+  // The contents start closed on a phone.
+  var toc = document.getElementById('toc');
+  var narrow = window.matchMedia('(max-width: 900px)');
+  if (narrow.matches) toc.open = false;
+  narrow.addEventListener('change', function (e) { toc.open = !e.matches; });
+
+  var links = Array.prototype.slice.call(toc.querySelectorAll('li a'));
+  links.forEach(function (a) {
+    a.addEventListener('click', function () { if (narrow.matches) toc.open = false; });
+  });
+
+  // Mark the chapter being read.
+  var chapters = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function mark() {
+    var at = 0;
+    chapters.forEach(function (c, i) { if (c && c.getBoundingClientRect().top < 140) at = i; });
+    links.forEach(function (a, i) { a.classList.toggle('current', i === at); });
+  }
+  window.addEventListener('scroll', mark, { passive: true });
+  mark();
+
+  // Screenshots open larger; without this script they are plain links to the image.
+  var zoom = document.getElementById('zoom');
+  var big = zoom.querySelector('img');
+  document.addEventListener('click', function (e) {
+    var link = e.target.closest && e.target.closest('figure a');
+    if (!link || !zoom.showModal) return;
+    e.preventDefault();
+    big.src = link.getAttribute('href');
+    big.alt = link.querySelector('img').alt;
+    zoom.showModal();
+  });
+  zoom.addEventListener('click', function () { zoom.close(); });
+})();
+</script>
+</body>
+</html>
