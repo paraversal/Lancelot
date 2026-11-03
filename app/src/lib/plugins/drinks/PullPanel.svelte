@@ -43,7 +43,7 @@
 			await ctx.apply([setProduct({ ...product, aliases: [...(product.aliases ?? []), name] })]);
 		});
 
-	// A Strich from a paper list has no stock, so a new product needs no cost yet.
+	// A tally from a paper list has no stock, so a new product needs no cost yet.
 	const addProduct = (name: string) =>
 		run(() =>
 			ctx.apply([

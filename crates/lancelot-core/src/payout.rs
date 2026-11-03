@@ -1,6 +1,6 @@
 //! The payout and repayment lists (R-PER-4, R-PER-7) and the payout CSV.
 //!
-//! The payout list is everyone the event owes money to, for the Verein's treasurer, who pays
+//! The payout list is everyone the event owes money to, for the association's treasurer, who pays
 //! it in one go. The repayment list is everyone who owes the event money; they pay on their
 //! own, so their repayments are recorded one by one when the money arrives.
 
@@ -67,7 +67,7 @@ pub struct Payouts {
 /// spelled out, other characters outside the set are dropped, and it is cut to 140.
 pub fn reference(event: &str, person: &str) -> String {
     let mut out = String::new();
-    for c in format!("Auslagen {event} {person}").chars() {
+    for c in format!("Reimbursement {event} {person}").chars() {
         match c {
             'ä' => out.push_str("ae"),
             'ö' => out.push_str("oe"),
@@ -177,14 +177,14 @@ mod tests {
     #[test]
     fn references_use_sepa_characters_only() {
         assert_eq!(
-            reference("Sommerfest 2026", "Anna Krüger"),
-            "Auslagen Sommerfest 2026 Anna Krueger"
+            reference("Summer Festival 2026", "Anna Krüger"),
+            "Reimbursement Summer Festival 2026 Anna Krueger"
         );
         assert_eq!(
             reference("Straßenfest", "José Núñez"),
-            "Auslagen Strassenfest Jose Nunez"
+            "Reimbursement Strassenfest Jose Nunez"
         );
-        assert_eq!(reference("Fest  🎉", "Kim"), "Auslagen Fest Kim");
+        assert_eq!(reference("Fest  🎉", "Kim"), "Reimbursement Fest Kim");
         assert_eq!(
             reference(&"x".repeat(200), "Kim").chars().count(),
             REFERENCE_MAX
@@ -202,13 +202,13 @@ mod tests {
                 bic: None,
                 other_method: None,
                 amount: Cents::new(123_456).unwrap(),
-                reference: "Auslagen X Anna".into(),
+                reference: "Reimbursement X Anna".into(),
             }],
             ..Payouts::default()
         };
         assert_eq!(
             payouts_csv(&list, NumberFormat::De),
-            "Name;Account holder;IBAN;BIC;Other method;Amount;Reference\r\n\"Anna; \"\"Ani\"\"\";Anna Krüger;DE89370400440532013000;;;1234,56;Auslagen X Anna\r\n"
+            "Name;Account holder;IBAN;BIC;Other method;Amount;Reference\r\n\"Anna; \"\"Ani\"\"\";Anna Krüger;DE89370400440532013000;;;1234,56;Reimbursement X Anna\r\n"
         );
         assert!(payouts_csv(&list, NumberFormat::En).contains(",1234.56,"));
     }

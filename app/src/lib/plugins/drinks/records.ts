@@ -4,6 +4,8 @@ import type { CostCentre, PluginChange, PluginRecord } from '../api';
 
 export type CentreSettings = {
 	supplier: string | null;
+	/** Taken with the right to return what's unsold. Bought outright, nothing goes back. */
+	commission: boolean;
 	/** The expense category of deposit, left out of the invoice check (R-DRK-2). */
 	deposit: number | null;
 };
@@ -14,7 +16,7 @@ export type Product = {
 	name: string;
 	/** What a unit costs from the supplier, in cents. */
 	cost: number;
-	/** What people are asked to give per unit, in cents. A paper list's Strich is a product too. */
+	/** What people are asked to give per unit, in cents. A paper list's tally is a product too. */
 	donation: number | null;
 	/** Other names a data source uses for it. */
 	aliases?: string[];
@@ -52,6 +54,8 @@ export function centreSettings(records: PluginRecord[], centre: number): CentreS
 	if (!isObject(v)) return null;
 	return {
 		supplier: typeof v.supplier === 'string' ? v.supplier : null,
+		// Settings from before the choice existed were all on commission.
+		commission: v.commission !== false,
 		deposit: isWhole(v.deposit) ? v.deposit : null
 	};
 }
@@ -110,6 +114,9 @@ export function stockedCentres(records: PluginRecord[], centres: CostCentre[]) {
 /** Ids stay unique among the products that exist; a removed product's counts go with it. */
 export const nextProductId = (records: PluginRecord[]) =>
 	Math.max(0, ...allProducts(records).map((p) => p.id)) + 1;
+
+/** A cost centre the plugin was just attached to. */
+export const NEW_CENTRE: CentreSettings = { supplier: null, commission: true, deposit: null };
 
 export const setCentre = (centre: number, settings: CentreSettings | null): PluginChange => ({
 	key: `centre:${centre}`,

@@ -4,7 +4,7 @@ Longer-term ideas and larger changes that are not planned yet. Nothing here is c
 
 ## Ticket sources other than a sheet
 
-Today tickets come from a sheet or a data source, each a plugin. Other groups may have only totals. The refactoring made tickets optional and removed the fixed Verein account, so no group is stuck with this workflow. Other sources can then follow without a redesign.
+Today tickets come from a sheet or a data source, each a plugin. Other groups may have only totals. The refactoring made tickets optional and removed the fixed main bank account, so no group is stuck with this workflow. Other sources can then follow without a redesign.
 
 **The seam already exists.** `Book::preview_import` and `Book::import_tickets` take a `TicketBatch`, which is a label, a hash and one tier and order ID per ticket. Everything after that (conflicts, generated income, statistics) knows nothing about files. A new source only has to build a `TicketBatch`.
 

@@ -1,6 +1,7 @@
 <script lang="ts">
-	// The commission supplier, whose expenses are checked against the records, and the category of
-	// deposit, which the check leaves out. Booking an invoice without a supplier starts here.
+	// The supplier, whose expenses are checked against the records, whether unsold goods go back to
+	// them, and the category of deposit, which the check leaves out. Booking an invoice without a
+	// supplier starts here.
 	import { untrack } from 'svelte';
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
@@ -28,12 +29,14 @@
 	} = $props();
 
 	let supplier = $state<string | null>(null);
+	let commission = $state(true);
 	let deposit = $state(0);
 	untrack(() => {
 		supplier = settings.supplier;
+		commission = settings.commission;
 		deposit = settings.deposit ?? 0;
 	});
-	const values = () => JSON.stringify([supplier, deposit]);
+	const values = () => JSON.stringify([supplier, commission, deposit]);
 	const clean = values();
 	let error = $state<string | null>(null);
 
@@ -46,7 +49,9 @@
 		const name = supplier?.trim() || null;
 		if (forInvoice && !name) return void (error = 'Enter who the invoice is from.');
 		try {
-			await ctx.apply([setCentre(centre, { supplier: name, deposit: depositValue || null })]);
+			await ctx.apply([
+				setCentre(centre, { supplier: name, commission, deposit: depositValue || null })
+			]);
 			onsaved(name);
 		} catch (e) {
 			if (!(e instanceof Error)) throw e;
@@ -64,7 +69,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={forInvoice ? 'Supplier invoice' : 'Commission'} {onclose} dirty={values() !== clean}>
+<Panel title={forInvoice ? 'Supplier invoice' : 'Supplier'} {onclose} dirty={values() !== clean}>
 	<fieldset disabled={ctx.closed}>
 		<TextField
 			label="Supplier"
@@ -78,6 +83,16 @@
 				this name.{/snippet}
 		</TextField>
 		{#if !forInvoice}
+			<div class="form-field">
+				<label class="check">
+					<input type="checkbox" bind:checked={commission} />
+					On commission
+				</label>
+				<span class="hint">
+					Unsold goods go back to the supplier, and you pay only for the rest. Off, you bought them
+					outright, and the products have no Returned count.
+				</span>
+			</div>
 			<Select
 				label="Deposit category"
 				value={depositValue}
@@ -88,7 +103,7 @@
 				onchange={(v) => (deposit = v)}
 			>
 				{#snippet hint()}Optional. Expenses in this category are left out of the invoice check. Use
-					it for a returnable deposit on crates that couldn't be returned, such as Pfand.{/snippet}
+					it for a returnable deposit on crates that couldn't be returned.{/snippet}
 			</Select>
 		{/if}
 	</fieldset>
@@ -107,6 +122,17 @@
 </Panel>
 
 <style>
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2);
+	}
+
+	.hint {
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+	}
+
 	.closed {
 		display: inline-flex;
 		align-items: center;

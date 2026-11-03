@@ -81,7 +81,7 @@ A transfer takes `from` and `to` instead of `counterparty` and `lines`. A settle
 
 ### Setting up categories
 
-`createCostCentre`, `createCategory` and `setCategoryCentre` add to the event's setup, for a button such as "Set up Drinks".
+`createCostCentre`, `createCategory` and `setCategoryCentre` add to the event's setup, as Stock and sales does when it adds a cost centre for goods.
 
 ### Reading a file
 

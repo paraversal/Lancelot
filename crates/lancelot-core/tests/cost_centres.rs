@@ -29,7 +29,7 @@ fn tagged(account: AccountId, value: &str, centre: CostCentreId) -> SplitLine {
 }
 
 fn spend(book: &mut Book, supplier: Option<&str>, lines: Vec<SplitLine>) -> TxnId {
-    let payer = asset(book, "Verein account");
+    let payer = asset(book, "Bank account");
     let draft = TxnDraft {
         counterparty: supplier.map(str::to_owned),
         ..draft("Receipt", Entry::Expense { payer, lines })
@@ -96,7 +96,7 @@ fn the_drinks_result_is_what_is_tagged_to_it() {
 fn a_tag_must_exist() {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
-    let payer = asset(&book, "Verein account");
+    let payer = asset(&book, "Bank account");
     let lines = vec![tagged(kitchen, "1", CostCentreId(99))];
     let err = book
         .save_txn(&draft("x", Entry::Expense { payer, lines }), None)
@@ -114,7 +114,7 @@ fn a_linked_line_has_the_cost_centre_of_its_budget_line() {
     let centre = drinks_centre(&mut book);
     let kitchen = expense(&book, "Kitchen");
     let food = book.add_budget_line(plan(kitchen, "100", None)).unwrap();
-    let payer = asset(&book, "Verein account");
+    let payer = asset(&book, "Bank account");
 
     let lines = vec![SplitLine {
         budget_line: Some(food),
@@ -188,9 +188,9 @@ fn names_stay_unique_and_a_new_event_has_no_cost_centre() {
 fn only_categories_start_with_a_cost_centre() {
     let mut book = new_book();
     let centre = drinks_centre(&mut book);
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     assert_eq!(
-        book.set_category_cost_centre(verein, Some(centre))
+        book.set_category_cost_centre(bank, Some(centre))
             .unwrap_err()
             .code(),
         "wrong_account_kind"

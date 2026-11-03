@@ -80,7 +80,7 @@ pub struct ReconciliationId(#[ts(type = "number")] pub i64);
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountKind {
-    /// Event money sitting somewhere: the Verein account, the cash box.
+    /// Event money sitting somewhere: the Bank account, the cash box.
     Asset,
     /// Someone who advanced or holds event money. Positive displayed balance: the event owes them.
     Person,

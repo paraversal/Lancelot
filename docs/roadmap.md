@@ -26,7 +26,7 @@ First try the data sources in the desktop app with a real provider and a token i
 | --------------------------------------------- | ------------ | ------ |
 | Date of the next event: not soon, no deadline | M5           | you    |
 | Apple Developer account for signing           | after v0.1.0 | you    |
-| Sale date column in the ticket sheet          | M8           | Verein |
+| Sale date column in the ticket sheet          | M8           | Association |
 | A real (anonymised) ticket sheet as a fixture | M7           | you    |
 
 ## How we work

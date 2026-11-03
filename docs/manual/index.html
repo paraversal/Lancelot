@@ -73,7 +73,7 @@ ol.steps > li::before { content: counter(step); position: absolute; left: 0; top
 .note { margin: 18px 0; padding: 12px 16px; border-left: 3px solid var(--rule); background: var(--paper-sunk); border-radius: 0 8px 8px 0; font-size: 16px; }
 .note.warn { border-left-color: var(--attention); }
 .note p:last-child, .note ul:last-child { margin-bottom: 0; }
-.note strong:first-child { display: block; margin-bottom: 2px; }
+.note > strong:first-child { display: block; margin-bottom: 2px; }
 
 figure { margin: 22px 0 26px; }
 figure a { display: block; }
@@ -142,7 +142,7 @@ dialog img { display: block; max-width: 96vw; max-height: 96vh; cursor: zoom-out
     <li><a href="#opening">5. Count the cash</a></li>
     <li><a href="#entries">6. Enter the money</a></li>
     <li><a href="#tickets">7. Bring in tickets</a></li>
-    <li><a href="#drinks">8. Track drinks and stock</a></li>
+    <li><a href="#drinks">8. Track stock and sales</a></li>
     <li><a href="#check">9. Check against reality</a></li>
     <li><a href="#payouts">10. Pay people back</a></li>
     <li><a href="#close">11. Report and close</a></li>
@@ -210,7 +210,7 @@ dialog img { display: block; max-width: 96vw; max-height: 96vh; cursor: zoom-out
   <tr><td><strong>People</strong></td><td>One balance per person, netting what they advanced against what they hold. Reimbursement by bank transfer, with an IBAN check, or any other way. Payout list as PDF or CSV, repayment list, and marking paid who you choose in one go.</td></tr>
   <tr><td><strong>Budget</strong></td><td>Plan against actual per line, category and cost centre, with a cautious forecast of the result.</td></tr>
   <tr><td><strong>Tickets</strong></td><td>Tiers with price, fee and quota. Import <code>.ods</code>, <code>.xlsx</code> or <code>.csv</code> sheets with a review of what changed. Conflicts when tickets disappear, refunds, manual sales, a sales chart and break-even.</td></tr>
-  <tr><td><strong>Stock and sales</strong></td><td>For drinks on commission: billed units, the gap against what people logged, expected against collected donations, and an invoice check.</td></tr>
+  <tr><td><strong>Stock and sales</strong></td><td>For drinks or other goods, on commission or bought outright: billed units, the gap against what people logged, expected against collected money, and an invoice check.</td></tr>
   <tr><td><strong>Settling</strong></td><td>Cash counts and bank statement checks, a list of open items, a settlement report with receipts, a CSV of all transactions, and closing the event.</td></tr>
   <tr><td><strong>Your computer</strong></td><td>Works fully offline. Light and dark appearance, two number formats and keyboard shortcuts for entering a stack of receipts.</td></tr>
 </table></div>
@@ -253,8 +253,8 @@ pnpm tauri build --bundles app</code></pre></li>
 <h2 class="chapter" id="ideas">Six ideas to know</h2>
 <div class="table-wrap"><table>
   <tr><th style="width:22%">Idea</th><th>What it means</th><th style="width:28%">Example</th></tr>
-  <tr><td><strong>Event</strong></td><td>One self-contained world in one file. It knows nothing about events before or after it.</td><td>Sommerfest 2026</td></tr>
-  <tr><td><strong>Account</strong></td><td>A real place where the event's money sits: <b>bank</b> or <b>cash</b>.</td><td>Verein account, Cash box</td></tr>
+  <tr><td><strong>Event</strong></td><td>One self-contained world in one file. It knows nothing about events before or after it.</td><td>Summer Festival 2026</td></tr>
+  <tr><td><strong>Account</strong></td><td>A real place where the event's money sits: <b>bank</b> or <b>cash</b>.</td><td>Bank account, Cash box</td></tr>
   <tr><td><strong>Person</strong></td><td>Someone who advanced money or holds event money. Both net into one balance.</td><td>Bob advanced 120 € and holds 300 €, so Bob owes 180 €.</td></tr>
   <tr><td><strong>Category</strong></td><td>What kind of income or expense a line is.</td><td>Kitchen, Venue, Tickets</td></tr>
   <tr><td><strong>Budget line</strong></td><td>A planned amount. Planning never changes a real balance.</td><td>Hall rent, 1.800 €</td></tr>
@@ -266,7 +266,7 @@ pnpm tauri build --bundles app</code></pre></li>
 <h2 class="chapter" id="window">Find your way around</h2>
 <figure>
   <a href="images/overview.png"><img src="images/overview.png" width="1280" height="1000" loading="lazy" alt="The Overview: result, income and expenses at the top, bars by category, where the money is, and the open items."></a>
-  <figcaption>The Overview of the made-up Sommerfest 2026. Every screenshot in this manual uses invented data.</figcaption>
+  <figcaption>The Overview of the made-up Summer Festival 2026. Every screenshot in this manual uses invented data.</figcaption>
 </figure>
 <ul>
   <li>The <strong>sidebar</strong> lists the pages: Overview, Ledger, People, Tickets and Budget, then one page per cost centre.</li>
@@ -286,7 +286,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <li><span class="when">Ticket sales</span><span><a href="#tickets">Import each new ticket sheet</a> and resolve any conflicts.</span></li>
   <li><span class="when">Before doors</span><span><a href="#opening">Count the cash</a> you start with.</span></li>
   <li><span class="when">During</span><span><a href="#entries">Enter receipts</a> as they come, or collect them for later.</span></li>
-  <li><span class="when">Afterwards</span><span>Enter the rest, finish <a href="#drinks">drinks and stock</a>, and <a href="#check">count the cash and check the statement</a>.</span></li>
+  <li><span class="when">Afterwards</span><span>Enter the rest, finish <a href="#drinks">stock and sales</a>, and <a href="#check">count the cash and check the statement</a>.</span></li>
   <li><span class="when">Settling</span><span><a href="#payouts">Pay people back</a>, collect what's owed, then <a href="#close">print the report and close</a>.</span></li>
 </ul>
 
@@ -396,7 +396,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <tr><td><strong>Expense</strong></td><td>Event money was spent. <b>Paid by</b> is an account, or a person who advanced it.</td><td>Anna buys food on a private card: Paid by Anna, Kitchen.</td></tr>
   <tr><td><strong>Income</strong></td><td>The event earned money. <b>Received by</b> is an account, or a person who now holds it.</td><td>A donation goes in the cash box: Received by Cash box, General.</td></tr>
   <tr><td><strong>Transfer</strong></td><td>Money moved, but wasn't earned or spent.</td><td>Anna puts 200 € of private money into the box: From Anna, To Cash box. Anna is now owed 200 €.</td></tr>
-  <tr><td><strong>Settle</strong></td><td>A person's balance was paid, in either direction.</td><td>Reimburse Anna from the Verein account, or Bob repays the money held.</td></tr>
+  <tr><td><strong>Settle</strong></td><td>A person's balance was paid, in either direction.</td><td>Reimburse Anna from the Bank account, or Bob repays the money held.</td></tr>
 </table></div>
 
 <h3>Enter an expense</h3>
@@ -460,7 +460,7 @@ pnpm tauri build --bundles app</code></pre></li>
 </ol>
 <figure>
   <a href="images/tier.png"><img src="images/tier.png" width="1280" height="800" loading="lazy" alt="The new tier panel for Early Bird, at 25 euros with a quota of 50."></a>
-  <figcaption>A tier. The ticket screenshots use a second made-up event, Neues Fest.</figcaption>
+  <figcaption>A tier. The ticket screenshots use a second made-up event, New Festival.</figcaption>
 </figure>
 
 <h3>Import a ticket sheet</h3>
@@ -517,12 +517,13 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>Once there's a budget, the page also shows <strong>Break-even</strong>: the amount still missing against the forecast, and about how many tickets would close it.</p>
 <p>To change or delete an import, click the import line at the top of the page, such as <strong>Import 2 · 8 Jun</strong>. Deleting one previews what it will change first.</p>
 
-<h2 class="chapter" id="drinks">8. Track drinks and stock</h2>
-<p>The <strong>Stock and sales</strong> plugin is for goods taken on commission: you take crates from a supplier, return what's unsold and pay for the rest. It's only for checking, and <strong>never creates entries</strong>. Real money still goes in through the normal forms, and an event settles the same without it.</p>
+<h2 class="chapter" id="drinks">8. Track stock and sales</h2>
+<p>The <strong>Stock and sales</strong> plugin is for goods you get from a supplier and pass on, such as drinks, food or merch. Either you take them <strong>on commission</strong>, return what's unsold and pay for the rest, or you <strong>buy them outright</strong>. It's only for checking, and <strong>never creates entries</strong>. Real money still goes in through the normal forms, and an event settles the same without it.</p>
 <h3>Set it up</h3>
 <ol class="steps">
-  <li>In <strong>Settings → Plugins → Stock and sales</strong>, click <strong>Set up Drinks</strong>. This creates a Drinks cost centre with the categories Drink donations, Drinks and Deposit.</li>
-  <li>Open <strong>Drinks</strong> in the sidebar, and click <strong>Commission</strong> at the top of the section. Enter the <strong>Supplier</strong>, and if you have one, the category that holds a returnable deposit, such as Pfand.</li>
+  <li>In <strong>Settings → Plugins → Stock and sales</strong>, enter a name under <strong>New cost centre for goods</strong>, such as <code>Drinks</code>, and click <strong>Add cost centre</strong>. This creates the cost centre with the categories Drinks income, Drinks and Deposit. To use a cost centre you already have, tick it under <strong>Show on these cost centres</strong> instead.</li>
+  <li>Open the cost centre in the sidebar, and click <strong>Supplier</strong> at the top of the section. Enter the <strong>Supplier</strong>, and if you have one, the category that holds a returnable deposit.</li>
+  <li>Leave <strong>On commission</strong> ticked if you can return what's unsold. Untick it if you bought the goods outright: then there's no <strong>Returned</strong> count, and everything taken is billed.</li>
   <li>Click <strong>+ Product</strong> and enter its <strong>Cost per unit</strong>, without deposit, and its <strong>Donation per unit</strong>.</li>
 </ol>
 <figure>
@@ -530,12 +531,12 @@ pnpm tauri build --bundles app</code></pre></li>
   <figcaption>The Drinks cost centre, with the plugin's table and the lines tagged to it.</figcaption>
 </figure>
 <h3>Several suppliers</h3>
-<p>A cost centre has one supplier, with its own products and invoice check. If your drinks come from two independent suppliers, give each one its own cost centre.</p>
+<p>A cost centre has one supplier, with its own products and invoice check. If your goods come from two independent suppliers, give each one its own cost centre.</p>
 <ol class="steps">
   <li>In <strong>Settings → Cost centres</strong>, add one per supplier, such as <strong>Drinks Hoffmann</strong> and <strong>Drinks Krüger</strong>.</li>
-  <li>In <strong>Settings → Plugins → Stock and sales</strong>, tick both under <strong>Show on these cost centres</strong>. <strong>Set up Drinks</strong> is only a shortcut for one cost centre called Drinks, so you don't need it here.</li>
-  <li>Open each one in the sidebar, click <strong>Commission</strong> to enter its supplier, and add the products you get from them.</li>
-  <li>Both can share a category such as Drinks. A category starts its lines in one cost centre, so check the <strong>Cost centre</strong> on each expense and donation line, because that's how money reaches the right supplier's figures.</li>
+  <li>In <strong>Settings → Plugins → Stock and sales</strong>, tick both under <strong>Show on these cost centres</strong>.</li>
+  <li>Open each one in the sidebar, click <strong>Supplier</strong> to enter its supplier, and add the products you get from them.</li>
+  <li>Both can share a category such as Drinks. A category starts its lines in one cost centre, so check the <strong>Cost centre</strong> on each expense and income line, because that's how money reaches the right supplier's figures.</li>
 </ol>
 <figure>
   <a href="images/drinks-suppliers.png"><img src="images/drinks-suppliers.png" width="1280" height="900" loading="lazy" alt="Settings, Stock and sales: the cost centres Drinks Hoffmann and Drinks Krüger are both ticked."></a>
@@ -547,12 +548,12 @@ pnpm tauri build --bundles app</code></pre></li>
   <li>Open each product and fill in the counts:
     <ul>
       <li><strong>Taken:</strong> received from the supplier.</li>
-      <li><strong>Returned:</strong> given back, and not billed.</li>
+      <li><strong>Returned:</strong> given back unsold, and not billed. Only on commission.</li>
       <li><strong>Left over:</strong> paid for, but still here.</li>
       <li><strong>Logged:</strong> what people logged as taken.</li>
     </ul>
   </li>
-  <li>Enter the donations you collected as normal <strong>Income</strong>, in the Drink donations category.</li>
+  <li>Enter the money you collected as normal <strong>Income</strong>, in the cost centre's income category, such as Drinks income.</li>
   <li>When the supplier's invoice arrives, click <strong>Book invoice</strong>. It opens an expense form filled in from your records, so compare the amount with the real invoice. Put any deposit on its own line in the deposit category, then save.</li>
 </ol>
 <figure>
@@ -562,14 +563,13 @@ pnpm tauri build --bundles app</code></pre></li>
 <h3>Read the table</h3>
 <div class="table-wrap"><table>
   <tr><th style="width:24%">Column</th><th>Meaning</th></tr>
-  <tr><td><strong>Billed</strong></td><td>Taken minus returned.</td></tr>
-  <tr><td><strong>Gap</strong></td><td>Billed, minus left over, minus logged. This can be crew drinks or breakage, so it's no proof of anyone's dishonesty.</td></tr>
+  <tr><td><strong>Billed</strong></td><td>Taken minus returned. Bought outright, everything taken.</td></tr>
+  <tr><td><strong>Gap</strong></td><td>Billed, minus left over, minus logged. This can be what the crew used, or breakage, so it's no proof of anyone's dishonesty.</td></tr>
   <tr><td><strong>Cost</strong></td><td>Billed × cost per unit. The total is what the invoice should say without deposit.</td></tr>
   <tr><td><strong>Expected</strong></td><td>Logged × donation per unit, shown against what you collected.</td></tr>
-  <tr><td><strong>Per drink</strong></td><td>The cost of what's gone, per unit gone. Leftovers don't count.</td></tr>
+  <tr><td><strong>Per unit</strong></td><td>The cost of what's gone, per unit gone. Leftovers don't count.</td></tr>
 </table></div>
-<div class="note"><strong>Using a paper tally?</strong><p>Create one product called <code>Strich</code>, with the value of a tally mark as its donation and only a logged count. Expected donations still work.</p></div>
-<p>The plugin works for other goods too. In Settings, attach it to any cost centre.</p>
+<div class="note"><strong>Using a paper tally?</strong><p>Create one product called <code>Tally</code>, with the value of a tally mark as its donation and only a logged count. Expected donations still work.</p></div>
 
 <h2 class="chapter" id="check">9. Check against reality</h2>
 <h3>Count the cash at the end</h3>
@@ -591,7 +591,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <li>Click <strong>Add</strong>. A mismatch becomes an open item.</li>
 </ol>
 <figure>
-  <a href="images/statement.png"><img src="images/statement.png" width="1280" height="800" loading="lazy" alt="The statement panel for the Verein account, listing a checkpoint that matches the books."></a>
+  <a href="images/statement.png"><img src="images/statement.png" width="1280" height="800" loading="lazy" alt="The statement panel for the Bank account, listing a checkpoint that matches the books."></a>
   <figcaption>Statements stay listed, so you can add one whenever you get a new one.</figcaption>
 </figure>
 
@@ -627,7 +627,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <li>Check the account under <strong>From</strong>, and click <strong>Save</strong>.</li>
 </ol>
 <figure>
-  <a href="images/entry-settle.png"><img src="images/entry-settle.png" width="1280" height="800" loading="lazy" alt="The Settle form for Anna, reimbursing 212,40 euros from the Verein account, showing that Anna is then settled."></a>
+  <a href="images/entry-settle.png"><img src="images/entry-settle.png" width="1280" height="800" loading="lazy" alt="The Settle form for Anna, reimbursing 212,40 euros from the Bank account, showing that Anna is then settled."></a>
   <figcaption>The amount starts at the full balance.</figcaption>
 </figure>
 <h3>Collect from people who owe the event</h3>
@@ -757,9 +757,9 @@ pnpm tauri build --bundles app</code></pre></li>
 <h2 class="chapter" id="glossary">Glossary</h2>
 <div class="table-wrap"><table>
   <tr><th style="width:28%">Term</th><th>Meaning</th></tr>
-  <tr><td><strong>Advance (Auslage)</strong></td><td>A payment from someone's private money on the event's behalf. The event now owes them.</td></tr>
+  <tr><td><strong>Advance</strong></td><td>A payment from someone's private money on the event's behalf. The event now owes them.</td></tr>
   <tr><td><strong>Alias</strong></td><td>Another name for a tier in the ticket sheet.</td></tr>
-  <tr><td><strong>Commission goods (Kommissionsware)</strong></td><td>Goods taken with the right to return what's unsold. You pay only for what you keep.</td></tr>
+  <tr><td><strong>Commission goods</strong></td><td>Goods taken with the right to return what's unsold. You pay only for what you keep.</td></tr>
   <tr><td><strong>Conflict</strong></td><td>A ticket that was in the last sheet and is gone from the new one, waiting for your decision.</td></tr>
   <tr><td><strong>Counterparty</strong></td><td>The shop or supplier on an entry. Usually it's only information, but the Stock and sales invoice check finds a supplier's invoices by this name.</td></tr>
   <tr><td><strong>Final balance</strong></td><td>Where the money is when the event closes.</td></tr>
@@ -768,9 +768,8 @@ pnpm tauri build --bundles app</code></pre></li>
   <tr><td><strong>Result</strong></td><td>Income minus expenses.</td></tr>
   <tr><td><strong>Settle</strong></td><td>Recording that a person's balance was paid, as a reimbursement or a repayment.</td></tr>
   <tr><td><strong>Snapshot date</strong></td><td>The date an import stands for. The latest one is the current sheet.</td></tr>
-  <tr><td><strong>Strich</strong></td><td>A tally mark on a paper list, worth a fixed amount.</td></tr>
+  <tr><td><strong>Tally</strong></td><td>A tally mark on a paper list, worth a fixed amount.</td></tr>
   <tr><td><strong>Tier</strong></td><td>A ticket type with a fixed price, such as Early Bird.</td></tr>
-  <tr><td><strong>Verein account</strong></td><td>In the examples, the bank account of an association that handles the group's money.</td></tr>
 </table></div>
 </main>
 </div>

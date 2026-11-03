@@ -60,9 +60,9 @@ fn last_year() -> Book {
 #[test]
 fn a_template_keeps_the_setup_and_none_of_the_money() {
     let source = last_year();
-    let book = Book::from_template(&source, details("Sommerfest 2027")).unwrap();
+    let book = Book::from_template(&source, details("Summer Festival 2027")).unwrap();
 
-    assert_eq!(book.event().details.name, "Sommerfest 2027");
+    assert_eq!(book.event().details.name, "Summer Festival 2027");
     assert!(!book.event().is_closed());
     assert!(book.event().closing_overrides.is_empty());
     assert_eq!(
@@ -114,7 +114,7 @@ fn a_template_file_reopens_as_the_same_book() {
     let path = dir.path().join("new.lancelot");
     let (store, report) = Store::create_from_template(
         &path,
-        details("Sommerfest 2027"),
+        details("Summer Festival 2027"),
         &source,
         StoreOptions::default(),
     )
@@ -132,26 +132,26 @@ fn a_template_file_reopens_as_the_same_book() {
 fn the_new_event_books_like_any_other() {
     let source = last_year();
     let mut book = Book::from_template(&source, details("Next")).unwrap();
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let venue = category(&book, AccountKind::Expense, "Venue");
     let saved = save(
         &mut book,
         "Hall",
         Entry::Expense {
-            payer: verein,
+            payer: bank,
             lines: vec![split(venue, "80")],
         },
     );
     assert!(book.txn(saved).is_some());
-    assert_eq!(book.ledger().balance(verein), eur("-80"));
+    assert_eq!(book.ledger().balance(bank), eur("-80"));
 }
 
 #[test]
 fn a_template_brings_its_currency() {
-    let mut source_details = details("Sommerfest 2026");
+    let mut source_details = details("Summer Festival 2026");
     source_details.currency = Currency::Chf;
     let source = Book::new(source_details, &two_accounts()).unwrap();
-    let book = Book::from_template(&source, details("Sommerfest 2027")).unwrap();
+    let book = Book::from_template(&source, details("Summer Festival 2027")).unwrap();
     assert_eq!(book.event().details.currency, Currency::Chf);
 }
 

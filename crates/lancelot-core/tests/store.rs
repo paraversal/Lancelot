@@ -20,7 +20,7 @@ fn details() -> EventDetails {
 }
 
 fn create(dir: &TempDir) -> (Store, PathBuf) {
-    let path = dir.path().join("sommerfest.lancelot");
+    let path = dir.path().join("summer-festival.lancelot");
     let (store, report) =
         Store::create(&path, details(), &two_accounts(), StoreOptions::default()).unwrap();
     assert!(report.is_clean(), "{report:?}");
@@ -66,7 +66,7 @@ fn a_new_file_reopens_as_the_same_book() {
     let (reopened, report) = open(&path);
     assert!(report.is_clean());
     assert_eq!(reopened.book(), &book);
-    assert_eq!(reopened.book().event().details.name, "Sommerfest 2026");
+    assert_eq!(reopened.book().event().details.name, "Summer Festival 2026");
 }
 
 #[test]
@@ -83,10 +83,7 @@ fn the_example_event_survives_saving_and_reopening() {
     assert_eq!(store.book(), &book);
     let l = store.book().ledger();
     assert_eq!(l.result(), eur("2.027,50"));
-    assert_eq!(
-        l.balance(asset(store.book(), "Verein account")),
-        eur("1.757")
-    );
+    assert_eq!(l.balance(asset(store.book(), "Bank account")), eur("1.757"));
     assert_eq!(l.balance(asset(store.book(), "Cash box")), eur("412,90"));
     assert_eq!(l.person(m.anna).unwrap().net, eur("212,40"));
     assert_eq!(l.person(m.malte).unwrap().net, eur("110"));
@@ -269,7 +266,7 @@ fn leaves_no_journal_files_behind() {
         .unwrap()
         .map(|e| e.unwrap().file_name())
         .collect();
-    assert_eq!(names, ["sommerfest.lancelot"]);
+    assert_eq!(names, ["summer-festival.lancelot"]);
 }
 
 #[test]
@@ -376,13 +373,13 @@ fn a_tampered_attachment_is_reported_but_the_file_opens() {
 fn overpaying_shows_as_a_warning() {
     let dir = TempDir::new().unwrap();
     let (mut store, path) = create(&dir);
-    let verein = asset(store.book(), "Verein account");
+    let bank = asset(store.book(), "Bank account");
     let anna = store.person("Anna");
     store.save(
         "Too much",
         Entry::Settle {
             person: anna,
-            account: verein,
+            account: bank,
             amount: eur("10"),
             direction: SettleDirection::Reimburse,
         },
@@ -497,7 +494,7 @@ fn clock() -> (Arc<Mutex<OffsetDateTime>>, StoreOptions, TempDir) {
 fn backups_on_open_after_the_interval_and_pruned() {
     let dir = TempDir::new().unwrap();
     let (now, options, backups) = clock();
-    let path = dir.path().join("sommerfest.lancelot");
+    let path = dir.path().join("summer-festival.lancelot");
     let (mut store, _) = Store::create(&path, details(), &two_accounts(), options).unwrap();
     let uuid = store.event_uuid().to_owned();
     let count = || list_backups(backups.path(), &uuid).unwrap().len();
@@ -672,10 +669,10 @@ fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
     store
         .change(|book| book.update_person(m.malte, "Malte", iban("DE02120300000000202051")))
         .unwrap();
-    let verein = asset(store.book(), "Verein account");
+    let bank = asset(store.book(), "Bank account");
 
     let n = store
-        .change(|book| book.mark_payouts_paid(verein, june(20), &[m.anna, m.malte]))
+        .change(|book| book.mark_payouts_paid(bank, june(20), &[m.anna, m.malte]))
         .unwrap();
     assert_eq!(n, 2);
     let l = store.book().ledger();
@@ -687,7 +684,7 @@ fn marking_the_payout_list_as_paid_settles_everyone_with_an_iban() {
         "repayments are not touched"
     );
     assert_eq!(
-        l.balance(verein),
+        l.balance(bank),
         eur("1.757").checked_sub(eur("322,40")).unwrap()
     );
     assert!(payouts(store.book()).unwrap().payouts.is_empty());
@@ -702,9 +699,9 @@ fn asset_types_and_counts_survive_reopening() {
     let bar = store
         .change(|book| book.add_asset("Cash – Bar", AssetType::Cash))
         .unwrap();
-    let verein = asset(store.book(), "Verein account");
+    let bank = asset(store.book(), "Bank account");
     store
-        .change(|book| book.set_asset_type(verein, AssetType::Cash))
+        .change(|book| book.set_asset_type(bank, AssetType::Cash))
         .unwrap();
     store
         .change(|book| book.set_opening_count(bar, june(12), eur("40")))
@@ -807,10 +804,10 @@ fn a_mistyped_person_or_category_can_go_while_nothing_refers_to_it() {
             .code(),
         "account_in_use"
     );
-    let verein = asset(store.book(), "Verein account");
+    let bank = asset(store.book(), "Bank account");
     assert_eq!(
         store
-            .change(|book| book.delete_account(verein))
+            .change(|book| book.delete_account(bank))
             .unwrap_err()
             .code(),
         "account_in_use"

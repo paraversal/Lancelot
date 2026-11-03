@@ -418,13 +418,13 @@
 		<div class="stage">
 			{#if opened}
 				<div class="page" in:fx.pageIn={{ level }}>
-					<strong>Sommerfest 2026</strong>
+					<strong>Summer Festival 2026</strong>
 					<span class="line"></span><span class="line short"></span>
 					<Button size="sm" onclick={() => (opened = false)}>Back</Button>
 				</div>
 			{:else}
 				<button type="button" class="recent" bind:this={recentRow} onclick={openEvent}>
-					<strong>Sommerfest 2026</strong><small>12.–14.06.2026</small>
+					<strong>Summer Festival 2026</strong><small>12.–14.06.2026</small>
 				</button>
 			{/if}
 		</div>

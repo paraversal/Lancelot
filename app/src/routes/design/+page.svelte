@@ -78,7 +78,7 @@
 	<section>
 		<h3>Familjen Grotesk · 400 / 600</h3>
 		<p class="t40">+2.027,50 €</p>
-		<p class="t22">Sommerfest 2026</p>
+		<p class="t22">Summer Festival 2026</p>
 		<p class="t16">Anna Krüger</p>
 		<p>Metro weekly shop · 312,40 €</p>
 		<p class="t12">since import 4</p>
@@ -140,7 +140,7 @@
 			<AmountField label="invalid" value={null} {format} text="1.23.4" />
 		</div>
 		<div class="fields">
-			<TextField label="Name" value="Sommerfest 2026" oncommit={() => {}} />
+			<TextField label="Name" value="Summer Festival 2026" oncommit={() => {}} />
 			<DateField label="Date" value="2026-06-13" {format} oncommit={() => {}} />
 			<Select
 				label="Paid by"

@@ -71,17 +71,17 @@ describe('Overview', () => {
 			return r;
 		};
 
-		it('shows that the Verein account matches its statement', () => {
+		it('shows that the Bank account matches its statement', () => {
 			render(Overview);
-			const verein = screen.getByText('Verein account').closest('li')!;
-			expect(text(verein)).toContain('statement 30.06.2026 ✓');
+			const bank = screen.getByText('Bank account').closest('li')!;
+			expect(text(bank)).toContain('statement 30.06.2026 ✓');
 		});
 
 		it('leads from a mismatch to the panel, which asks for the net movement', async () => {
 			mismatched();
 			render(Overview);
 			await fireEvent.click(
-				screen.getByText('Verein account, 30.06.2026: 12,00 € more than recorded')
+				screen.getByText('Bank account, 30.06.2026: 12,00 € more than recorded')
 			);
 			expect(screen.getByText('Net movement')).toBeTruthy();
 			expect(
@@ -100,8 +100,8 @@ describe('Overview', () => {
 			const r = mismatched();
 			deleteReconciliation.mockResolvedValue(session.event);
 			render(Overview);
-			const verein = screen.getByText('Verein account').closest('li')!;
-			await fireEvent.click(within(verein).getByRole('button', { name: 'Statement' }));
+			const bank = screen.getByText('Bank account').closest('li')!;
+			await fireEvent.click(within(bank).getByRole('button', { name: 'Statement' }));
 			await fireEvent.click(screen.getByText('In the books'));
 			await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 			expect(deleteReconciliation).not.toHaveBeenCalled();

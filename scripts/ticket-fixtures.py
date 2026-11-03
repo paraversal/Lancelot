@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes the ticket sheet fixtures in fixtures/tickets (roadmap M7).
 
-A series of imports of the same made-up event, in the Verein's layout: one row per ticket with
+A series of imports of the same made-up event, in the association's layout: one row per ticket with
 the buyer's name and e-mail, which Lancelot must never read (R-TKT-17).
 
   import-1.ods          first import

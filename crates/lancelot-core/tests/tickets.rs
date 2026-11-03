@@ -87,8 +87,8 @@ fn an_import_generates_ticket_income_net_of_fees() {
     let (mut book, t) = with_tiers();
     import(&mut book, "import-1.ods", 1);
 
-    // R-TKT-6: one income per tier to the Verein account; the fee is an expense in it.
-    let verein = asset(&book, "Verein account");
+    // R-TKT-6: one income per tier to the Bank account; the fee is an expense in it.
+    let bank = asset(&book, "Bank account");
     let tickets = role(&book, Role::Tickets);
     let fees = role(&book, Role::TicketFees);
     assert_eq!(book.account(fees).unwrap().name, "Ticket fees");
@@ -106,13 +106,13 @@ fn an_import_generates_ticket_income_net_of_fees() {
         [
             (tickets, -eur("96")),
             (fees, eur("2,40")),
-            (verein, eur("93,60"))
+            (bank, eur("93,60"))
         ]
     );
     assert_eq!(income_of(&book, t.early).unwrap().lines.len(), 2);
 
     let ledger = book.ledger();
-    assert_eq!(ledger.balance(verein), eur("188,60"));
+    assert_eq!(ledger.balance(bank), eur("188,60"));
     assert_eq!(ledger.balance(tickets), eur("191"));
     assert_eq!(ledger.balance(fees), eur("2,40"));
     assert_eq!(ledger.result(), eur("188,60"));
@@ -177,7 +177,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
     assert_eq!(txn_amount(&regular.lines), eur("128"));
     assert_eq!(sold(&book, t.supporter).gross, eur("90"));
     assert_eq!(
-        book.ledger().balance(asset(&book, "Verein account")),
+        book.ledger().balance(asset(&book, "Bank account")),
         eur("264,80")
     );
 
@@ -233,7 +233,7 @@ fn ticket_income_cannot_be_changed_by_hand() {
     import(&mut book, "import-1.ods", 1);
     let id = income_of(&book, t.early).unwrap().id;
     let entry = Entry::Income {
-        destination: asset(&book, "Verein account"),
+        destination: asset(&book, "Bank account"),
         lines: vec![split(role(&book, Role::Tickets), "60")],
     };
     assert_eq!(
@@ -683,7 +683,7 @@ mod properties {
 
     proptest! {
         /// After any series of imports with any prices and fees, the ticket income is exactly
-        /// the figures: Verein gets the net, Tickets the gross, fees the rest, and every
+        /// the figures: the bank account gets the net, Tickets the gross, fees the rest, and every
         /// balance still sums to zero (R-TKT-6, R-TKT-10, R-COR-2).
         #[test]
         fn ticket_income_matches_the_figures(
@@ -706,7 +706,7 @@ mod properties {
             let total = book.tickets().total;
             let ledger = book.ledger();
             prop_assert_eq!(raw_sum(&book), 0);
-            prop_assert_eq!(ledger.balance(asset(&book, "Verein account")), total.net);
+            prop_assert_eq!(ledger.balance(asset(&book, "Bank account")), total.net);
             prop_assert_eq!(ledger.balance(role(&book, Role::Tickets)), total.gross);
             let fees = book.account_by_role(Role::TicketFees).map_or(Cents::ZERO, |a| ledger.balance(a.id));
             prop_assert_eq!(fees, total.fees);
@@ -870,19 +870,19 @@ fn a_refund_keeps_the_ticket_sold_and_books_negative_income() {
         (eur("96"), eur("2,40"), eur("32"), eur("61,60"))
     );
 
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let refunds = role(&book, Role::TicketRefunds);
     assert_eq!(book.account(refunds).unwrap().name, "Ticket refunds");
     assert_eq!(book.account(refunds).unwrap().kind, AccountKind::Income);
     // Negative income, shown as such.
     assert_eq!(book.ledger().balance(refunds), -eur("32"));
-    assert_eq!(book.ledger().balance(verein), eur("61,60"));
+    assert_eq!(book.ledger().balance(bank), eur("61,60"));
     assert_eq!(book.ledger().result(), eur("61,60"));
     assert_eq!(raw_sum(&book), 0);
 
     let view = &book.tickets().cancellations[0];
     assert_eq!((view.per_ticket, view.refund), (eur("16"), eur("32")));
-    assert_eq!(view.payer, Some(verein));
+    assert_eq!(view.payer, Some(bank));
     let txn = book.txn(view.txn.unwrap()).unwrap();
     assert_eq!(txn.date, june(20));
     assert_eq!(txn.description, "Refund 2 × Regular");
@@ -908,7 +908,7 @@ fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
     assert_eq!(view.txn.kind, TxnKind::Refund);
     assert_eq!(view.flow, Flow::Out);
     assert!(!view.needs_receipt);
-    assert_eq!(view.who, Some(asset(&book, "Verein account")));
+    assert_eq!(view.who, Some(asset(&book, "Bank account")));
     // Ticket income stays income, and shows with its fee among the splits.
     let income = snapshot
         .txns
@@ -919,7 +919,7 @@ fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
     let Some(Entry::Income { destination, lines }) = &income.entry else {
         panic!("{:?}", income.entry);
     };
-    assert_eq!(*destination, asset(&book, "Verein account"));
+    assert_eq!(*destination, asset(&book, "Bank account"));
     assert_eq!(lines[0].amount, income.amount);
     assert_eq!(lines.len(), 2);
 }
@@ -1209,7 +1209,7 @@ fn conflicts_keep_the_event_from_closing_until_accepted() {
     book.close(
         vec![BlockerOverride {
             item,
-            note: "the Verein is checking".into(),
+            note: "the association is checking".into(),
         }],
         now(),
     )
@@ -1378,7 +1378,7 @@ mod conflict_properties {
                 .account_by_role(role)
                 .map_or(Cents::ZERO, |a| ledger.balance(a.id));
             prop_assert_eq!(raw_sum(&book), 0);
-            prop_assert_eq!(ledger.balance(asset(&book, "Verein account")), total.net);
+            prop_assert_eq!(ledger.balance(asset(&book, "Bank account")), total.net);
             prop_assert_eq!(of(Role::Tickets), total.gross);
             prop_assert_eq!(of(Role::TicketFees), total.fees);
             prop_assert_eq!(of(Role::TicketRefunds), -total.refunds);
@@ -1487,10 +1487,10 @@ fn the_ticket_account_receives_the_sheet_and_is_needed_to_import() {
     );
 
     // The income moves with the setting.
-    let verein = asset(&book, "Verein account");
-    book.set_ticket_account(Some(verein)).unwrap();
+    let bank = asset(&book, "Bank account");
+    book.set_ticket_account(Some(bank)).unwrap();
     assert_eq!(book.ledger().balance(cash), Cents::ZERO);
-    assert_eq!(book.ledger().balance(verein), net);
+    assert_eq!(book.ledger().balance(bank), net);
     let kitchen = expense(&book, "Kitchen");
     assert_eq!(
         book.set_ticket_account(Some(kitchen)).unwrap_err().field(),

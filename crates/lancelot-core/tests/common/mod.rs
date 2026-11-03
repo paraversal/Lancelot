@@ -29,7 +29,7 @@ pub fn june(day: u8) -> Date {
 pub fn two_accounts() -> Vec<AccountDraft> {
     vec![
         AccountDraft {
-            name: "Verein account".into(),
+            name: "Bank account".into(),
             asset_type: AssetType::Bank,
         },
         AccountDraft {
@@ -42,7 +42,7 @@ pub fn two_accounts() -> Vec<AccountDraft> {
 pub fn new_book() -> Book {
     let details = EventDetails {
         currency: Default::default(),
-        name: "Sommerfest 2026".into(),
+        name: "Summer Festival 2026".into(),
         starts_on: Some(june(12)),
         ends_on: Some(june(14)),
         location: None,
