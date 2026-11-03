@@ -186,6 +186,11 @@ const walks = {
 		await reset('example');
 		await goTo('/event/overview');
 		await shot('overview', { height: 1000 });
+		// The README shows a shorter one in the reader's theme.
+		await shot('readme-overview', { height: 720 });
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await shot('readme-overview-dark', { height: 720 });
+		await page.emulateMedia({ colorScheme: 'light' });
 
 		await button('Count').nth(1).click();
 		await shot('count-closing');
