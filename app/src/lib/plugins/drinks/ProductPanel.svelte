@@ -22,12 +22,15 @@
 	let {
 		ctx,
 		centre,
+		commission = true,
 		product,
 		counts = NO_COUNTS,
 		onclose
 	}: {
 		ctx: PluginContext;
 		centre: number;
+		/** Bought outright, nothing goes back, so there is no Returned count. */
+		commission?: boolean;
 		product: Product | null;
 		counts?: Counts;
 		onclose: () => void;
@@ -82,7 +85,7 @@
 
 	const billed = $derived.by(() => {
 		const t = whole(taken);
-		const r = whole(returned);
+		const r = commission ? whole(returned) : 0;
 		return t !== null && r !== null && r <= t ? t - r : null;
 	});
 
@@ -93,7 +96,8 @@
 		if (costInvalid || donationInvalid) return;
 		const fail = (field: string, message: string) => void (error = { field, message });
 		const t = taken.trim() === '' ? 0 : whole(taken);
-		const r = returned.trim() === '' ? 0 : whole(returned);
+		// Bought outright, a count typed while on commission stays for switching back, unused.
+		const r = !commission ? counts.returned : returned.trim() === '' ? 0 : whole(returned);
 		const left = leftOver.trim() === '' ? null : whole(leftOver);
 		const manual = logged.trim() === '' ? null : signed(logged);
 		if (!name.trim()) return fail('name', 'enter a name');
@@ -103,9 +107,10 @@
 		if (donation !== null && donation < 0) return fail('donation', 'a price cannot be negative');
 		if (t === null) return fail('taken', 'enter a whole number');
 		if (r === null) return fail('returned', 'enter a whole number');
-		if (r > t) return fail('returned', 'more units returned than taken');
+		if (commission && r > t) return fail('returned', 'more units returned than taken');
 		if (leftOver.trim() !== '' && left === null) return fail('leftOver', 'enter a whole number');
-		if (left !== null && left > t - r) return fail('leftOver', 'more left over than billed');
+		const bought = commission ? t - r : t;
+		if (left !== null && left > bought) return fail('leftOver', 'more left over than billed');
 		if (logged.trim() !== '' && manual === null) return fail('logged', 'enter a whole number');
 
 		const id = product?.id ?? nextProductId(ctx.records);
@@ -185,14 +190,25 @@
 				{#if fieldError('donation')}<span class="form-error">{fieldError('donation')}</span>{/if}
 			</div>
 		</div>
-		<div class="form-pair">
-			{@render count('Taken', 'taken', taken, (v) => (taken = v))}
-			{@render count('Returned', 'returned', returned, (v) => (returned = v))}
-		</div>
-		<div class="form-pair">
-			{@render count('Left over', 'leftOver', leftOver, (v) => (leftOver = v))}
-			{@render count('Logged', 'logged', logged, (v) => (logged = v))}
-		</div>
+		{#if commission}
+			<div class="form-pair">
+				{@render count('Taken', 'taken', taken, (v) => (taken = v))}
+				{@render count('Returned', 'returned', returned, (v) => (returned = v))}
+			</div>
+			<div class="form-pair">
+				{@render count('Left over', 'leftOver', leftOver, (v) => (leftOver = v))}
+				{@render count('Logged', 'logged', logged, (v) => (logged = v))}
+			</div>
+		{:else}
+			<div class="form-pair">
+				{@render count('Taken', 'taken', taken, (v) => (taken = v))}
+				{@render count('Left over', 'leftOver', leftOver, (v) => (leftOver = v))}
+			</div>
+			<div class="form-pair">
+				{@render count('Logged', 'logged', logged, (v) => (logged = v))}
+				<span></span>
+			</div>
+		{/if}
 		{#if billed !== null && cost !== null}
 			<span class="hint">{billed} billed = {formatAmount(billed * cost, format)}</span>
 		{/if}

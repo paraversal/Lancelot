@@ -6,7 +6,7 @@ import type { CentreSettings, Counts, Product } from './records';
 /** What each count means, for the person typing it in. */
 export const EXPLAINERS = {
 	taken: 'Received from the supplier.',
-	returned: 'Given back to the supplier. Not billed.',
+	returned: 'Given back to the supplier unsold. Not billed.',
 	leftOver: 'Paid for, but still here after the event.',
 	logged: 'What people logged as taken.'
 };
@@ -14,10 +14,10 @@ export const EXPLAINERS = {
 export type Row = {
 	product: Product;
 	counts: Counts;
-	/** Taken minus returned: what the supplier bills. */
+	/** Taken minus returned: what the supplier bills. Bought outright, everything taken. */
 	billed: number;
 	leftOver: number;
-	/** Billed minus left over: drunk, given away or lost. */
+	/** Billed minus left over: sold, given away or lost. */
 	gone: number;
 	/** What people logged. Null until a figure is entered or imported. */
 	logged: number | null;
@@ -46,7 +46,7 @@ export type Figures = {
 	gap: number;
 	cost: number;
 	/** Cost of what is gone, per unit, rounded half up. Null while nothing is gone. */
-	costPerDrink: number | null;
+	costPerUnit: number | null;
 	/** Null until something has a donation price and a log. */
 	expected: number | null;
 	invoice: InvoiceCheck | null;
@@ -59,8 +59,8 @@ export function loggedOf(counts: Counts): number | null {
 	return Math.max(0, (counts.imported ?? 0) + (counts.manual ?? 0));
 }
 
-function rowOf(product: Product, counts: Counts): Row {
-	const billed = Math.max(0, counts.taken - counts.returned);
+function rowOf(product: Product, counts: Counts, commission: boolean): Row {
+	const billed = Math.max(0, counts.taken - (commission ? counts.returned : 0));
 	const leftOver = counts.leftOver ?? 0;
 	const gone = Math.max(0, billed - leftOver);
 	const logged = loggedOf(counts);
@@ -103,7 +103,7 @@ export function computeFigures(
 	products: { product: Product; counts: Counts }[],
 	txns: TxnView[]
 ): Figures {
-	const rows = products.map((p) => rowOf(p.product, p.counts));
+	const rows = products.map((p) => rowOf(p.product, p.counts, settings.commission));
 	const gone = sum(rows.map((r) => r.gone));
 	const goneCost = sum(rows.map((r) => r.gone * r.product.cost));
 	const cost = sum(rows.map((r) => r.cost));
@@ -116,7 +116,7 @@ export function computeFigures(
 		logged: sum(rows.map((r) => r.logged ?? 0)),
 		gap: sum(rows.map((r) => r.gap ?? 0)),
 		cost,
-		costPerDrink: gone > 0 ? Math.floor((goneCost * 2 + gone) / (gone * 2)) : null,
+		costPerUnit: gone > 0 ? Math.floor((goneCost * 2 + gone) / (gone * 2)) : null,
 		expected: expected.length ? sum(expected) : null,
 		invoice: checkInvoice(centre, settings, txns, cost, rows.length > 0)
 	};

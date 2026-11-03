@@ -31,7 +31,7 @@ const item = (over: Partial<Product> & Partial<Counts>) => {
 	};
 };
 
-const settings = { supplier: 'Hoffmann', deposit: DEPOSIT };
+const settings = { supplier: 'Hoffmann', commission: true, deposit: DEPOSIT };
 
 const invoice = (
 	counterparty: string | null,
@@ -53,6 +53,12 @@ describe('The drink figures', () => {
 		]);
 		expect(row.cost).toBe(16560);
 		expect(row.expected).toBe(19650);
+	});
+
+	it('bills everything taken when the goods were bought outright', () => {
+		const bought = { ...settings, commission: false };
+		const f = computeFigures(CENTRE, bought, [item({ taken: 24, returned: 6, cost: 100 })], []);
+		expect([f.billed, f.cost]).toEqual([24, 2400]);
 	});
 
 	it('counts a blank left over as none', () => {
@@ -85,22 +91,22 @@ describe('The drink figures', () => {
 		expect(loggedOf({ ...NO_COUNTS, manual: 0 })).toBe(0);
 	});
 
-	it('leaves left-over stock out of the cost per drink', () => {
+	it('leaves left-over stock out of the cost per unit', () => {
 		const stock = [
 			item({ id: 1, taken: 10, leftOver: 5, cost: 100 }),
 			item({ id: 2, taken: 5, cost: 200 })
 		];
 		const f = computeFigures(CENTRE, settings, stock, []);
 		// 5 × 1,00 € and 5 × 2,00 € are gone; the 5 left over are billed, but not drunk.
-		expect(f.costPerDrink).toBe(150);
+		expect(f.costPerUnit).toBe(150);
 		expect(f.cost).toBe(2000);
 		const none = computeFigures(CENTRE, settings, [item({ taken: 5, leftOver: 5 })], []);
-		expect(none.costPerDrink).toBeNull();
+		expect(none.costPerUnit).toBeNull();
 	});
 
-	it('rounds the cost per drink half up', () => {
+	it('rounds the cost per unit half up', () => {
 		const stock = [item({ id: 1, taken: 1, cost: 100 }), item({ id: 2, taken: 1, cost: 101 })];
-		expect(computeFigures(CENTRE, settings, stock, []).costPerDrink).toBe(101);
+		expect(computeFigures(CENTRE, settings, stock, []).costPerUnit).toBe(101);
 	});
 });
 
@@ -133,7 +139,7 @@ describe('The invoice check', () => {
 		expect(noCheck([invoice('Hoffmann', [{ ...line, costCentre: null }])])).toBeNull();
 		expect(noCheck([invoice('Hoffmann', [{ ...line, costCentre: 2 }])])).toBeNull();
 		expect(noCheck([invoice('Hoffmann', [line], 'income')])).toBeNull();
-		const noSupplier = { supplier: null, deposit: null };
+		const noSupplier = { supplier: null, commission: true, deposit: null };
 		expect(computeFigures(CENTRE, noSupplier, stock, [invoice(null, [line])]).invoice).toBeNull();
 	});
 
@@ -156,12 +162,19 @@ describe('The stored records', () => {
 
 	it('reads what was written', () => {
 		const records = [
+			// Written before goods could be bought outright, so on commission.
 			record('centre:1', { supplier: 'Hoffmann', deposit: 9 }),
+			record('centre:2', { supplier: null, commission: false, deposit: null }),
 			record('product:3', { centre: 1, name: 'Pils', cost: 95, donation: null }),
 			record('count:3', { taken: 5, returned: 1, leftOver: null, manual: -2, imported: null })
 		];
-		expect(centreSettings(records, 1)).toEqual({ supplier: 'Hoffmann', deposit: 9 });
-		expect(centreSettings(records, 2)).toBeNull();
+		expect(centreSettings(records, 1)).toEqual({
+			supplier: 'Hoffmann',
+			commission: true,
+			deposit: 9
+		});
+		expect(centreSettings(records, 2)?.commission).toBe(false);
+		expect(centreSettings(records, 4)).toBeNull();
 		expect(allProducts(records)).toEqual([
 			{ id: 3, centre: 1, name: 'Pils', cost: 95, donation: null }
 		]);

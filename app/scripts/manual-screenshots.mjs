@@ -227,7 +227,8 @@ const walks = {
 		await page.keyboard.press('Escape');
 
 		await goTo('/event/settings');
-		await button('Set up Drinks').click();
+		await page.getByLabel('New cost centre for goods').fill('Drinks');
+		await button('Add cost centre').click();
 		await page.getByRole('navigation').getByText('Drinks').click();
 		await page.getByRole('button', { name: /^Product/ }).click();
 		await page.keyboard.press('Escape');
@@ -301,7 +302,7 @@ const walks = {
 			['Drinks Krüger', 'Krüger']
 		]) {
 			await page.getByRole('navigation').getByText(centre).click();
-			await button('Commission').click();
+			await button('Supplier').click();
 			await page.getByLabel('Supplier').fill(supplier);
 			await save();
 			await page.getByText(supplier).first().waitFor();

@@ -1727,7 +1727,7 @@
         "centre": 1,
         "cost": 95,
         "donation": 200,
-        "name": "Pils 0,33"
+        "name": "Lager 0,33"
       }
     },
     {
@@ -1752,7 +1752,7 @@
         "centre": 1,
         "cost": 95,
         "donation": 200,
-        "name": "Radler 0,33"
+        "name": "Shandy 0,33"
       }
     },
     {
@@ -1777,7 +1777,7 @@
         "centre": 1,
         "cost": 140,
         "donation": 300,
-        "name": "Apfelschorle 1,0"
+        "name": "Apple spritzer 1,0"
       }
     },
     {

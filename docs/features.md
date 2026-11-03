@@ -87,14 +87,15 @@ Optional per event, and switched off in Settings while the event has no tiers (R
 
 Built-in features switched per event in Settings. Each shows in a marked frame, and switching one off hides it and keeps its data in the file.
 
-**Stock and sales**, for drinks or other goods on commission, attached to any cost centre:
+**Stock and sales**, for drinks or other goods from a supplier, attached to any cost centre:
 
-- "Set up Drinks" creates a cost centre with its categories.
-- Per product: cost, donation, and units taken, returned, left over and logged (R-DRK-5).
-- Billed units, the gap against what was logged, and the cost per drink (R-DRK-5, R-DRK-9).
+- A new cost centre for goods can be added from its settings, with an income and an expense category of its name and a Deposit category.
+- Per cost centre: the supplier, whether the goods are on commission or bought outright, and an optional deposit category (R-DRK-1, R-DRK-2).
+- Per product: cost, donation, and units taken, returned (only on commission), left over and logged (R-DRK-5).
+- Billed units, the gap against what was logged, and the cost per unit gone (R-DRK-5, R-DRK-9).
 - Expected donations against what was collected. A paper tally is one product, `Tally` (R-DRK-7).
 - A table per cost centre in the settlement report, which the report's toolbar can leave out.
-- An invoice check, which can leave out an optional deposit category and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
+- An invoice check, which leaves out the deposit category, and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
 - Pull logged counts from a data source, reviewing the changes first. A name that matches no product must be mapped once and is then remembered (R-DRK-6). Not yet tried with a real provider.
 
 **Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, even with other lines above them, and the rest of the file is never stored (R-TKT-3, R-TKT-17).

@@ -3,8 +3,9 @@
 	// whose cost centre was deleted can move to another: the core doesn't know about them.
 	import Button from '../../components/Button.svelte';
 	import Select from '../../components/Select.svelte';
+	import TextField from '../../components/TextField.svelte';
 	import type { SettingsSectionProps } from '../api';
-	import { allProducts, centreSettings, setCentre, setProduct } from './records';
+	import { allProducts, centreSettings, NEW_CENTRE, setCentre, setProduct } from './records';
 
 	let { ctx }: SettingsSectionProps = $props();
 
@@ -25,13 +26,18 @@
 	}
 
 	const toggle = (centre: number, on: boolean) =>
-		run(() => ctx.apply([setCentre(centre, on ? { supplier: null, deposit: null } : null)]));
+		run(() => ctx.apply([setCentre(centre, on ? NEW_CENTRE : null)]));
 
-	// A cost centre with the usual categories. One the event already has joins it, unless it
-	// belongs to another cost centre.
-	const setUp = () =>
+	/** The name of a new cost centre for goods, such as Drinks or Merch. */
+	let name = $state<string | null>(null);
+
+	// A new cost centre with its own income and expense categories, and a shared Deposit. A
+	// category the event already has joins it, unless it belongs to another cost centre.
+	const add = () =>
 		run(async () => {
-			const centre = await ctx.createCostCentre('Drinks');
+			const centreName = name?.trim();
+			if (!centreName) throw new Error('Enter a name for the cost centre.');
+			const centre = await ctx.createCostCentre(centreName);
 			const category = async (kind: 'income' | 'expense', name: string) => {
 				const found = ctx.accounts.find(
 					(a) => a.kind === kind && a.name.toLowerCase() === name.toLowerCase()
@@ -40,10 +46,11 @@
 				if (found.costCentre === null) await ctx.setCategoryCentre(found.id, centre);
 				return found.id;
 			};
-			await category('income', 'Drink donations');
-			await category('expense', 'Drinks');
+			await category('income', `${centreName} income`);
+			await category('expense', centreName);
 			const deposit = await category('expense', 'Deposit');
-			await ctx.apply([setCentre(centre, { supplier: null, deposit })]);
+			await ctx.apply([setCentre(centre, { ...NEW_CENTRE, deposit })]);
+			name = null;
 		});
 
 	const move = (centre: number) =>
@@ -68,8 +75,19 @@
 			{/each}
 		</ul>
 	{/if}
-	{#if !ctx.closed && !ctx.costCentres.some((c) => c.name.toLowerCase() === 'drinks')}
-		<div><Button size="sm" icon="plus" onclick={setUp}>Set up Drinks</Button></div>
+	{#if !ctx.closed}
+		<div class="add">
+			<TextField
+				label="New cost centre for goods"
+				value={name}
+				oninput={(v) => (name = v)}
+				oncommit={(v) => (name = v)}
+			>
+				{#snippet hint()}Such as Drinks or Merch. It gets an income and an expense category of its
+					name, and Deposit.{/snippet}
+			</TextField>
+			<div><Button size="sm" icon="plus" onclick={add}>Add cost centre</Button></div>
+		</div>
 	{/if}
 	{#if orphans.length}
 		<p class="note" data-testid="plugin-drinks-orphans">
@@ -109,6 +127,14 @@
 		margin: 0;
 		padding: 0;
 		list-style: none;
+	}
+
+	.add {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-2);
+		max-width: 360px;
+		margin-top: var(--spacing-2);
 	}
 
 	label {

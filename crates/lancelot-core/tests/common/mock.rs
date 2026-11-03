@@ -209,9 +209,9 @@ pub fn build(t: &mut impl Target) -> Mock {
     }];
     for (id, (name, taken, returned, left_over, logged, cost, donation)) in [
         ("Club-Mate 0,5", 240, 96, 4, 138, 115, 250),
-        ("Pils 0,33", 480, 312, 0, 165, 95, 200),
-        ("Radler 0,33", 120, 72, 2, 45, 95, 200),
-        ("Apfelschorle 1,0", 72, 48, 2, 22, 140, 300),
+        ("Lager 0,33", 480, 312, 0, 165, 95, 200),
+        ("Shandy 0,33", 120, 72, 2, 45, 95, 200),
+        ("Apple spritzer 1,0", 72, 48, 2, 22, 140, 300),
         ("Water 1,0", 96, 70, 6, 20, 60, 100),
     ]
     .into_iter()

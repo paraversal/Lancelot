@@ -10,15 +10,13 @@
 	import ProductPanel from './ProductPanel.svelte';
 	import { PULL_FIELDS } from './pull';
 	import PullPanel from './PullPanel.svelte';
-	import { allProducts, centreSettings, countsOf } from './records';
+	import { allProducts, centreSettings, countsOf, NEW_CENTRE } from './records';
 	import SupplierPanel from './SupplierPanel.svelte';
 
 	let { ctx, centre, setPanel }: CentreSectionProps = $props();
 
 	const format = $derived(ctx.format);
-	const settings = $derived(
-		centreSettings(ctx.records, centre.id) ?? { supplier: null, deposit: null }
-	);
+	const settings = $derived(centreSettings(ctx.records, centre.id) ?? NEW_CENTRE);
 	const products = $derived(
 		allProducts(ctx.records)
 			.filter((p) => p.centre === centre.id)
@@ -106,12 +104,19 @@
 	{#if pulled}
 		<PullPanel {ctx} centre={centre.id} {pulled} onclose={() => show({})} />
 	{:else if adding}
-		<ProductPanel {ctx} centre={centre.id} product={null} onclose={() => show({})} />
+		<ProductPanel
+			{ctx}
+			centre={centre.id}
+			commission={settings.commission}
+			product={null}
+			onclose={() => show({})}
+		/>
 	{:else if open}
 		{#key open.product.id}
 			<ProductPanel
 				{ctx}
 				centre={centre.id}
+				commission={settings.commission}
 				product={open.product}
 				counts={open.counts}
 				onclose={() => show({})}
@@ -136,11 +141,11 @@
 <div class="records">
 	<div class="caption">
 		<button type="button" class="link" onclick={() => show({ supplier: 'settings' })}>
-			{settings.supplier ? `${settings.supplier} · commission` : 'Commission'}
+			{settings.supplier ?? 'Supplier'}{settings.commission ? ' · on commission' : ''}
 		</button>
 		<span class="side">
-			{#if figures.costPerDrink !== null}
-				<span>{formatAmount(figures.costPerDrink, format)} per drink</span>
+			{#if figures.costPerUnit !== null}
+				<span>{formatAmount(figures.costPerUnit, format)} per unit</span>
 			{/if}
 			{#if !ctx.closed}
 				{#if ctx.dataSource}
