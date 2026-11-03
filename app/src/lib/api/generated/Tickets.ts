@@ -24,9 +24,14 @@ imports: Array<ImportSummary>,
  */
 manualSales: Array<ManualSaleView>, 
 /**
- * By order ID.
+ * By order ID. Without order IDs there is one, for the order with no name ([`NO_ORDER`]).
  */
 conflicts: Array<OrderConflict>, 
+/**
+ * Whether the imports have order IDs. `None` until an import has tickets: then either
+ * kind can be imported.
+ */
+orderIds: boolean | null, 
 /**
  * Oldest first.
  */

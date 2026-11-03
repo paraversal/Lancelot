@@ -62,7 +62,7 @@ pub use store::{
 pub use tickets::{
     BatchTicket, Cancellation, CancellationDraft, CancellationEdit, CancellationSource,
     CancellationView, ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft,
-    OrderConflict, RefundTerms, RemovedTickets, Resolution, TicketBatch, TicketImport,
+    NO_ORDER, OrderConflict, RefundTerms, RemovedTickets, Resolution, TicketBatch, TicketImport,
     TicketSettings, TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
 };
 

@@ -464,7 +464,9 @@ pnpm tauri build --bundles app</code></pre></li>
 </figure>
 
 <h3>Import a ticket sheet</h3>
-<p>The sheet needs one row per ticket, with a column for the tier and one for the order ID. By default these are called <code>Ticket</code> and <code>Order ID</code>. Click <strong>Reads Ticket · Order ID</strong> to change the names. Lancelot reads only those two columns, so names and email addresses in the file are never stored.</p>
+<p>The sheet needs one row per ticket, with a column for the tier and, usually, one for the order ID. By default these are called <code>Ticket</code> and <code>Order ID</code>. Click <strong>Reads Ticket · Order ID</strong> to change the names. Lancelot reads only those columns, so names and email addresses in the file are never stored.</p>
+<p>If your sheet has no order IDs, untick <strong>Rows have an order ID</strong> in the same panel before the first import. Lancelot then counts tickets per tier. You can only change this while the event has no imports, because every import has to be the same kind.</p>
+<div class="note"><strong>Without order IDs, Lancelot sees less</strong><p>A tier with fewer tickets than before still becomes a conflict. But if one ticket is cancelled and another of the same tier is sold between two imports, the count stays the same and nothing shows. Import often, and record cancellations you know about with <strong>+ Cancellation</strong>.</p></div>
 <ol class="steps">
   <li>Click <strong>Import sheet</strong> and choose an <code>.ods</code>, <code>.xlsx</code> or <code>.csv</code> file, or drop it on the page.</li>
   <li>If rows can't be read, they're listed first. Fix the file, or continue with <strong>Review import</strong>.</li>
@@ -491,7 +493,7 @@ pnpm tauri build --bundles app</code></pre></li>
 </figure>
 <figure>
   <a href="images/tickets-conflicts.png"><img src="images/tickets-conflicts.png" width="1280" height="1000" loading="lazy" alt="The Tickets page showing two conflict cards, one for each order, with Refund and Correction options."></a>
-  <figcaption>Conflicts, grouped by order.</figcaption>
+  <figcaption>Conflicts, grouped by order. Without order IDs they're grouped under <strong>Sheet</strong>, one line per tier.</figcaption>
 </figure>
 <p>For each one, choose:</p>
 <ul>
@@ -508,7 +510,7 @@ pnpm tauri build --bundles app</code></pre></li>
 <h3>Manual sales and cancellations</h3>
 <ul>
   <li><strong>Manual sale</strong> is for tickets sold outside the regular channels. Enter the tier, the count, who received the money, the date and an optional reference. If a person received it, it shows up in their balance.</li>
-  <li><strong>+ Cancellation</strong> records a cancellation without waiting for the sheet to change, on an order ID or a manual sale. If the order disappears later, the conflict offers to match it, so nothing counts twice.</li>
+  <li><strong>+ Cancellation</strong> records a cancellation without waiting for the sheet to change, on an order ID, a tier of the sheet when it has no order IDs, or a manual sale. If the order disappears later, the conflict offers to match it, so nothing counts twice.</li>
 </ul>
 <figure>
   <a href="images/manual-sale.png"><img src="images/manual-sale.png" width="1280" height="800" loading="lazy" alt="The Manual sale panel, with a tier, a count of 3, and the total."></a>

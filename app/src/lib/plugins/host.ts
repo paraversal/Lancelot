@@ -49,6 +49,9 @@ export function pluginContext(id: string): PluginContext {
 		get txns() {
 			return snapshot().txns;
 		},
+		get ticketOrderIds() {
+			return snapshot().tickets.orderIds;
+		},
 		figuresOf: (centre) => snapshot().budget.costCentres.find((c) => c.costCentre === centre),
 		get records() {
 			return snapshot().pluginRecords.filter((r) => r.plugin === id && r.key !== OFF_KEY);

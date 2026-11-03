@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The sheet's columns, and what came of reading it: the rows that could not be read are listed,
 	// never dropped silently (R-TKT-4). Only these columns are read, the rest of the file never
-	// reaches the event (R-TKT-17).
+	// reaches the event (R-TKT-17). Whether rows have an order ID is set until the first import:
+	// an event's imports either all have them or none do.
 	import Button from '../../components/Button.svelte';
 	import Panel from '../../components/Panel.svelte';
 	import TextField from '../../components/TextField.svelte';
@@ -30,7 +31,8 @@
 		onclose: () => void;
 	} = $props();
 
-	const columns = $derived(columnsOf(ctx.records));
+	const columns = $derived(columnsOf(ctx.records, ctx.ticketOrderIds));
+	const locked = $derived(ctx.ticketOrderIds !== null);
 	let columnError = $state<string | null>(null);
 	const name = $derived(path?.split(/[\\/]/).pop() ?? null);
 	const PROBLEMS = $derived({
@@ -39,8 +41,9 @@
 		cellError: 'a cell with an error'
 	});
 
-	async function setColumn(key: keyof TicketColumns, value: string) {
-		if (columns[key] === value.trim()) return;
+	async function setColumn<K extends keyof TicketColumns>(key: K, value: TicketColumns[K]) {
+		const trimmed = typeof value === 'string' ? value.trim() : value;
+		if (columns[key] === trimmed) return;
 		const next = { ...columns, [key]: value };
 		columnError = columnsError(next);
 		if (columnError) return;
@@ -68,16 +71,42 @@
 		<span class="form-label">Columns read</span>
 		<div class="columns">
 			{#each [{ key: 'tier', label: 'tier' }, { key: 'order', label: 'order' }] as const as c (c.key)}
-				<div class="column">
-					<TextField
-						label={c.label}
-						value={columns[c.key]}
-						oncommit={(v) => setColumn(c.key, v ?? '')}
-					/>
-				</div>
+				{#if c.key === 'tier' || columns.orderIds}
+					<div class="column">
+						<TextField
+							label={c.label}
+							value={columns[c.key]}
+							oncommit={(v) => setColumn(c.key, v ?? '')}
+						/>
+					</div>
+				{/if}
 			{/each}
 		</div>
 		{#if columnError}<span class="form-error">{columnError}</span>{/if}
+	</div>
+
+	<div class="labelled">
+		<label class="check">
+			<input
+				type="checkbox"
+				checked={columns.orderIds}
+				disabled={locked || ctx.closed}
+				onchange={(e) => setColumn('orderIds', e.currentTarget.checked)}
+			/>
+			Rows have an order ID
+		</label>
+		<span class="hint">
+			{#if locked}
+				The event's imports {columns.orderIds
+					? 'have order IDs, so every sheet needs them'
+					: 'have none, so every sheet is counted per tier'}. Delete the imports to change this.
+			{:else if columns.orderIds}
+				A ticket that leaves the sheet is traced to its order.
+			{:else}
+				Tickets are counted per tier. A tier with fewer tickets than before is a conflict, but a
+				cancelled ticket and a new one in the same tier cancel out.
+			{/if}
+		</span>
 	</div>
 
 	{#if sheet?.problems.length}
@@ -139,6 +168,17 @@
 
 	.column :global(.field > label) {
 		order: 2;
+	}
+
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2);
+	}
+
+	.hint {
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
 	}
 
 	.problems {

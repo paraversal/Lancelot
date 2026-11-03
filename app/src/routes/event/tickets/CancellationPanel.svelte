@@ -18,7 +18,7 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, parseCount, parseFee } from '#lib/tickets.ts';
+	import { feeInput, orderName, parseCount, parseFee } from '#lib/tickets.ts';
 	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let {
@@ -36,6 +36,8 @@
 	const tiers = $derived(tickets.tiers);
 	const sales = $derived(tickets.manualSales);
 	const current = $derived(tickets.cancellations.find((c) => c.id === id) ?? null);
+	// Without order IDs, a sheet ticket is named by its tier alone.
+	const noOrderIds = $derived(tickets.orderIds === false);
 	const correction = $derived(!!current && current.terms === null);
 	const ticketAccount = $derived(snapshot.ticketSettings.account ?? 0);
 	const tierName = (t: TierId) => tiers.find((x) => x.id === t)?.name ?? '';
@@ -107,7 +109,7 @@
 		if (n === null || Number.isNaN(n)) return missing('count', 'enter a whole number');
 		if (bp === null) return missing('refundBp', 'enter a percentage');
 		if (date === null) return missing('date', 'enter a date');
-		if (!current && source === 'order' && !order?.trim())
+		if (!current && source === 'order' && !noOrderIds && !order?.trim())
 			return missing('order', 'enter the order ID');
 		const terms: RefundTerms = {
 			refundBp: bp,
@@ -121,7 +123,7 @@
 					source:
 						source === 'sale'
 							? { type: 'sale', sale }
-							: { type: 'order', order: order ?? '', tier },
+							: { type: 'order', order: noOrderIds ? '' : (order ?? ''), tier },
 					count: n,
 					terms,
 					note
@@ -155,7 +157,7 @@
 		{#if current}
 			<p class="source">
 				{current.order !== null
-					? `Order ${current.order}`
+					? orderName(current.order)
 					: `Sale: ${chosenSale ? saleLabel(chosenSale) : ''}`}
 				· {current.count} × {tierName(current.tier)}
 			</p>
@@ -163,14 +165,21 @@
 			{#if sales.length}
 				<Segmented
 					options={[
-						{ value: 'order' as Source, label: 'Order' },
+						{ value: 'order' as Source, label: noOrderIds ? 'Sheet' : 'Order' },
 						{ value: 'sale' as Source, label: 'Manual sale' }
 					]}
 					bind:value={source}
 					label="Cancelled from"
 				/>
 			{/if}
-			{#if source === 'order'}
+			{#if source === 'order' && noOrderIds}
+				<Select
+					label="Tier"
+					value={tier}
+					options={tiers.map((t) => ({ value: t.id, label: t.name }))}
+					onchange={(v) => (tier = v)}
+				/>
+			{:else if source === 'order'}
 				<div class="pair">
 					<div class="form-field grow">
 						<TextField

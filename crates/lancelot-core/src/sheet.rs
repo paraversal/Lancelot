@@ -64,9 +64,10 @@ pub fn read_table(
 }
 
 impl TicketBatch {
-    /// The tickets of a table read with the tier and order columns, without the rows missing
-    /// either. The app's Ticket sheet plugin does this itself and shows those rows; this is for
-    /// the example events and tests, which have no one to show them to.
+    /// The tickets of a table read with the tier and order columns, or with the tier column
+    /// alone for a sheet without order IDs, leaving out the rows missing either. The app's Ticket
+    /// sheet plugin does this itself and shows those rows; this is for the example events and
+    /// tests, which have no one to show them to.
     pub fn from_table(table: Table) -> TicketBatch {
         TicketBatch {
             source: table.source,
@@ -74,11 +75,17 @@ impl TicketBatch {
             tickets: table
                 .rows
                 .into_iter()
-                .filter_map(|r| match <[String; 2]>::try_from(r.cells) {
-                    Ok([tier, order]) if !tier.is_empty() && !order.is_empty() => {
-                        Some(BatchTicket { tier, order })
+                .filter_map(|r| {
+                    let mut cells = r.cells.into_iter();
+                    let tier = cells.next().filter(|t| !t.is_empty())?;
+                    match cells.next() {
+                        None => Some(BatchTicket { tier, order: None }),
+                        Some(order) if !order.is_empty() => Some(BatchTicket {
+                            tier,
+                            order: Some(order),
+                        }),
+                        Some(_) => None,
                     }
-                    _ => None,
                 })
                 .collect(),
         }
@@ -313,7 +320,7 @@ mod tests {
             batch.tickets,
             [BatchTicket {
                 tier: "Regular".into(),
-                order: "1".into()
+                order: Some("1".into())
             }]
         );
     }

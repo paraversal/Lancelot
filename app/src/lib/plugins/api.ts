@@ -73,6 +73,11 @@ export interface PluginContext {
 	readonly accounts: AccountView[];
 	readonly txns: TxnView[];
 	figuresOf(centre: number): CostCentreFigures | undefined;
+	/**
+	 * Whether the event's ticket imports have order IDs; null until one has tickets. A batch of the
+	 * other kind is refused. The orders themselves stay out of plugins.
+	 */
+	readonly ticketOrderIds: boolean | null;
 	/** This plugin's records, in creation order. */
 	readonly records: PluginRecord[];
 	/** Applies the changes together. A null value removes a record. */
