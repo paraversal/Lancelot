@@ -1,4 +1,4 @@
-//! The raw transactions as CSV (R-SET-6), for spreadsheets and the Verein's own books.
+//! The raw transactions as CSV (R-SET-6), for spreadsheets and the association's own books.
 
 use crate::amount::NumberFormat;
 use crate::book::Book;

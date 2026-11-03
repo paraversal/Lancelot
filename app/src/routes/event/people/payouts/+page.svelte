@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Payouts: the payout list for the Verein's treasurer (R-PER-4) and the repayment list
+	// Payouts: the payout list for the association's treasurer (R-PER-4) and the repayment list
 	// (R-PER-7). PDF prints a clean layout (saved from the print dialog), CSV follows the
 	// number format, "Mark as paid" records the reimbursements, "Repaid" one repayment.
 	import { api, errorMessage } from '#lib/api/index.ts';

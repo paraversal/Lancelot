@@ -103,11 +103,11 @@ const walks = {
 		await goTo('/');
 
 		await button('New event').click();
-		await page.getByLabel('Name', { exact: true }).first().fill('Sommerfest 2026');
+		await page.getByLabel('Name', { exact: true }).first().fill('Summer Festival 2026');
 		await page.getByLabel('From').fill('12.06.2026');
 		await page.getByLabel('To', { exact: true }).fill('14.06.2026');
 		await page.getByLabel('Location').fill('Jugendzentrum Nord');
-		await page.getByPlaceholder('Name').fill('Verein account');
+		await page.getByPlaceholder('Name').fill('Bank account');
 		await button('Account').click();
 		await page.getByPlaceholder('Name').nth(1).fill('Cash box');
 		await page.getByRole('radiogroup', { name: 'Cash box holds' }).getByText('Cash').click();
@@ -134,7 +134,7 @@ const walks = {
 		await choose('Paid by', 'Anna');
 		await page.locator('.category select').first().selectOption({ label: 'Kitchen' });
 		await page.getByLabel('Description').fill('Spices and oil');
-		await page.getByLabel('Counterparty').fill('Großmarkt');
+		await page.getByLabel('Counterparty').fill('Wholesale market');
 		await shot('entry-expense', { height: 900 });
 
 		await page.locator('.add-line').click();

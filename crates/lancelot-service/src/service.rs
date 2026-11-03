@@ -650,7 +650,7 @@ mod tests {
             asset_type,
         };
         vec![
-            draft("Verein account", AssetType::Bank),
+            draft("Bank account", AssetType::Bank),
             draft("Cash box", AssetType::Cash),
         ]
     }
@@ -680,7 +680,7 @@ mod tests {
         s.close_file();
 
         let summary = s.template_preview(&old).unwrap();
-        assert_eq!(summary.accounts, ["Verein account", "Cash box"]);
+        assert_eq!(summary.accounts, ["Bank account", "Cash box"]);
         assert_eq!((summary.name.as_str(), summary.persons), ("Old", 1));
 
         let new = dir.path().join("new.lancelot");
@@ -731,19 +731,19 @@ mod tests {
         let open = s
             .create_event(&dir.path().join("e.lancelot"), details("E"), &accounts())
             .unwrap();
-        let verein = open.snapshot.event.default_reimbursement_account;
+        let bank = open.snapshot.event.default_reimbursement_account;
         let amount = lancelot_core::parse_amount("12,00", lancelot_core::NumberFormat::De, true)
             .unwrap()
             .cents;
 
         let on = |day| time::Date::from_calendar_date(2026, time::Month::June, day).unwrap();
         let open = s
-            .change(|b| b.add_reconciliation(verein, on(30), amount))
+            .change(|b| b.add_reconciliation(bank, on(30), amount))
             .unwrap();
         let r = open.snapshot.reconciliations[0];
         assert_eq!((r.movement, r.difference), (true, amount));
         let err = s
-            .change(|b| b.add_reconciliation(verein, on(30), amount))
+            .change(|b| b.add_reconciliation(bank, on(30), amount))
             .unwrap_err();
         assert_eq!(err.code, "duplicate_checkpoint");
 
@@ -758,21 +758,21 @@ mod tests {
     #[test]
     fn creates_opens_and_remembers_events() {
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("sommerfest.lancelot");
+        let path = dir.path().join("summer-festival.lancelot");
         let mut s = service(&dir);
         assert!(s.current().is_none());
 
         let open = s
-            .create_event(&path, details("Sommerfest"), &accounts())
+            .create_event(&path, details("Summer Festival"), &accounts())
             .unwrap();
         assert_eq!(
             (open.revision, open.file_name.as_str()),
-            (1, "sommerfest.lancelot")
+            (1, "summer-festival.lancelot")
         );
-        assert_eq!(open.snapshot.event.details.name, "Sommerfest");
+        assert_eq!(open.snapshot.event.details.name, "Summer Festival");
         assert!(open.integrity.is_clean());
 
-        let mut dated = details("Sommerfest 2026");
+        let mut dated = details("Summer Festival 2026");
         dated.starts_on = Some(time::macros::date!(2026 - 06 - 12));
         let renamed = s.change(|b| b.update_event(dated)).unwrap();
         assert_eq!(renamed.revision, 2);
@@ -791,10 +791,10 @@ mod tests {
         let recent = s.recent_events();
         assert_eq!(
             (recent[0].name.as_str(), recent[0].exists),
-            ("Sommerfest 2026", true)
+            ("Summer Festival 2026", true)
         );
         let open = s.open_event(Path::new(&recent[0].path)).unwrap();
-        assert_eq!(open.snapshot.event.details.name, "Sommerfest 2026");
+        assert_eq!(open.snapshot.event.details.name, "Summer Festival 2026");
     }
 
     #[test]
@@ -903,7 +903,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("damaged.lancelot");
         let mut s = service(&dir);
-        s.create_event(&path, details("Winterfest"), &accounts())
+        s.create_event(&path, details("Winter Festival"), &accounts())
             .unwrap();
         s.close_file();
 
@@ -924,7 +924,7 @@ mod tests {
         let open = s
             .restore_backup(&path, Path::new(&backups[0].path), &copy)
             .unwrap();
-        assert_eq!(open.snapshot.event.details.name, "Winterfest");
+        assert_eq!(open.snapshot.event.details.name, "Winter Festival");
     }
 
     #[test]
@@ -1394,7 +1394,7 @@ mod tests {
                 .account
                 .id
         };
-        let (verein, kitchen) = (id_of("Verein account"), id_of("Kitchen"));
+        let (bank, kitchen) = (id_of("Bank account"), id_of("Kitchen"));
         let anna = s
             .add(|b| b.add_person("Anna Krüger", Person::default()))
             .unwrap()
@@ -1429,13 +1429,13 @@ mod tests {
         assert!(csv.starts_with('\u{feff}'));
         assert!(
             csv.contains(
-                "Anna Krüger;Anna Krüger;DE89370400440532013000;;;212,40;Auslagen Fest Anna Krueger"
+                "Anna Krüger;Anna Krüger;DE89370400440532013000;;;212,40;Reimbursement Fest Anna Krueger"
             ),
             "{csv}"
         );
 
         let paid = s
-            .change(|b| b.mark_payouts_paid(verein, time::macros::date!(2026 - 06 - 20), &[anna]))
+            .change(|b| b.mark_payouts_paid(bank, time::macros::date!(2026 - 06 - 20), &[anna]))
             .unwrap();
         assert!(paid.snapshot.payouts.payouts.is_empty());
         assert_eq!(paid.snapshot.persons[0].summary.net.get(), 0);

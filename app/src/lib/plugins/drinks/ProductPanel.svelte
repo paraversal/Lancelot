@@ -97,7 +97,7 @@
 		const left = leftOver.trim() === '' ? null : whole(leftOver);
 		const manual = logged.trim() === '' ? null : signed(logged);
 		if (!name.trim()) return fail('name', 'enter a name');
-		// A Strich from a paper list has no stock, so it has no cost either.
+		// A tally from a paper list has no stock, so it has no cost either.
 		if (cost === null && t !== 0) return fail('cost', 'enter a price');
 		if (cost !== null && cost < 0) return fail('cost', 'a price cannot be negative');
 		if (donation !== null && donation < 0) return fail('donation', 'a price cannot be negative');
@@ -171,7 +171,7 @@
 					bind:invalid={costInvalid}
 					oninput={(v) => (cost = v)}
 				/>
-				<span class="hint">Without deposit, such as Pfand.</span>
+				<span class="hint">Without deposit.</span>
 				{#if fieldError('cost')}<span class="form-error">{fieldError('cost')}</span>{/if}
 			</div>
 			<div class="form-field">

@@ -1,6 +1,6 @@
 {
   "event": {
-    "name": "Sommerfest 2026",
+    "name": "Summer Festival 2026",
     "currency": "EUR",
     "startsOn": "2026-06-12",
     "endsOn": "2026-06-14",
@@ -18,7 +18,7 @@
     {
       "id": 1,
       "kind": "asset",
-      "name": "Verein account",
+      "name": "Bank account",
       "role": null,
       "assetType": "bank",
       "netMovement": true,
@@ -763,7 +763,7 @@
       "id": 10,
       "kind": "expense",
       "date": "2026-06-13",
-      "description": "Großmarkt",
+      "description": "Wholesale market",
       "counterparty": null,
       "notes": null,
       "lines": [
@@ -1322,7 +1322,7 @@
         "bic": null,
         "otherMethod": null,
         "amount": 21240,
-        "reference": "Auslagen Sommerfest 2026 Anna"
+        "reference": "Reimbursement Summer Festival 2026 Anna"
       },
       {
         "person": 15,
@@ -1332,7 +1332,7 @@
         "bic": null,
         "otherMethod": null,
         "amount": 11000,
-        "reference": "Auslagen Sommerfest 2026 Malte"
+        "reference": "Reimbursement Summer Festival 2026 Malte"
       }
     ],
     "payoutTotal": 32240,

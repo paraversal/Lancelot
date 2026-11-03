@@ -60,7 +60,7 @@ fn it_starts_with_recent_events_and_nothing_open() {
         .iter()
         .map(|r| r["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names[0], "Sommerfest 2026");
+    assert_eq!(names[0], "Summer Festival 2026");
     assert_eq!(names.len(), 3);
 }
 
@@ -120,8 +120,8 @@ fn the_damaged_and_the_locked_file_are_refused_as_in_the_app() {
             .unwrap()["path"]
             .clone()
     };
-    let damaged = path("Winterfest 2025");
-    let locked = path("Sommerfest 2025");
+    let damaged = path("Winter Festival 2025");
+    let locked = path("Summer Festival 2025");
     let (status, error) = invoke(&mut bridge, "event_open", json!({ "path": damaged }));
     assert_eq!((status, error["code"].as_str()), (400, Some("damaged")));
     assert!(error["report"]["issues"].is_array());

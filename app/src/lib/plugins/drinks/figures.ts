@@ -71,7 +71,7 @@ function rowOf(product: Product, counts: Counts): Row {
 		leftOver,
 		gone,
 		logged,
-		// A Strich from a paper list has no stock of its own, so there is nothing to compare.
+		// A tally from a paper list has no stock of its own, so there is nothing to compare.
 		gap: logged !== null && counts.taken > 0 ? gone - logged : null,
 		cost: billed * product.cost,
 		expected: logged !== null && product.donation !== null ? logged * product.donation : null

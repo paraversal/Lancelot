@@ -35,31 +35,26 @@ fn status(book: &Book, id: ReconciliationId) -> ReconciliationStatus {
 #[test]
 fn only_lines_up_to_the_date_count() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
-    income_on(&mut book, verein, 10, "100");
-    income_on(&mut book, verein, 11, "20");
-    income_on(&mut book, verein, 12, "3");
+    let bank = asset(&book, "Bank account");
+    income_on(&mut book, bank, 10, "100");
+    income_on(&mut book, bank, 11, "20");
+    income_on(&mut book, bank, 12, "3");
 
-    let id = book
-        .add_reconciliation(verein, june(11), eur("120"))
-        .unwrap();
+    let id = book.add_reconciliation(bank, june(11), eur("120")).unwrap();
     let r = status(&book, id);
     assert_eq!(r.computed, eur("120"));
     assert!(r.difference.is_zero());
-    assert_eq!(book.ledger().balance(verein), eur("123"));
+    assert_eq!(book.ledger().balance(bank), eur("123"));
 }
 
 #[test]
-fn the_verein_account_compares_its_net_movement() {
+fn the_bank_account_compares_its_net_movement() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
-    book.set_opening_count(verein, june(1), eur("5000"))
-        .unwrap();
-    income_on(&mut book, verein, 10, "100");
+    let bank = asset(&book, "Bank account");
+    book.set_opening_count(bank, june(1), eur("5000")).unwrap();
+    income_on(&mut book, bank, 10, "100");
 
-    let id = book
-        .add_reconciliation(verein, june(11), eur("100"))
-        .unwrap();
+    let id = book.add_reconciliation(bank, june(11), eur("100")).unwrap();
     let r = status(&book, id);
     assert!(r.movement);
     assert_eq!(r.computed, eur("100"));
@@ -85,7 +80,7 @@ fn another_account_compares_its_balance_with_the_opening_count() {
 #[test]
 fn a_movement_can_be_negative() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let venue = book
         .account_by_name(AccountKind::Expense, "Venue")
         .unwrap()
@@ -94,32 +89,28 @@ fn a_movement_can_be_negative() {
         &mut book,
         "Hall",
         Entry::Expense {
-            payer: verein,
+            payer: bank,
             lines: vec![split(venue, "80")],
         },
     );
 
-    let id = book
-        .add_reconciliation(verein, june(30), eur("-80"))
-        .unwrap();
+    let id = book.add_reconciliation(bank, june(30), eur("-80")).unwrap();
     assert!(status(&book, id).difference.is_zero());
 }
 
 #[test]
 fn a_mismatch_is_an_open_item_until_the_books_agree() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
-    let id = book
-        .add_reconciliation(verein, june(30), eur("100"))
-        .unwrap();
+    let bank = asset(&book, "Bank account");
+    let id = book.add_reconciliation(bank, june(30), eur("100")).unwrap();
     let expected = OpenItem::ReconciliationMismatch {
         checkpoint: id,
-        account: verein,
+        account: bank,
         difference: eur("100"),
     };
     assert!(book.open_items().contains(&expected));
 
-    income_on(&mut book, verein, 10, "100");
+    income_on(&mut book, bank, 10, "100");
     assert!(
         !book
             .ledger()
@@ -132,11 +123,10 @@ fn a_mismatch_is_an_open_item_until_the_books_agree() {
 #[test]
 fn an_earlier_mismatch_stays_open_after_a_later_match() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
-    income_on(&mut book, verein, 20, "100");
-    book.add_reconciliation(verein, june(10), eur("5")).unwrap();
-    book.add_reconciliation(verein, june(30), eur("100"))
-        .unwrap();
+    let bank = asset(&book, "Bank account");
+    income_on(&mut book, bank, 20, "100");
+    book.add_reconciliation(bank, june(10), eur("5")).unwrap();
+    book.add_reconciliation(bank, june(30), eur("100")).unwrap();
     let mismatches = book
         .open_items()
         .into_iter()
@@ -148,10 +138,10 @@ fn an_earlier_mismatch_stays_open_after_a_later_match() {
 #[test]
 fn a_mismatch_blocks_closing_unless_overridden() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let cash = asset(&book, "Cash box");
     book.set_closing_count(cash, june(30), Cents::ZERO).unwrap();
-    book.add_reconciliation(verein, june(30), eur("1")).unwrap();
+    book.add_reconciliation(bank, june(30), eur("1")).unwrap();
 
     let err = book.close(vec![], now()).unwrap_err();
     let DomainError::ClosingBlocked { blockers } = err else {
@@ -166,7 +156,7 @@ fn a_mismatch_blocks_closing_unless_overridden() {
     book.close(overrides, now()).unwrap();
     assert!(book.event().is_closed());
     assert_eq!(
-        book.add_reconciliation(verein, june(29), Cents::ZERO)
+        book.add_reconciliation(bank, june(29), Cents::ZERO)
             .unwrap_err()
             .code(),
         "event_closed"
@@ -176,15 +166,15 @@ fn a_mismatch_blocks_closing_unless_overridden() {
 #[test]
 fn one_checkpoint_per_account_and_date() {
     let mut book = new_book();
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let cash = asset(&book, "Cash box");
-    let first = book.add_reconciliation(verein, june(10), eur("1")).unwrap();
-    let second = book.add_reconciliation(verein, june(11), eur("2")).unwrap();
+    let first = book.add_reconciliation(bank, june(10), eur("1")).unwrap();
+    let second = book.add_reconciliation(bank, june(11), eur("2")).unwrap();
     book.add_reconciliation(cash, june(10), eur("3")).unwrap();
 
     let duplicate = |e: DomainError| e.code();
     assert_eq!(
-        book.add_reconciliation(verein, june(10), eur("9"))
+        book.add_reconciliation(bank, june(10), eur("9"))
             .map_err(duplicate),
         Err("duplicate_checkpoint")
     );
@@ -226,13 +216,13 @@ fn checkpoints_survive_the_file_and_are_logged() {
     let details = new_book().event().details.clone();
     let (mut store, _) =
         Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
-    let verein = asset(store.book(), "Verein account");
+    let bank = asset(store.book(), "Bank account");
 
     let a = store
-        .change(|book| book.add_reconciliation(verein, june(10), eur("-1")))
+        .change(|book| book.add_reconciliation(bank, june(10), eur("-1")))
         .unwrap();
     let b = store
-        .change(|book| book.add_reconciliation(verein, june(11), eur("2")))
+        .change(|book| book.add_reconciliation(bank, june(11), eur("2")))
         .unwrap();
     // One checkpoint takes the date another one just left.
     store
@@ -243,7 +233,7 @@ fn checkpoints_survive_the_file_and_are_logged() {
         .unwrap();
     store.change(|book| book.delete_reconciliation(a)).unwrap();
     let c = store
-        .change(|book| book.add_reconciliation(verein, june(11), eur("3")))
+        .change(|book| book.add_reconciliation(bank, june(11), eur("3")))
         .unwrap();
     assert_ne!(c, a, "ids are never reused");
 
@@ -293,10 +283,10 @@ fn sheet(rows: &[(u8, bool)], n: usize) -> TicketBatch {
 fn a_re_import_leaves_an_earlier_checkpoint_as_it_was() {
     let mut book = new_book();
     tiers(&mut book);
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     book.import_tickets(&sheet(&[(1, false), (2, false)], 1), june(1), now())
         .unwrap();
-    let id = book.add_reconciliation(verein, june(5), eur("50")).unwrap();
+    let id = book.add_reconciliation(bank, june(5), eur("50")).unwrap();
     assert!(status(&book, id).difference.is_zero());
 
     book.import_tickets(
@@ -308,14 +298,12 @@ fn a_re_import_leaves_an_earlier_checkpoint_as_it_was() {
     let r = status(&book, id);
     assert_eq!((r.computed, r.from_sheet), (eur("50"), eur("50")));
     assert!(r.difference.is_zero(), "still what the statement showed");
-    assert_eq!(book.ledger().balance(verein), eur("75"));
+    assert_eq!(book.ledger().balance(bank), eur("75"));
 
     // A statement after the new sheet sees it, and one before any sheet sees nothing.
-    let later = book
-        .add_reconciliation(verein, june(12), eur("75"))
-        .unwrap();
+    let later = book.add_reconciliation(bank, june(12), eur("75")).unwrap();
     assert!(status(&book, later).difference.is_zero());
-    let earlier = book.add_reconciliation(verein, june(1).previous_day().unwrap(), Cents::ZERO);
+    let earlier = book.add_reconciliation(bank, june(1).previous_day().unwrap(), Cents::ZERO);
     assert!(status(&book, earlier.unwrap()).difference.is_zero());
 }
 
@@ -323,24 +311,22 @@ fn a_re_import_leaves_an_earlier_checkpoint_as_it_was() {
 fn a_closing_count_and_a_statement_of_the_same_figure_agree() {
     let mut book = new_book();
     tiers(&mut book);
-    let verein = asset(&book, "Verein account");
-    book.set_opening_count(verein, june(1), eur("5000"))
-        .unwrap();
+    let bank = asset(&book, "Bank account");
+    book.set_opening_count(bank, june(1), eur("5000")).unwrap();
     let kitchen = expense(&book, "Kitchen");
     let entry = Entry::Expense {
-        payer: verein,
+        payer: bank,
         lines: vec![split(kitchen, "100")],
     };
     book.save_txn(&draft("Food", entry), None).unwrap();
 
     let id = book
-        .add_reconciliation(verein, june(30), eur("-100"))
+        .add_reconciliation(bank, june(30), eur("-100"))
         .unwrap();
-    book.set_closing_count(verein, june(30), eur("-100"))
-        .unwrap();
+    book.set_closing_count(bank, june(30), eur("-100")).unwrap();
     assert!(status(&book, id).difference.is_zero());
     let cash = book.ledger().cash();
-    let count = cash.iter().find(|c| c.account == verein).unwrap();
+    let count = cash.iter().find(|c| c.account == bank).unwrap();
     assert_eq!(count.difference, Some(Cents::ZERO));
 }
 
@@ -351,10 +337,10 @@ fn a_negative_count_survives_the_file_and_a_negative_opening_is_refused() {
     let details = new_book().event().details.clone();
     let (mut store, _) =
         Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
-    let verein = asset(store.book(), "Verein account");
+    let bank = asset(store.book(), "Bank account");
     let cash = asset(store.book(), "Cash box");
     store
-        .change(|book| book.set_counts(verein, None, Some((june(30), eur("-100")))))
+        .change(|book| book.set_counts(bank, None, Some((june(30), eur("-100")))))
         .unwrap();
     assert_eq!(
         store
@@ -410,8 +396,8 @@ mod properties {
                     aliases: Vec::new(),
                 })).unwrap();
             }
-            let verein = asset(store.book(), "Verein account");
-            let id = store.change(|book| book.add_reconciliation(verein, june(checkpoint_day), Cents::ZERO)).unwrap();
+            let bank = asset(store.book(), "Bank account");
+            let id = store.change(|book| book.add_reconciliation(bank, june(checkpoint_day), Cents::ZERO)).unwrap();
 
             for (n, (rows, day)) in sheets.iter().enumerate() {
                 let before = store.book().clone();
@@ -430,17 +416,17 @@ mod properties {
                     prop_assert_eq!(status(store.book(), id).computed, figure);
                     prop_assert_eq!(store.book().tickets().total, before.tickets().total);
                     prop_assert_eq!(
-                        store.book().ledger().balance(verein),
-                        before.ledger().balance(verein)
+                        store.book().ledger().balance(bank),
+                        before.ledger().balance(bank)
                     );
                 }
             }
 
             // A statement after every sheet compares with the whole balance.
-            let final_id = store.change(|book| book.add_reconciliation(verein, june(28), Cents::ZERO)).unwrap();
+            let final_id = store.change(|book| book.add_reconciliation(bank, june(28), Cents::ZERO)).unwrap();
             prop_assert_eq!(
                 status(store.book(), final_id).computed,
-                store.book().ledger().balance(verein)
+                store.book().ledger().balance(bank)
             );
 
             let expected = store.book().clone();
@@ -455,8 +441,8 @@ mod properties {
 #[test]
 fn net_movement_is_a_setting_of_any_asset_account() {
     let mut book = new_book();
-    let (verein, cash) = (asset(&book, "Verein account"), asset(&book, "Cash box"));
-    assert!(book.account(verein).unwrap().net_movement);
+    let (bank, cash) = (asset(&book, "Bank account"), asset(&book, "Cash box"));
+    assert!(book.account(bank).unwrap().net_movement);
     assert!(!book.account(cash).unwrap().net_movement);
 
     book.set_counts(

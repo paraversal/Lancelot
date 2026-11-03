@@ -18,9 +18,9 @@ pub const START: &str = "start";
 /// Every scenario, for the error message and the tests.
 pub const ALL: &[&str] = &[START, "example", "empty", "conflict", "closed"];
 
-pub const EXAMPLE_FILE: &str = "sommerfest-2026.lancelot";
-const DAMAGED_FILE: &str = "winterfest-2025.lancelot";
-const LOCKED_FILE: &str = "sommerfest-2025.lancelot";
+pub const EXAMPLE_FILE: &str = "summer-festival-2026.lancelot";
+const DAMAGED_FILE: &str = "winter-festival-2025.lancelot";
+const LOCKED_FILE: &str = "summer-festival-2025.lancelot";
 
 fn store_error(e: StoreError) -> ApiError {
     ApiError::new("scenario", e.to_string())
@@ -122,7 +122,7 @@ pub fn load(service: &mut Service, dir: &Path, scenario: &str) -> Result<Option<
 
     // Opened once each, so the start screen lists them as recent events.
     let example_path = dir.join(EXAMPLE_FILE);
-    let mut main = example(&example_path, "Sommerfest 2026")?;
+    let mut main = example(&example_path, "Summer Festival 2026")?;
     match scenario {
         "conflict" => conflict(&mut main)?,
         "closed" => close(&mut main)?,
@@ -130,9 +130,9 @@ pub fn load(service: &mut Service, dir: &Path, scenario: &str) -> Result<Option<
     }
     drop(main);
     let damaged_path = dir.join(DAMAGED_FILE);
-    drop(example(&damaged_path, "Winterfest 2025")?);
+    drop(example(&damaged_path, "Winter Festival 2025")?);
     let locked_path = dir.join(LOCKED_FILE);
-    drop(example(&locked_path, "Sommerfest 2025")?);
+    drop(example(&locked_path, "Summer Festival 2025")?);
     for path in [&damaged_path, &locked_path, &example_path] {
         service.open_event(path)?;
     }
@@ -145,8 +145,8 @@ pub fn load(service: &mut Service, dir: &Path, scenario: &str) -> Result<Option<
         START => {}
         "empty" => {
             service.create_event(
-                &dir.join("neues-fest.lancelot"),
-                details("Neues Fest"),
+                &dir.join("new-festival.lancelot"),
+                details("New Festival"),
                 &two_accounts(),
             )?;
         }

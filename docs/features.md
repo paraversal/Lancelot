@@ -92,9 +92,9 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 - "Set up Drinks" creates a cost centre with its categories.
 - Per product: cost, donation, and units taken, returned, left over and logged (R-DRK-5).
 - Billed units, the gap against what was logged, and the cost per drink (R-DRK-5, R-DRK-9).
-- Expected donations against what was collected. A paper tally is one product, `Strich` (R-DRK-7).
+- Expected donations against what was collected. A paper tally is one product, `Tally` (R-DRK-7).
 - A table per cost centre in the settlement report, which the report's toolbar can leave out.
-- An invoice check, which can leave out an optional deposit category such as Pfand, and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
+- An invoice check, which can leave out an optional deposit category and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
 - Pull logged counts from a data source, reviewing the changes first. A name that matches no product must be mapped once and is then remembered (R-DRK-6). Not yet tried with a real provider.
 
 **Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, even with other lines above them, and the rest of the file is never stored (R-TKT-3, R-TKT-17).

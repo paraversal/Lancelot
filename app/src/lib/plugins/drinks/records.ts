@@ -14,7 +14,7 @@ export type Product = {
 	name: string;
 	/** What a unit costs from the supplier, in cents. */
 	cost: number;
-	/** What people are asked to give per unit, in cents. A paper list's Strich is a product too. */
+	/** What people are asked to give per unit, in cents. A paper list's tally is a product too. */
 	donation: number | null;
 	/** Other names a data source uses for it. */
 	aliases?: string[];

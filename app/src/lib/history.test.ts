@@ -169,7 +169,7 @@ describe('historyChanges', () => {
 
 	it('says closing and reopening with the notes on what stayed open', () => {
 		const event = {
-			name: 'Sommerfest',
+			name: 'Summer Festival',
 			startsOn: null,
 			endsOn: null,
 			location: null,

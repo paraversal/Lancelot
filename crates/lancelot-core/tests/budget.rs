@@ -28,7 +28,7 @@ fn linked(account: AccountId, value: &str, line: BudgetLineId) -> SplitLine {
 }
 
 fn spend(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
-    let payer = asset(book, "Verein account");
+    let payer = asset(book, "Bank account");
     save(book, "Receipt", Entry::Expense { payer, lines })
 }
 
@@ -199,11 +199,11 @@ fn budget_lines_never_change_a_balance() {
 fn rejects_invalid_budget_lines() {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let err = |book: &mut Book, d: BudgetLineDraft| book.add_budget_line(d).unwrap_err();
 
     assert_eq!(
-        err(&mut book, amount(verein, "Food", "10")),
+        err(&mut book, amount(bank, "Food", "10")),
         DomainError::WrongAccountKind {
             field: "category".into()
         }
@@ -253,7 +253,7 @@ fn a_link_stays_within_its_category() {
     let food = book
         .add_budget_line(amount(kitchen, "Food", "100"))
         .unwrap();
-    let payer = asset(&book, "Verein account");
+    let payer = asset(&book, "Bank account");
     let receipt = |lines| draft("Receipt", Entry::Expense { payer, lines });
 
     let wrong = book.save_txn(
@@ -361,7 +361,7 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
             })
         })
         .unwrap();
-    let payer = asset(store.book(), "Verein account");
+    let payer = asset(store.book(), "Bank account");
     store
         .change(|book| {
             book.save_txn(

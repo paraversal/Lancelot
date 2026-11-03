@@ -61,9 +61,9 @@ describe('The drink figures', () => {
 		expect(f.rows[0].gap).toBeNull();
 	});
 
-	it('has no gap without a log, and none for a Strich without stock', () => {
-		const strich = item({ name: 'Strich', manual: 700, cost: 0, donation: 50 });
-		const f = computeFigures(CENTRE, settings, [item({ id: 2, taken: 10 }), strich], []);
+	it('has no gap without a log, and none for a tally without stock', () => {
+		const tally = item({ name: 'Tally', manual: 700, cost: 0, donation: 50 });
+		const f = computeFigures(CENTRE, settings, [item({ id: 2, taken: 10 }), tally], []);
 		expect(f.rows.map((r) => r.gap)).toEqual([null, null]);
 		// The money can still be compared: 700 × 0,50 €.
 		expect(f.expected).toBe(35000);

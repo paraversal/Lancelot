@@ -46,7 +46,7 @@ fn result_and_totals_match_the_mockups() {
 fn accounts_and_people_match_the_mockups() {
     let (book, m) = mock_event();
     let l = book.ledger();
-    assert_eq!(l.balance(asset(&book, "Verein account")), eur("1.757"));
+    assert_eq!(l.balance(asset(&book, "Bank account")), eur("1.757"));
     assert_eq!(l.balance(asset(&book, "Cash box")), eur("412,90"));
 
     let person = |id| *l.person(id).unwrap();
@@ -124,7 +124,7 @@ fn the_snapshot_carries_every_figure_in_ui_form() {
     let json = serde_json::to_value(&snapshot).unwrap();
     assert_eq!(json["totals"]["result"], 202_750);
     assert_eq!(json["whereTheMoneyIs"]["owedToPeople"], 32_240);
-    assert_eq!(json["event"]["name"], "Sommerfest 2026");
+    assert_eq!(json["event"]["name"], "Summer Festival 2026");
     assert_eq!(json["event"]["startsOn"], "2026-06-12");
     assert_eq!(json["txns"][0]["date"], "2026-06-13");
     let anna = json["persons"]
@@ -217,7 +217,10 @@ fn the_payout_list_and_the_repayment_list() {
         (list.repayments[0].person, list.repayments[0].amount),
         (m.bob, eur("180"))
     );
-    assert_eq!(list.payouts[0].reference, "Auslagen Sommerfest 2026 Anna");
+    assert_eq!(
+        list.payouts[0].reference,
+        "Reimbursement Summer Festival 2026 Anna"
+    );
 }
 
 #[test]

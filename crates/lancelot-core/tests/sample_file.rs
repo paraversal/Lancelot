@@ -17,7 +17,7 @@ use tempfile::TempDir;
 
 const SAMPLE: &str = "sample-v1.lancelot";
 /// A regenerated sample would hide a schema edited in place, so its bytes are pinned too.
-const SAMPLE_SHA256: &str = "9f15656dd1c8a13804a210c6190f99c3ec33d2fadbea992116ad44e09474bdcc";
+const SAMPLE_SHA256: &str = "dd2ff016e1782967149cf2b14a6b34683dd05cae3721a119d38a8d09320c4d55";
 
 fn sample_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -94,10 +94,10 @@ fn write_the_sample() {
         &path,
         EventDetails {
             currency: Default::default(),
-            name: "Sommerfest 2026".into(),
+            name: "Summer Festival 2026".into(),
             starts_on: Some(june(12)),
             ends_on: Some(june(14)),
-            location: Some("Festwiese".into()),
+            location: Some("Riverside Park".into()),
             notes: Some("The sample of the event file format.".into()),
         },
         &two_accounts(),
@@ -199,10 +199,10 @@ fn write_the_sample() {
                 terms: terms(10_000),
                 note: None,
             })?;
-            let verein = asset(b, "Verein account");
-            let movement = b.ledger().balance(verein);
+            let bank = asset(b, "Bank account");
+            let movement = b.ledger().balance(bank);
             let date = time::macros::date!(2026 - 07 - 01);
-            b.add_reconciliation(verein, date, movement)?;
+            b.add_reconciliation(bank, date, movement)?;
             Ok::<_, DomainError>(())
         })
         .unwrap();
@@ -283,7 +283,10 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let book = store.book();
     let l = book.ledger();
 
-    assert_eq!(book.event().details.location.as_deref(), Some("Festwiese"));
+    assert_eq!(
+        book.event().details.location.as_deref(),
+        Some("Riverside Park")
+    );
     assert_eq!(book.event().closed_at, Some(now()));
     assert_eq!(book.event().closing_overrides.len(), 7);
 
@@ -291,7 +294,7 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     assert_eq!(l.income_total(), eur("7.754"));
     assert_eq!(l.expense_total(), eur("5.367,30"));
     assert_eq!(raw_sum(book), 0);
-    assert_eq!(l.balance(asset(book, "Verein account")), eur("2.052,20"));
+    assert_eq!(l.balance(asset(book, "Bank account")), eur("2.052,20"));
     assert_eq!(l.balance(asset(book, "Cash box")), eur("476,90"));
     assert_eq!(l.balance(asset(book, "Bar float")), eur("100"));
     let w = l.where_the_money_is();
@@ -325,15 +328,12 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let refunds: Vec<_> = tickets.cancellations.iter().map(|c| c.refund).collect();
     assert_eq!(refunds, [eur("32"), Cents::ZERO, eur("32")]);
 
-    let verein = asset(book, "Verein account");
+    let bank = asset(book, "Bank account");
     let checkpoints: Vec<_> = book
         .reconciliations()
         .map(|r| (r.account, r.amount))
         .collect();
-    assert_eq!(
-        checkpoints,
-        [(verein, eur("1.757")), (verein, eur("2.052,20"))]
-    );
+    assert_eq!(checkpoints, [(bank, eur("1.757")), (bank, eur("2.052,20"))]);
     assert_eq!(
         book.closing_count(asset(book, "Cash box"))
             .map(|c| c.amount),

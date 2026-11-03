@@ -88,7 +88,7 @@
 				onchange={(v) => (deposit = v)}
 			>
 				{#snippet hint()}Optional. Expenses in this category are left out of the invoice check. Use
-					it for a returnable deposit on crates that couldn't be returned, such as Pfand.{/snippet}
+					it for a returnable deposit on crates that couldn't be returned.{/snippet}
 			</Select>
 		{/if}
 	</fieldset>

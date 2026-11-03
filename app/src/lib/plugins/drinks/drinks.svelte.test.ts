@@ -123,7 +123,7 @@ describe('The stock and sales section', () => {
 		open();
 		render(Centre, { centre: drinksCentre() });
 		await fireEvent.click(screen.getByText('Club-Mate 0,5'));
-		expect(screen.getByText('Without deposit, such as Pfand.')).toBeTruthy();
+		expect(screen.getByText('Without deposit.')).toBeTruthy();
 	});
 
 	it('goes straight on to the invoice after asking for the supplier', async () => {
@@ -150,19 +150,19 @@ describe('The stock and sales section', () => {
 		expect(takeProposal()).toMatchObject({ kind: 'expense', counterparty: 'Hoffmann' });
 	});
 
-	it('takes a Strich with a donation and a logged count, without stock or cost', async () => {
+	it('takes a tally with a donation and a logged count, without stock or cost', async () => {
 		open();
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockResolvedValue(session.event!);
 		render(Centre, { centre: drinksCentre() });
 		await fireEvent.click(screen.getByText('Product'));
-		await fireEvent.input(screen.getByLabelText('Product'), { target: { value: 'Strich' } });
+		await fireEvent.input(screen.getByLabelText('Product'), { target: { value: 'Tally' } });
 		await fireEvent.input(screen.getByLabelText('Logged'), { target: { value: '700' } });
 		await fireEvent.click(screen.getByText('Save'));
 
 		await waitFor(() => expect(apply).toHaveBeenCalledOnce());
 		const [, changes] = apply.mock.calls[0];
 		expect(changes[0]).toMatchObject({ key: 'product:6', scope: 'setup' });
-		expect(changes[0].value).toMatchObject({ name: 'Strich', cost: 0 });
+		expect(changes[0].value).toMatchObject({ name: 'Tally', cost: 0 });
 		expect(changes[1]).toMatchObject({ key: 'count:6', scope: 'records' });
 		expect(changes[1].value).toMatchObject({ taken: 0, manual: 700 });
 	});
@@ -207,7 +207,7 @@ describe('The stock and sales section', () => {
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockResolvedValue(session.event!);
 		render(Centre, { centre: drinksCentre() });
 		await fireEvent.click(screen.getByText('Product'));
-		await fireEvent.input(screen.getByLabelText('Product'), { target: { value: 'Strich' } });
+		await fireEvent.input(screen.getByLabelText('Product'), { target: { value: 'Tally' } });
 		await fireEvent.input(screen.getByLabelText('Donation per unit'), {
 			target: { value: '0,50' }
 		});
@@ -216,7 +216,7 @@ describe('The stock and sales section', () => {
 
 		finish({ cents: 50, ambiguous: false, terms: 1 });
 		await waitFor(() => expect(apply).toHaveBeenCalledOnce());
-		expect(apply.mock.calls[0][1][0].value).toMatchObject({ name: 'Strich', donation: 50 });
+		expect(apply.mock.calls[0][1][0].value).toMatchObject({ name: 'Tally', donation: 50 });
 	});
 
 	it('does not save over an amount it cannot read', async () => {
@@ -225,7 +225,7 @@ describe('The stock and sales section', () => {
 		const apply = vi.spyOn(api, 'applyPluginRecords').mockResolvedValue(session.event!);
 		render(Centre, { centre: drinksCentre() });
 		await fireEvent.click(screen.getByText('Product'));
-		await fireEvent.input(screen.getByLabelText('Product'), { target: { value: 'Strich' } });
+		await fireEvent.input(screen.getByLabelText('Product'), { target: { value: 'Tally' } });
 		await fireEvent.input(screen.getByLabelText('Donation per unit'), {
 			target: { value: 'abc' }
 		});

@@ -390,7 +390,7 @@ mod tests {
         .collect()
     }
 
-    const VEREIN: AccountId = AccountId(1);
+    const BANK: AccountId = AccountId(1);
     const CASH: AccountId = AccountId(2);
     const TICKETS: AccountId = AccountId(4);
     const FOOD: AccountId = AccountId(5);
@@ -441,7 +441,7 @@ mod tests {
     fn settle_direction_decides_the_flow() {
         let reimburse = Entry::Settle {
             person: ANNA,
-            account: VEREIN,
+            account: BANK,
             amount: c(21_240),
             direction: SettleDirection::Reimburse,
         };
@@ -451,7 +451,7 @@ mod tests {
         );
         let repay = Entry::Settle {
             person: ANNA,
-            account: VEREIN,
+            account: BANK,
             amount: c(18_000),
             direction: SettleDirection::Repay,
         };
@@ -498,7 +498,7 @@ mod tests {
         );
         assert_eq!(
             err(Entry::Transfer {
-                from: VEREIN,
+                from: BANK,
                 to: AccountId(3),
                 amount: c(100)
             }),
@@ -507,7 +507,7 @@ mod tests {
         assert_eq!(
             err(Entry::Settle {
                 person: CASH,
-                account: VEREIN,
+                account: BANK,
                 amount: c(100),
                 direction: SettleDirection::Repay
             }),
@@ -531,7 +531,7 @@ mod tests {
         let a = accounts();
         for (from, to) in [
             (ANNA, AccountId(8)),
-            (VEREIN, ANNA),
+            (BANK, ANNA),
             (CASH, FOOD),
             (TICKETS, FOOD),
         ] {
@@ -596,7 +596,7 @@ mod tests {
         assert!(!lines_follow_rules(TxnKind::Transfer, &opening, &a));
         let transfer = build_lines(
             &Entry::Transfer {
-                from: VEREIN,
+                from: BANK,
                 to: CASH,
                 amount: c(100),
             },
@@ -687,7 +687,7 @@ mod tests {
                 lines: vec![s(FOOD, 1), s(TECH, 99_999)],
             },
             Entry::Income {
-                destination: VEREIN,
+                destination: BANK,
                 lines: vec![s(TICKETS, 652_750)],
             },
             Entry::Transfer {
