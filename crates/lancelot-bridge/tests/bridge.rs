@@ -95,6 +95,19 @@ fn the_conflict_scenario_has_an_open_conflict() {
 }
 
 #[test]
+fn the_no_order_ids_scenario_has_a_conflict_per_tier() {
+    let (_dir, mut bridge) = bridge();
+    reset(&mut bridge, "no-order-ids");
+    let (_, open) = invoke(&mut bridge, "event_current", json!({}));
+    let tickets = &open["snapshot"]["tickets"];
+    assert_eq!(tickets["orderIds"], json!(false));
+    let conflicts = tickets["conflicts"].as_array().unwrap();
+    assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+    assert_eq!(conflicts[0]["order"], "");
+    assert_eq!(conflicts[0]["removed"].as_array().unwrap().len(), 2);
+}
+
+#[test]
 fn the_closed_scenario_is_closed() {
     let (_dir, mut bridge) = bridge();
     reset(&mut bridge, "closed");

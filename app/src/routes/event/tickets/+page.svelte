@@ -22,7 +22,13 @@
 	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
 	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { conflictCount, formatFee, otherTicketIncome, shortDay } from '#lib/tickets.ts';
+	import {
+		conflictCount,
+		formatFee,
+		orderName,
+		otherTicketIncome,
+		shortDay
+	} from '#lib/tickets.ts';
 	import CancellationPanel from './CancellationPanel.svelte';
 	import ConflictCard from './ConflictCard.svelte';
 	import ImportPanel from './ImportPanel.svelte';
@@ -79,7 +85,7 @@
 	const tierName = (id: TierId) => tickets.tiers.find((t) => t.id === id)?.name ?? '';
 	function cancellationText(c: CancellationView) {
 		const what = `${c.count} × ${tierName(c.tier)}`;
-		const from = c.order !== null ? `Order ${c.order}` : 'Manual sale';
+		const from = c.order !== null ? orderName(c.order) : 'Manual sale';
 		const how = c.terms ? `${formatFee(c.terms.refundBp, format)} refund` : 'Correction';
 		return `${from} · ${what} · ${how}`;
 	}
@@ -149,7 +155,7 @@
 				<h2>Conflicts <span class="badge">{conflicts}</span></h2>
 				{#each tickets.conflicts as conflict (conflict.order)}
 					<article class="card">
-						<strong>Order {conflict.order}</strong>
+						<strong>{orderName(conflict.order)}</strong>
 						{#each conflict.removed as removed (removed.tier)}
 							{#key `${removed.count}|${removed.matches.length}`}
 								<ConflictCard {conflict} {removed} />

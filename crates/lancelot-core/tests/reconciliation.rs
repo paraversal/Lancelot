@@ -272,7 +272,7 @@ fn sheet(rows: &[(u8, bool)], n: usize) -> TicketBatch {
         tickets: rows
             .iter()
             .map(|(order, regular)| BatchTicket {
-                order: order.to_string(),
+                order: Some(order.to_string()),
                 tier: if *regular { "Regular" } else { "Early Bird" }.to_owned(),
             })
             .collect(),

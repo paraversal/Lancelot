@@ -72,6 +72,7 @@ Optional per event, and switched off in Settings while the event has no tiers (R
 - Every import goes through a review that shows what changed. A tier it doesn't know blocks the import until it is mapped (R-TKT-4, R-TKT-5).
 - Each import is kept with its date, which can be changed. An import can be deleted, with a preview of what that changes (R-TKT-8).
 - Manual sales for tickets sold outside the regular channels (R-TKT-7).
+- Sheets with or without order IDs. Without them, conflicts are found per tier, and an event's imports all have them or none do (R-TKT-3, R-TKT-12).
 - A removed ticket becomes a conflict, grouped by order, with a badge in the navigation. It is resolved as a refund of 0–100 %, a match to a cancellation, or a correction, wholly or in part (R-TKT-12, R-TKT-13, R-TKT-16).
 - Manual cancellations on an order or a manual sale, and a choice of who pays the refund (R-TKT-14, R-TKT-15).
 - A sales chart over the imports, by places or net income, against the quota (R-TKT-8).

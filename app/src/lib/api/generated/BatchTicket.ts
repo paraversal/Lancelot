@@ -3,4 +3,9 @@
 /**
  * One ticket.
  */
-export type BatchTicket = { tier: string, order: string, };
+export type BatchTicket = { tier: string, 
+/**
+ * The order it belongs to. A source without order IDs leaves it out on every ticket, and
+ * an event's imports either all have them or none do.
+ */
+order: string | null, };

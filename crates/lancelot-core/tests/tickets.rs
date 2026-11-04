@@ -75,7 +75,7 @@ fn the_three_formats_read_the_same_tickets_and_nothing_else() {
         assert_eq!(s.tickets, ods.tickets, "{other}");
     }
     assert_eq!(ods.tickets.len(), 6);
-    assert_eq!(ods.tickets[0].order, "4701");
+    assert_eq!(ods.tickets[0].order.as_deref(), Some("4701"));
     assert_eq!(ods.tickets[0].tier, "Early Bird");
     // Names and e-mail addresses are in the sheet but never read (R-TKT-17).
     let debug = format!("{ods:?}");
@@ -355,7 +355,7 @@ fn a_batch_needs_a_source_and_every_order() {
         Some("source")
     );
     let mut no_order = good;
-    no_order.tickets[0].order = " ".into();
+    no_order.tickets[0].order = Some(" ".into());
     assert_eq!(
         book.import_tickets(&no_order, june(1), now())
             .unwrap_err()
@@ -675,7 +675,7 @@ mod properties {
                 .iter()
                 .map(|(order, tier)| BatchTicket {
                     tier: names[*tier].into(),
-                    order: order.to_string(),
+                    order: Some(order.to_string()),
                 })
                 .collect(),
         }
@@ -1527,4 +1527,170 @@ fn a_manual_sale_can_go_into_an_account() {
     })
     .unwrap();
     assert_eq!(book.ledger().balance(cash), eur("32"));
+}
+
+// --- sheets without order IDs -----------------------------------------------------------------
+
+/// A sheet with a tier column alone: each name is one ticket.
+fn tier_sheet(name: &str, tiers: &[&str]) -> TicketBatch {
+    let mut text = String::from("Ticket\n");
+    for tier in tiers {
+        text.push_str(&format!("{tier}\n"));
+    }
+    let columns = ["Ticket".to_owned()];
+    TicketBatch::from_table(read_table(name, text.as_bytes(), &columns, NumberFormat::De).unwrap())
+}
+
+fn import_tiers(book: &mut Book, day: u8, tiers: &[&str]) -> Result<ImportId, DomainError> {
+    let sheet = tier_sheet(&format!("tickets-{day}.csv"), tiers);
+    book.import_tickets(&sheet, june(day), now())
+}
+
+#[test]
+fn a_sheet_without_order_ids_counts_per_tier() {
+    let (mut book, t) = with_tiers();
+    let sheet = tier_sheet("tickets.csv", &["Regular", "Regular", "Early Bird", ""]);
+    assert!(sheet.tickets.iter().all(|t| t.order.is_none()));
+    assert_eq!(sheet.tickets.len(), 3);
+    import_tiers(&mut book, 1, &["Regular", "Regular", "Early Bird"]).unwrap();
+    assert_eq!(book.tickets().order_ids, Some(false));
+    assert_eq!(sold(&book, t.regular).sold, 2);
+    assert_eq!(sold(&book, t.early).sold, 1);
+    assert!(income_of(&book, t.regular).is_some());
+}
+
+#[test]
+fn without_order_ids_a_tier_with_fewer_tickets_is_a_conflict() {
+    let (mut book, t) = with_tiers();
+    import_tiers(
+        &mut book,
+        1,
+        &["Regular", "Regular", "Regular", "Early Bird"],
+    )
+    .unwrap();
+    // Regular loses one while Early Bird sells more: only the drop is a conflict, and the sale
+    // in another tier isn't offered as a changed tier.
+    import_tiers(
+        &mut book,
+        2,
+        &["Regular", "Regular", "Early Bird", "Early Bird"],
+    )
+    .unwrap();
+    assert_eq!(conflict_lines(&book), [(NO_ORDER.into(), t.regular, 1)]);
+    assert!(book.tickets().conflicts[0].added.is_empty());
+
+    book.resolve_conflict(NO_ORDER, t.regular, refund(1, 10_000))
+        .unwrap();
+    assert!(book.tickets().conflicts.is_empty());
+    let f = sold(&book, t.regular);
+    assert_eq!((f.sheet, f.cancelled, f.sold), (2, 1, 3));
+}
+
+#[test]
+fn without_order_ids_a_new_sale_hides_a_cancellation_in_the_same_tier() {
+    // The limit of a sheet without order IDs: one ticket gone and one new is the same count.
+    let (mut book, _) = with_tiers();
+    import_tiers(&mut book, 1, &["Regular", "Regular"]).unwrap();
+    import_tiers(&mut book, 2, &["Regular", "Regular"]).unwrap();
+    assert!(book.tickets().conflicts.is_empty());
+}
+
+#[test]
+fn without_order_ids_a_cancellation_names_the_tier_alone() {
+    let (mut book, t) = with_tiers();
+    import_tiers(&mut book, 1, &["Regular", "Regular"]).unwrap();
+    let draft = CancellationDraft {
+        source: CancellationSource::Order {
+            order: NO_ORDER.into(),
+            tier: t.regular,
+        },
+        count: 1,
+        terms: terms(5000),
+        note: None,
+    };
+    let id = book.add_cancellation(draft).unwrap();
+    assert_eq!(sold(&book, t.regular).refunds, eur("16"));
+
+    // The sheet then has one fewer: the cancellation is offered to match it.
+    import_tiers(&mut book, 2, &["Regular"]).unwrap();
+    let removed = &book.tickets().conflicts[0].removed[0];
+    assert_eq!(removed.matches[0].cancellation, id);
+}
+
+#[test]
+fn an_event_takes_imports_of_one_kind_until_they_are_deleted() {
+    let (mut book, _) = with_tiers();
+    assert_eq!(book.tickets().order_ids, None);
+    // A sheet without tickets fits either kind and decides nothing.
+    import_tiers(&mut book, 1, &[]).unwrap();
+    assert_eq!(book.tickets().order_ids, None);
+
+    let with_ids = sheet("import-1.ods");
+    let first = book.import_tickets(&with_ids, june(2), now()).unwrap();
+    assert_eq!(book.tickets().order_ids, Some(true));
+
+    let without = tier_sheet("tickets.csv", &["Regular"]);
+    assert!(book.preview_import(&without, june(3)).order_ids_differ);
+    assert!(!book.preview_import(&with_ids, june(3)).order_ids_differ);
+    assert_eq!(
+        book.import_tickets(&without, june(3), now()),
+        Err(DomainError::OrderIdsDiffer)
+    );
+
+    book.delete_import(first).unwrap();
+    assert_eq!(book.tickets().order_ids, None);
+    book.import_tickets(&without, june(3), now()).unwrap();
+    assert_eq!(
+        book.import_tickets(&with_ids, june(4), now()),
+        Err(DomainError::OrderIdsDiffer)
+    );
+}
+
+#[test]
+fn a_batch_has_an_order_on_every_ticket_or_on_none() {
+    let (mut book, _) = with_tiers();
+    let mut mixed = sheet("import-1.ods");
+    mixed.tickets[1].order = None;
+    assert_eq!(
+        book.import_tickets(&mixed, june(1), now())
+            .unwrap_err()
+            .field(),
+        Some("order")
+    );
+    let mut mixed = tier_sheet("tickets.csv", &["Regular", "Regular"]);
+    mixed.tickets[1].order = Some("4711".into());
+    assert_eq!(
+        book.import_tickets(&mixed, june(1), now())
+            .unwrap_err()
+            .field(),
+        Some("order")
+    );
+}
+
+#[test]
+fn a_sheet_without_order_ids_survives_saving_and_reopening() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("tickets.lancelot");
+    let details = new_book().event().details.clone();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
+    let regular = store
+        .change(|book| book.add_tier(tier("Regular", "32", 250)))
+        .unwrap();
+    store
+        .import_tickets(&tier_sheet("a.csv", &["Regular", "Regular"]), june(1))
+        .unwrap();
+    store
+        .import_tickets(&tier_sheet("b.csv", &["Regular"]), june(2))
+        .unwrap();
+    store
+        .change(|book| book.resolve_conflict(NO_ORDER, regular, correction(1)))
+        .unwrap();
+    let book = store.book().clone();
+    drop(store);
+
+    let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(reopened.book(), &book);
+    assert_eq!(reopened.book().tickets().order_ids, Some(false));
 }

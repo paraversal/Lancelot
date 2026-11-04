@@ -90,6 +90,10 @@ pub enum DomainError {
     UnknownCancellation,
     #[error("no such order with tickets of this tier in the sheet")]
     UnknownOrder,
+    #[error(
+        "the event's other imports have order IDs and these tickets have none, or the other way round: delete the imports to switch"
+    )]
+    OrderIdsDiffer,
     #[error("that is more tickets than are left to cancel")]
     TooManyTickets,
     #[error("the refund must be between 0 and 100 %")]
@@ -157,6 +161,7 @@ impl DomainError {
             DomainError::UnknownManualSale => "unknown_manual_sale",
             DomainError::UnknownCancellation => "unknown_cancellation",
             DomainError::UnknownOrder => "unknown_order",
+            DomainError::OrderIdsDiffer => "order_ids_differ",
             DomainError::TooManyTickets => "too_many_tickets",
             DomainError::RefundTooHigh => "refund_too_high",
             DomainError::SaleHasCancellations => "sale_has_cancellations",

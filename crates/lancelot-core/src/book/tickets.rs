@@ -13,9 +13,10 @@ use crate::model::{
 use crate::money::BP_FULL;
 use crate::sales::Profitability;
 use crate::tickets::{
-    self, Cancellation, CancellationDraft, CancellationEdit, CancellationSource, ImportDeletion,
-    ImportPreview, ManualSale, ManualSaleDraft, RefundTerms, Resolution, TicketBatch, TicketImport,
-    TicketSettings, Tickets, Tier, TierDraft, clean_tier, default_payer, most_ever,
+    self, BatchTicket, Cancellation, CancellationDraft, CancellationEdit, CancellationSource,
+    ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft, RefundTerms, Resolution,
+    TicketBatch, TicketImport, TicketSettings, Tickets, Tier, TierDraft, clean_tier, default_payer,
+    most_ever,
 };
 
 /// The name of the income category of tickets.
@@ -24,6 +25,11 @@ const TICKETS: &str = "Tickets";
 const TICKET_FEES: &str = "Ticket fees";
 /// The name of the refund category when the first refund needs one.
 const TICKET_REFUNDS: &str = "Ticket refunds";
+
+/// Whether tickets of one kind can't join imports of the other: with order IDs and without.
+fn differs(batch: Option<bool>, event: Option<bool>) -> bool {
+    matches!((batch, event), (Some(a), Some(b)) if a != b)
+}
 
 impl Book {
     // --- reading -------------------------------------------------------------------------
@@ -194,6 +200,7 @@ impl Book {
         let previous = imports.iter().rev().find(|i| i.date <= date).copied();
         let current = imports.last().is_none_or(|i| i.date <= date);
         let mut preview = tickets::preview(batch, &self.tiers, previous, current);
+        preview.order_ids_differ = differs(batch.order_ids(), tickets::order_ids(&self.imports));
         let mut after = self.clone();
         if after
             .import_tickets(batch, date, OffsetDateTime::UNIX_EPOCH)
@@ -265,10 +272,16 @@ impl Book {
                     field: "source".into(),
                 });
             }
-            if batch.tickets.iter().any(|t| t.order.trim().is_empty()) {
+            // Every ticket has an order ID, or none does.
+            let with_ids = batch.order_ids() == Some(true);
+            let has_id = |t: &BatchTicket| t.order.as_ref().is_some_and(|o| !o.trim().is_empty());
+            if batch.tickets.iter().any(|t| has_id(t) != with_ids) {
                 return Err(DomainError::EmptyName {
                     field: "order".into(),
                 });
+            }
+            if differs(batch.order_ids(), tickets::order_ids(&book.imports)) {
+                return Err(DomainError::OrderIdsDiffer);
             }
             let orders = tickets::orders(batch, &book.tiers);
             if !orders.unknown.is_empty() {
