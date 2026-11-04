@@ -9,7 +9,7 @@
 	import Button from '../components/Button.svelte';
 	import TextField from '../components/TextField.svelte';
 	import type { DataSourceSpec } from './api';
-	import { dataSources } from './sources.svelte';
+	import { dataSources, optionalFields } from './sources.svelte';
 
 	let { id, spec }: { id: string; spec: DataSourceSpec } = $props();
 
@@ -46,9 +46,14 @@
 	}
 
 	async function saveAndTest() {
-		busy = true;
 		error = null;
 		result = null;
+		const blank = spec.fields.find((f) => !f.optional && !fields[f.key]?.trim());
+		if (blank) {
+			error = { field: `fields.${blank.key}`, message: "enter the provider's field name" };
+			return;
+		}
+		busy = true;
 		try {
 			dataSources.set(
 				await api.setDataSource(id, { label, url, authHeader, list, fields: { ...fields } })
@@ -60,7 +65,8 @@
 			}
 			result = await api.pullDataSource(
 				id,
-				spec.fields.map((f) => f.key)
+				spec.fields.map((f) => f.key),
+				optionalFields(spec)
 			);
 		} catch (e) {
 			if (!(e instanceof ApiError)) error = { field: null, message: errorMessage(e) };
@@ -147,7 +153,13 @@
 		<div class="pair">
 			{@render field('List', 'list', list, (v) => (list = v))}
 			{#each spec.fields as f (f.key)}
-				{@render field(f.label, `fields.${f.key}`, fields[f.key] ?? '', (v) => (fields[f.key] = v))}
+				{@render field(
+					f.label,
+					`fields.${f.key}`,
+					fields[f.key] ?? '',
+					(v) => (fields[f.key] = v),
+					f.optional ? 'Optional. Leave it empty if the provider has none.' : null
+				)}
 			{/each}
 		</div>
 
@@ -156,7 +168,12 @@
 			<div class="result" data-testid="data-source-result">
 				<strong>{result.rows.length} {result.rows.length === 1 ? 'row' : 'rows'} read</strong>
 				{#each result.rows.slice(0, 3) as row, n (n)}
-					<span>{spec.fields.map((f) => row[f.key]).join(' · ')}</span>
+					<span
+						>{spec.fields
+							.map((f) => row[f.key])
+							.filter((v) => v !== undefined)
+							.join(' · ')}</span
+					>
 				{/each}
 				{#if result.problems.length}
 					<span class="attention">

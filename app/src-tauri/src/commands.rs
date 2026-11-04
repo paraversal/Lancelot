@@ -470,9 +470,10 @@ pub async fn data_source_pull(
     state: State<'_, AppState>,
     id: String,
     fields: Vec<String>,
+    optional: Vec<String>,
 ) -> Result<Pulled> {
     let request = with(&state, |s| s.pull_request(&id))?;
-    tauri::async_runtime::spawn_blocking(move || request.run(&fields))
+    tauri::async_runtime::spawn_blocking(move || request.run(&fields, &optional))
         .await
         .map_err(|e| ApiError::new("internal", e.to_string()))?
 }

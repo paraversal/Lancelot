@@ -2,10 +2,20 @@
 import type { PullProblem } from "./PullProblem";
 
 /**
- * What a pull read: the fields asked for of every item that has them all.
+ * What a pull read: the fields asked for of every item that has all the required ones. An
+ * optional field an item lacks is left out of its row.
  */
 export type Pulled = { label: string, 
 /**
+ * The fields read: those asked for, less an optional one the source has no name for.
+ */
+fields: Array<string>, 
+/**
  * SHA-256 of the rows, lower-case hex. The same hash means the same figures.
  */
-sha256: string, rows: Array<{ [key in string]: string }>, problems: Array<PullProblem>, };
+sha256: string, rows: Array<{ [key in string]: string }>, problems: Array<PullProblem>, 
+/**
+ * Optional fields that items it read lack. Not problems here, but a plugin may treat them
+ * as such, like Ticket API an order when the others have one.
+ */
+missing: Array<PullProblem>, };

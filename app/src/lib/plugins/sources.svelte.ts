@@ -1,6 +1,11 @@
 // The data sources saved on this computer. They aren't in the event, so the snapshot doesn't have
 // them: the app reads them once and the form updates them.
 import { api, type DataSources } from '../api/index';
+import type { DataSourceSpec } from './api';
+
+/** The fields a plugin declared optional: they may be left blank and missing from an item. */
+export const optionalFields = (spec: DataSourceSpec | undefined) =>
+	spec?.fields.filter((f) => f.optional).map((f) => f.key) ?? [];
 
 let current = $state<DataSources>({});
 

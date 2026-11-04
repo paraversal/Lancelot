@@ -101,7 +101,7 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 **Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, even with other lines above them, and the rest of the file is never stored (R-TKT-3, R-TKT-17).
 
-**Ticket API** pulls tickets from a data source into the same review (R-TKT-3). Not yet tried with a real provider.
+**Ticket API** pulls tickets from a data source into the same review, with order IDs or, with the Order field left blank, without (R-TKT-3). Not yet tried with a real provider.
 
 **Data sources** are set up with a form under the plugin, with Save and test. The details stay on this computer and the token in the system's keychain, so neither is in the event file. Pulling is the only use of the network (R-NF-3). Saving a token and pulling in the desktop app hasn't been fully tested yet.
 

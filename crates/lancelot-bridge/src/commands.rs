@@ -207,11 +207,10 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
             &arg::<String>(a, "id")?,
             arg::<Option<String>>(a, "token")?.as_deref(),
         )),
-        "data_source_pull" => json(s.pull_request(&arg::<String>(a, "id")?)?.run(&arg::<
-            Vec<String>,
-        >(
-            a, "fields"
-        )?)),
+        "data_source_pull" => json(s.pull_request(&arg::<String>(a, "id")?)?.run(
+            &arg::<Vec<String>>(a, "fields")?,
+            &arg::<Vec<String>>(a, "optional")?,
+        )),
         "table_read" => json(s.read_table(
             &arg::<PathBuf>(a, "path")?,
             &arg::<Vec<String>>(a, "columns")?,

@@ -222,9 +222,9 @@ export const api = {
 	/** The token is never handed back; null removes it. */
 	setDataSourceToken: (id: string, token: string | null) =>
 		call<DataSources>('data_source_set_token', { id, token }),
-	/** Asks the provider for these fields; changes nothing. */
-	pullDataSource: (id: string, fields: string[]) =>
-		call<Pulled>('data_source_pull', { id, fields }),
+	/** Asks the provider for these fields, of which `optional` may be missing; changes nothing. */
+	pullDataSource: (id: string, fields: string[], optional: string[] = []) =>
+		call<Pulled>('data_source_pull', { id, fields, optional }),
 	/** Reads these columns of a file; changes nothing. */
 	readTable: (path: string, columns: string[]) => call<Table>('table_read', { path, columns }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),

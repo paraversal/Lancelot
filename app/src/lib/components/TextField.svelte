@@ -99,42 +99,40 @@
 	}
 </script>
 
-<div class="suggesting">
-	<Field {label} {id} {hint} tall={multiline}>
-		{#if multiline}
-			<textarea
-				{id}
-				bind:value={text}
-				oninput={() => oninput?.(text)}
-				onblur={commit}
-				onkeydown={keydown}></textarea>
-		{:else}
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				{id}
-				type="text"
-				bind:value={text}
-				role={suggestions.length ? 'combobox' : undefined}
-				aria-expanded={suggestions.length ? showing : undefined}
-				aria-controls={suggestions.length ? `${id}-suggestions` : undefined}
-				aria-autocomplete={suggestions.length ? 'list' : undefined}
-				autocomplete={suggestions.length ? 'off' : undefined}
-				oninput={() => {
-					open = true;
-					active = -1;
-					oninput?.(text);
-				}}
-				onfocus={() => (open = true)}
-				onblur={() => {
-					open = false;
-					active = -1;
-					commit();
-				}}
-				onkeydown={keydown}
-				{autofocus}
-			/>
-		{/if}
-	</Field>
+<Field {label} {id} {hint} tall={multiline}>
+	{#if multiline}
+		<textarea
+			{id}
+			bind:value={text}
+			oninput={() => oninput?.(text)}
+			onblur={commit}
+			onkeydown={keydown}></textarea>
+	{:else}
+		<!-- svelte-ignore a11y_autofocus -->
+		<input
+			{id}
+			type="text"
+			bind:value={text}
+			role={suggestions.length ? 'combobox' : undefined}
+			aria-expanded={suggestions.length ? showing : undefined}
+			aria-controls={suggestions.length ? `${id}-suggestions` : undefined}
+			aria-autocomplete={suggestions.length ? 'list' : undefined}
+			autocomplete={suggestions.length ? 'off' : undefined}
+			oninput={() => {
+				open = true;
+				active = -1;
+				oninput?.(text);
+			}}
+			onfocus={() => (open = true)}
+			onblur={() => {
+				open = false;
+				active = -1;
+				commit();
+			}}
+			onkeydown={keydown}
+			{autofocus}
+		/>
+	{/if}
 	{#if showing}
 		<ul class="suggestions" role="listbox" id="{id}-suggestions">
 			{#each matches as match, i (match)}
@@ -153,18 +151,16 @@
 			{/each}
 		</ul>
 	{/if}
-</div>
+</Field>
 
 <style>
-	.suggesting {
-		position: relative;
-	}
-
+	/* Inside the input's box, so the list opens right under the input rather than under the hint. */
 	.suggestions {
 		position: absolute;
 		z-index: 10;
-		left: 0;
-		right: 0;
+		top: 100%;
+		left: -1px;
+		right: -1px;
 		margin: 2px 0 0;
 		padding: 4px;
 		border: 1px solid var(--color-rule);

@@ -1,24 +1,22 @@
 <script lang="ts">
 	// Pulls the tickets sold and hands them to the review (R-TKT-3). Items it can't read are listed
-	// first, never dropped silently (R-TKT-4).
+	// first, never dropped silently (R-TKT-4). A source without an Order field gives tickets without
+	// order IDs, counted per tier.
 	import Button from '../../components/Button.svelte';
-	import type { Pulled, TicketBatch, TicketSectionProps } from '../api';
+	import type { TicketBatch, TicketSectionProps } from '../api';
+	import { ticketsOf } from './batch';
 
 	let { ctx, proposeImport }: TicketSectionProps = $props();
 
+	type Held = { batch: TicketBatch; problems: { row: number; field: string }[] };
+
 	let pulling = $state(false);
 	let error = $state<string | null>(null);
-	let held = $state<Pulled | null>(null);
+	let held = $state<Held | null>(null);
 
-	const toBatch = (pulled: Pulled): TicketBatch => ({
-		source: pulled.label,
-		sha256: pulled.sha256,
-		tickets: pulled.rows.map((row) => ({ tier: row.tier ?? '', order: row.order ?? '' }))
-	});
-
-	function review(pulled: Pulled) {
+	function review(batch: TicketBatch) {
 		held = null;
-		proposeImport(toBatch(pulled));
+		proposeImport(batch);
 	}
 
 	async function pull() {
@@ -26,9 +24,10 @@
 		error = null;
 		held = null;
 		try {
-			const pulled = await ctx.pull(['tier', 'order']);
-			if (pulled.problems.length) held = pulled;
-			else review(pulled);
+			const read = ticketsOf(await ctx.pull(['tier', 'order']), ctx.ticketOrderIds);
+			if ('error' in read) error = read.error;
+			else if (read.problems.length) held = read;
+			else review(read.batch);
 		} catch (e) {
 			if (!(e instanceof Error)) throw e;
 			error = e.message;
@@ -50,7 +49,7 @@
 			{#each held.problems as p, n (n)}
 				<span>Item {p.row}: no {p.field}</span>
 			{/each}
-			<div><Button size="sm" onclick={() => review(held!)}>Review the rest</Button></div>
+			<div><Button size="sm" onclick={() => review(held!.batch)}>Review the rest</Button></div>
 		</div>
 	{/if}
 </div>
