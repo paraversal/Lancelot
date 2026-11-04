@@ -20,6 +20,10 @@ A currency with none or three decimals, such as the yen or the Kuwaiti dinar, me
 
 The Cash box count plugin has a list of denominations in `cash-count/records.ts`, euro only. Another currency needs its own list there.
 
+## Tax
+
+VAT on tickets, drinks and receipts, and a tax summary for the association, either for information only or booked in the ledger. Today tax is a non-goal (requirements §1). The [tax consideration](tax.md) covers who would need it, what it would change and the questions to settle first.
+
 ## Payouts as a plugin
 
 The payout list could become an optional plugin, listing each person's method whatever it is. Reimbursement methods are in the core for now: a bank transfer or free text.
