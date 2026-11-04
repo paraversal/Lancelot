@@ -1,6 +1,6 @@
 // What a scenario does to the forecast. Its figures are informational and never reach the ledger
 // or the file (technical design §10). All amounts are integer cents.
-import type { AccountView, Budget, TierFigures } from '../api';
+import type { AccountView, Assumption, Budget, BudgetLine, TierFigures } from '../api';
 
 export type TierKnob = {
 	id: number;
@@ -20,6 +20,7 @@ export type CategoryKnob = {
 	id: number;
 	name: string;
 	kind: 'income' | 'expense';
+	/** Where it starts: the forecast, or the estimate while planning. */
 	forecast: number;
 	/** What is booked already. A category can't go below it. */
 	actual: number;
@@ -29,17 +30,57 @@ export type CategoryKnob = {
 	max: number;
 };
 
+/** An assumption to try other values of, such as the guests expected (R-BUD-6). */
+export type AssumptionKnob = { id: number; name: string; value: number; max: number };
+
+/** A budget line that scales with assumptions: its unit price can change, and its estimate follows. */
+export type LineKnob = {
+	id: number;
+	name: string;
+	category: number;
+	kind: 'income' | 'expense';
+	quantity: number;
+	unitPrice: number;
+	per: number[];
+	actual: number;
+	/** Complete, or ticket income once tickets sell: its forecast is what is booked. */
+	fixed: boolean;
+	/** Where it starts, like the categories. */
+	base: number;
+	step: number;
+	maxPrice: number;
+};
+
+/** The assumptions, and the lines that scale with them. */
+export type Scaled = { assumptions: AssumptionKnob[]; lines: LineKnob[]; planning: boolean };
+export const UNSCALED: Scaled = { assumptions: [], lines: [], planning: false };
+
 /** What has been changed. What isn't here hasn't been. */
 export type Scenario = {
 	/** More tickets per tier. */
 	more: Record<number, number>;
 	/** Another price per tier, for the tickets still to sell. */
 	price: Record<number, number>;
-	/** Another figure per category. */
+	/** Another figure per category, for what doesn't scale. */
 	category: Record<number, number>;
+	/** Another value per assumption. */
+	assumption: Record<number, number>;
+	/** Another unit price per scaled line. */
+	unit: Record<number, number>;
 };
 
-export const NOTHING: Scenario = { more: {}, price: {}, category: {} };
+export const NOTHING: Scenario = { more: {}, price: {}, category: {}, assumption: {}, unit: {} };
+
+/**
+ * Before anything is booked or sold, the forecast only counts the expenses: income counts once it
+ * comes in (R-BUD-4). What if then starts from the plan, and tickets come from the budget.
+ */
+export const isPlanning = (budget: Budget, tiers: TierFigures[]) =>
+	budget.income.actual === 0 && budget.expense.actual === 0 && tiers.every((t) => t.places === 0);
+
+/** Where What if starts: the planned result while planning, the forecast after. */
+export const startOf = (budget: Budget, planning: boolean) =>
+	planning ? budget.result.estimate : budget.result.forecast;
 
 export const PRICE_STEP = 100;
 
@@ -61,6 +102,82 @@ export const tierKnobs = (tiers: TierFigures[]): TierKnob[] =>
 		maxPrice: Math.max(t.price * 2, 2000)
 	}));
 
+const unitStep = (price: number) => (price < 200 ? 10 : price < 2000 ? 50 : 100);
+
+/** The assumptions some line scales with, and those lines. */
+export function scaledKnobs(
+	budget: Budget,
+	lines: BudgetLine[],
+	assumptions: Assumption[],
+	accounts: AccountView[],
+	planning = false
+): Scaled {
+	const out: LineKnob[] = [];
+	for (const l of lines) {
+		const e = l.estimate;
+		if (e.type !== 'quantity' || !e.per.length) continue;
+		const account = accounts.find((a) => a.id === l.category);
+		if (!account || (account.kind !== 'income' && account.kind !== 'expense')) continue;
+		const figures = budget.lines.find((f) => f.line === l.id);
+		if (!figures) continue;
+		out.push({
+			id: l.id,
+			name: l.description,
+			category: l.category,
+			kind: account.kind,
+			quantity: e.quantity,
+			unitPrice: e.unitPrice,
+			per: e.per,
+			actual: figures.actual,
+			fixed: l.complete || (account.role !== null && !planning),
+			base: planning ? figures.estimate : figures.forecast,
+			step: unitStep(e.unitPrice),
+			maxPrice: Math.max(e.unitPrice * 2, 500)
+		});
+	}
+	const used = new Set(out.flatMap((l) => l.per));
+	return {
+		assumptions: assumptions
+			.filter((a) => used.has(a.id))
+			.map((a) => ({ ...a, max: Math.max(a.value * 2, a.value + 20) })),
+		lines: out,
+		planning
+	};
+}
+
+export const assumptionValue = (knob: AssumptionKnob, s: Scenario) =>
+	clamp(s.assumption[knob.id] ?? knob.value, 0, knob.max);
+
+export const unitPrice = (line: LineKnob, s: Scenario) =>
+	clamp(s.unit[line.id] ?? line.unitPrice, 0, line.maxPrice);
+
+/** What a scaled line would come to, by the forecast's rule (R-BUD-4), or its estimate while planning. */
+function lineFigure(line: LineKnob, scaled: Scaled, s: Scenario, price: number) {
+	if (line.fixed) return line.base;
+	const estimate = line.per.reduce((n, id) => {
+		const knob = scaled.assumptions.find((a) => a.id === id);
+		return n * (knob ? assumptionValue(knob, s) : 0);
+	}, line.quantity * price);
+	if (scaled.planning) return estimate;
+	return line.kind === 'income' ? Math.min(estimate, line.actual) : Math.max(estimate, line.actual);
+}
+
+/** How far a scaled line moves: from the assumptions, then from its own unit price. */
+export function lineChange(line: LineKnob, scaled: Scaled, s: Scenario) {
+	const values = lineFigure(line, scaled, s, line.unitPrice);
+	const priced = lineFigure(line, scaled, s, unitPrice(line, s));
+	return { values: values - line.base, price: priced - values, value: priced };
+}
+
+/** What the scaled lines of a category add to it in the scenario. */
+export const scaledIn = (category: number, scaled: Scaled, s: Scenario) =>
+	scaled.lines
+		.filter((l) => l.category === category)
+		.reduce((n, l) => {
+			const c = lineChange(l, scaled, s);
+			return n + c.values + c.price;
+		}, 0);
+
 function stepFor(forecast: number) {
 	if (forecast >= 100000) return 1000;
 	return forecast >= 20000 ? 500 : 100;
@@ -68,26 +185,32 @@ function stepFor(forecast: number) {
 
 /**
  * The categories with a forecast, in account order. Ticket categories follow the tiers above
- * them. What is already booked has happened, so a category can't go below it.
+ * them, except while planning, when they are budgeted like the rest. What is already booked has
+ * happened, so a category can't go below it.
  */
-export function categoryKnobs(budget: Budget, accounts: AccountView[]): CategoryKnob[] {
+export function categoryKnobs(
+	budget: Budget,
+	accounts: AccountView[],
+	planning = false
+): CategoryKnob[] {
 	return budget.categories.flatMap((c) => {
 		const account = accounts.find((a) => a.id === c.category);
-		if (!account || account.role !== null || c.forecast <= 0) return [];
+		const start = planning ? c.estimate : c.forecast;
+		if (!account || (account.role !== null && !planning) || start <= 0) return [];
 		if (account.kind !== 'income' && account.kind !== 'expense') return [];
-		const step = stepFor(c.forecast);
-		const floor = Math.min(c.actual, c.forecast);
-		const ceiling = c.forecast + Math.max(c.forecast, 10000);
+		const step = stepFor(start);
+		const floor = Math.min(c.actual, start);
+		const ceiling = start + Math.max(start, 10000);
 		return [
 			{
 				id: c.category,
 				name: account.name,
 				kind: account.kind,
-				forecast: c.forecast,
+				forecast: start,
 				actual: c.actual,
 				step,
-				min: c.forecast - Math.floor((c.forecast - floor) / step) * step,
-				max: c.forecast + Math.floor((ceiling - c.forecast) / step) * step
+				min: start - Math.floor((start - floor) / step) * step,
+				max: start + Math.floor((ceiling - start) / step) * step
 			}
 		];
 	});
@@ -116,6 +239,8 @@ export type Bridge = {
 	tickets: number;
 	/** What other prices change on those tickets. */
 	prices: number;
+	/** What other values of the assumptions do to the lines that scale with them. */
+	assumptions: number;
 	income: number;
 	/** Already signed: more expenses are negative. */
 	expenses: number;
@@ -126,7 +251,8 @@ export function bridge(
 	forecast: number,
 	tiers: TierKnob[],
 	categories: CategoryKnob[],
-	s: Scenario
+	s: Scenario,
+	scaled: Scaled = UNSCALED
 ): Bridge {
 	let tickets = 0;
 	let prices = 0;
@@ -143,13 +269,22 @@ export function bridge(
 		if (c.kind === 'income') income += change;
 		else expenses -= change;
 	}
+	let assumptions = 0;
+	for (const l of scaled.lines) {
+		const c = lineChange(l, scaled, s);
+		const sign = l.kind === 'income' ? 1 : -1;
+		assumptions += sign * c.values;
+		if (l.kind === 'income') income += c.price;
+		else expenses -= c.price;
+	}
 	return {
 		forecast,
 		tickets,
 		prices,
+		assumptions,
 		income,
 		expenses,
-		result: forecast + tickets + prices + income + expenses
+		result: forecast + tickets + prices + assumptions + income + expenses
 	};
 }
 
@@ -158,8 +293,9 @@ export const outcome = (
 	forecast: number,
 	tiers: TierKnob[],
 	categories: CategoryKnob[],
-	s: Scenario
-) => bridge(forecast, tiers, categories, s).result;
+	s: Scenario,
+	scaled: Scaled = UNSCALED
+) => bridge(forecast, tiers, categories, s, scaled).result;
 
 /** One way towards a target, on top of the scenario. */
 export type Suggestion = {
@@ -173,6 +309,7 @@ export type Suggestion = {
 	| { kind: 'tickets'; tier: TierKnob; count: number; net: number; leftAfter: number }
 	| { kind: 'price'; tier: TierKnob; count: number; price: number }
 	| { kind: 'cut'; category: CategoryKnob; by: number; to: number }
+	| { kind: 'assumption'; assumption: AssumptionKnob; to: number }
 );
 
 /**
@@ -185,10 +322,40 @@ export function reach(
 	tiers: TierKnob[],
 	categories: CategoryKnob[],
 	s: Scenario,
+	scaled: Scaled = UNSCALED,
 	limit = 6
 ): Suggestion[] {
 	if (gap <= 0) return [];
 	const out: Suggestion[] = [];
+	// Another value of an assumption: the nearest that gets there, or the one that gets closest.
+	const now = outcome(0, tiers, categories, s, scaled);
+	for (const a of scaled.assumptions) {
+		const value = assumptionValue(a, s);
+		const at = (v: number) => ({ ...s, assumption: { ...s.assumption, [a.id]: v } });
+		const gainAt = (v: number) => outcome(0, tiers, categories, at(v), scaled) - now;
+		let best: { to: number; gain: number } | null = null;
+		for (let d = 1; d <= a.max; d++) {
+			for (const v of [value + d, value - d]) {
+				if (v < 0 || v > a.max) continue;
+				const gain = gainAt(v);
+				if (gain >= gap) {
+					best = { to: v, gain };
+					break;
+				}
+				if (gain > 0 && (!best || gain > best.gain)) best = { to: v, gain };
+			}
+			if (best && best.gain >= gap) break;
+		}
+		if (best)
+			out.push({
+				kind: 'assumption',
+				assumption: a,
+				to: best.to,
+				covers: best.gain >= gap,
+				gain: best.gain,
+				scenario: at(best.to)
+			});
+	}
 	for (const t of tiers) {
 		const more = moreOf(t, s);
 		const left = t.maxMore - more;
@@ -265,7 +432,12 @@ function omit(record: Record<number, number>, id: number) {
 export type Change = { part: keyof Scenario; id: number; name: string; value: number };
 
 /** Every change the scenario makes, tier by tier and then category by category. */
-export function changes(tiers: TierKnob[], categories: CategoryKnob[], s: Scenario): Change[] {
+export function changes(
+	tiers: TierKnob[],
+	categories: CategoryKnob[],
+	s: Scenario,
+	scaled: Scaled = UNSCALED
+): Change[] {
 	const out: Change[] = [];
 	for (const t of tiers) {
 		const more = moreOf(t, s);
@@ -277,6 +449,14 @@ export function changes(tiers: TierKnob[], categories: CategoryKnob[], s: Scenar
 		const value = categoryValue(c, s);
 		if (value !== c.forecast)
 			out.push({ part: 'category', id: c.id, name: c.name, value: value - c.forecast });
+	}
+	for (const a of scaled.assumptions) {
+		const value = assumptionValue(a, s);
+		if (value !== a.value) out.push({ part: 'assumption', id: a.id, name: a.name, value });
+	}
+	for (const l of scaled.lines) {
+		const price = unitPrice(l, s);
+		if (price !== l.unitPrice) out.push({ part: 'unit', id: l.id, name: l.name, value: price });
 	}
 	return out;
 }

@@ -34,7 +34,8 @@
 
 	const fmt = (cents: number, sign: 'plain' | 'always' = 'plain') =>
 		formatAmount(cents, format, sign);
-	const key = (s: Suggestion) => `${s.kind}:${s.kind === 'cut' ? s.category.id : s.tier.id}`;
+	const key = (s: Suggestion) =>
+		`${s.kind}:${s.kind === 'cut' ? s.category.id : s.kind === 'assumption' ? s.assumption.id : s.tier.id}`;
 
 	function title(s: Suggestion) {
 		if (s.kind === 'tickets')
@@ -42,6 +43,7 @@
 				? `Sell ${s.count} more ${s.tier.name}`
 				: `Sell the ${s.count} ${s.tier.name} left`;
 		if (s.kind === 'price') return `Sell ${s.count} more ${s.tier.name} at ${fmt(s.price)}`;
+		if (s.kind === 'assumption') return `${s.assumption.name} at ${s.to}`;
 		return `${s.category.name} down by ${fmt(s.by)}`;
 	}
 
@@ -52,6 +54,8 @@
 			return s.tier.quota === null ? sum : `${sum} · ${s.leftAfter} left after`;
 		}
 		if (s.kind === 'price') return fmt(s.gain, 'always');
+		if (s.kind === 'assumption')
+			return `${s.to > s.assumption.value ? '+' : '−'}${Math.abs(s.to - s.assumption.value)} from ${s.assumption.value} · ${fmt(s.gain, 'always')}`;
 		return `to ${fmt(s.to)} · ${fmt(s.category.actual)} booked`;
 	}
 </script>

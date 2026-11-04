@@ -17,8 +17,11 @@ import {
 	NOTHING,
 	outcome,
 	places,
+	isPlanning,
 	reach,
+	scaledKnobs,
 	snapCategory,
+	startOf,
 	tierKnobs,
 	tierPrice,
 	undo,
@@ -127,7 +130,7 @@ describe('A scenario', () => {
 
 	it('lists its changes, and undoes one at a time', () => {
 		const [knob] = tierKnobs([tier({})]);
-		const s = { more: { 1: 3 }, price: { 1: 3500 }, category: { 7: 51000 } };
+		const s = { ...NOTHING, more: { 1: 3 }, price: { 1: 3500 }, category: { 7: 51000 } };
 		expect(changes([knob], [kitchen()], s).map((c) => [c.part, c.value])).toEqual([
 			['more', 3],
 			['price', 3500],
@@ -169,6 +172,101 @@ describe('Reaching a target', () => {
 	it('cuts no further than what is booked', () => {
 		const [cut] = reach(50000, [], [kitchen()], NOTHING);
 		expect(cut).toMatchObject({ kind: 'cut', by: 20000, to: 30000, covers: false });
+	});
+});
+
+describe('Assumptions in a scenario', () => {
+	const accounts = [
+		{ id: 4, name: 'Tickets', kind: 'income', role: 'tickets' },
+		{ id: 6, name: 'Kitchen', kind: 'expense', role: null }
+	] as never;
+	const lines = [
+		{
+			id: 1,
+			category: 4,
+			description: 'Tickets',
+			estimate: { type: 'quantity', quantity: 1, unitPrice: 2000, per: [1] },
+			complete: false,
+			costCentre: null
+		},
+		{
+			id: 2,
+			category: 6,
+			description: 'Kitchen',
+			estimate: { type: 'quantity', quantity: 1, unitPrice: 400, per: [1] },
+			complete: false,
+			costCentre: null
+		}
+	] as never;
+	const guests = [{ id: 1, name: 'Guests', value: 150 }];
+	const figures = (line: number, estimate: number, actual: number, forecast: number) => ({
+		line,
+		estimate,
+		actual,
+		forecast,
+		fromPlan: 0
+	});
+	// Nothing booked: the forecast leaves out the ticket income, the plan doesn't.
+	const planned = {
+		...snapshot.budget,
+		income: { estimate: 300000, actual: 0, forecast: 0 },
+		expense: { estimate: 60000, actual: 0, forecast: 60000 },
+		result: { estimate: 240000, actual: 0, forecast: -60000 },
+		lines: [figures(1, 300000, 0, 0), figures(2, 60000, 0, 60000)],
+		categories: [
+			{ category: 4, estimate: 300000, actual: 0, forecast: 0, unbudgeted: 0 },
+			{ category: 6, estimate: 60000, actual: 0, forecast: 60000, unbudgeted: 0 }
+		]
+	};
+
+	it('start from the plan while nothing is booked, ticket income included', () => {
+		expect(isPlanning(planned, [])).toBe(true);
+		expect(startOf(planned, true)).toBe(240000);
+		expect(categoryKnobs(planned, accounts, true).map((c) => [c.name, c.forecast])).toEqual([
+			['Tickets', 300000],
+			['Kitchen', 60000]
+		]);
+		const spent = { ...planned, expense: { ...planned.expense, actual: 100 } };
+		expect(isPlanning(spent, [])).toBe(false);
+	});
+
+	it('move every line that scales, and each unit price on its own', () => {
+		const scaled = scaledKnobs(planned, lines, guests, accounts, true);
+		const more = { ...NOTHING, assumption: { 1: 200 } };
+		// 50 more guests: 50 × 20 € in, 50 × 4 € out.
+		expect(bridge(240000, [], [], more, scaled)).toMatchObject({
+			assumptions: 80000,
+			result: 320000
+		});
+		const pricier = { ...more, unit: { 2: 450 } };
+		expect(bridge(240000, [], [], pricier, scaled)).toMatchObject({
+			assumptions: 80000,
+			expenses: -10000,
+			result: 310000
+		});
+		expect(changes([], [], pricier, scaled).map((c) => [c.part, c.name, c.value])).toEqual([
+			['assumption', 'Guests', 200],
+			['unit', 'Kitchen', 450]
+		]);
+	});
+
+	it('follow the forecast once money is booked, and ticket income what is sold', () => {
+		const booked = {
+			...planned,
+			lines: [figures(1, 300000, 100000, 100000), figures(2, 60000, 70000, 70000)]
+		};
+		const scaled = scaledKnobs(booked, lines, guests, accounts, false);
+		expect(scaled.lines.map((l) => l.fixed)).toEqual([true, false]);
+		// Kitchen has spent 700 € already: up to 175 guests, the forecast stays there.
+		expect(bridge(0, [], [], { ...NOTHING, assumption: { 1: 170 } }, scaled).result).toBe(0);
+		expect(bridge(0, [], [], { ...NOTHING, assumption: { 1: 200 } }, scaled).result).toBe(-10000);
+	});
+
+	it('suggest the value that reaches a target', () => {
+		const scaled = scaledKnobs(planned, lines, guests, accounts, true);
+		const [s] = reach(32000, [], [], NOTHING, scaled);
+		// Each guest adds 16 €: 20 guests more.
+		expect(s).toMatchObject({ kind: 'assumption', to: 170, covers: true, gain: 32000 });
 	});
 });
 
@@ -229,6 +327,32 @@ describe('The What if section', () => {
 			'disabled',
 			true
 		);
+	});
+
+	it('tries other values of an assumption and the unit prices that scale with it', async () => {
+		open((s) => {
+			s.budgetLines.push({
+				id: 99,
+				category: 6,
+				description: 'Breakfast',
+				estimate: { type: 'quantity', quantity: 1, unitPrice: 400, per: [1] },
+				complete: false,
+				costCentre: null
+			});
+			s.budget.lines.push({ line: 99, estimate: 104000, actual: 0, forecast: 104000, fromPlan: 0 });
+		});
+		render(Budget);
+		await adjust();
+		expect(screen.getByTestId('plugin-what-if-assumption').textContent).toBe('260');
+		await fireEvent.click(screen.getByRole('button', { name: 'One more Guests' }));
+		// Ticket sales are complete, so only breakfast moves: 4 € more.
+		expect(money('plugin-what-if-result')).toBe('+1.761,00 €');
+		await fireEvent.click(
+			screen.getByRole('button', { name: 'Raise the unit price of Breakfast' })
+		);
+		expect(money('plugin-what-if-result')).toBe('+1.630,50 €');
+		await fireEvent.click(screen.getByRole('button', { name: /Undo Guests 261/ }));
+		expect(money('plugin-what-if-result')).toBe('+1.635,00 €');
 	});
 
 	it('works back from a target and applies a way there', async () => {

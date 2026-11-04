@@ -4,7 +4,9 @@
 import type { Component, Snippet } from 'svelte';
 import type { AccountKind } from '../api/generated/AccountKind';
 import type { AccountView } from '../api/generated/AccountView';
+import type { Assumption } from '../api/generated/Assumption';
 import type { Budget } from '../api/generated/Budget';
+import type { BudgetLine } from '../api/generated/BudgetLine';
 import type { CostCentre } from '../api/generated/CostCentre';
 import type { CostCentreFigures } from '../api/generated/CostCentreFigures';
 import type { NumberFormat } from '../api/generated/NumberFormat';
@@ -19,7 +21,9 @@ import type { TxnView } from '../api/generated/TxnView';
 
 export type {
 	AccountView,
+	Assumption,
 	Budget,
+	BudgetLine,
 	CostCentre,
 	CostCentreFigures,
 	PluginChange,
@@ -79,6 +83,9 @@ export interface PluginContext {
 	figuresOf(centre: number): CostCentreFigures | undefined;
 	/** Plan, actual and forecast of the whole event, as the Budget page shows them. */
 	readonly budget: Budget;
+	/** The budget lines, planning data only (R-BUD-5), and the assumptions they scale with. */
+	readonly budgetLines: BudgetLine[];
+	readonly assumptions: Assumption[];
 	/** The ticket tiers with what was sold of each. No orders, so no one's purchase. */
 	readonly tiers: TierFigures[];
 	/**

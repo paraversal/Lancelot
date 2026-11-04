@@ -51,7 +51,7 @@ A plugin that is switched off for the event shows none of these, and its records
 
 ### What the event holds
 
-`closed`, `format`, `costCentres`, `accounts`, `txns`, `budget`, `tiers` and `figuresOf(centre)` read the event as it is now. They are reactive, so read them in `$derived`. People's bank details and ticket orders are left out on purpose. `ticketOrderIds` says only whether the event's ticket imports have order IDs, or `null` before the first one with tickets: a ticket source builds its batch the same way, since one of the other kind is refused.
+`closed`, `format`, `costCentres`, `accounts`, `txns`, `budget`, `budgetLines`, `assumptions`, `tiers` and `figuresOf(centre)` read the event as it is now. They are reactive, so read them in `$derived`. People's bank details and ticket orders are left out on purpose. `ticketOrderIds` says only whether the event's ticket imports have order IDs, or `null` before the first one with tickets: a ticket source builds its batch the same way, since one of the other kind is refused.
 
 A closed event refuses changes, so hide what would change it when `ctx.closed` holds.
 

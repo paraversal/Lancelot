@@ -57,6 +57,12 @@ export function pluginContext(id: string): PluginContext {
 		get budget() {
 			return snapshot().budget;
 		},
+		get budgetLines() {
+			return snapshot().budgetLines;
+		},
+		get assumptions() {
+			return snapshot().assumptions;
+		},
 		get tiers() {
 			return snapshot().tickets.tiers;
 		},

@@ -15,20 +15,30 @@
 	import { level } from '../../motion/mode.svelte';
 	import MovingAmount from '../../motion/MovingAmount.svelte';
 	import type { BudgetSectionProps } from '../api';
+	import Assumption from './Assumption.svelte';
 	import Bridge, { type Part } from './Bridge.svelte';
 	import CategoryBar from './CategoryBar.svelte';
 	import Reach from './Reach.svelte';
 	import {
+		assumptionValue,
 		bridge,
 		categoryKnobs,
 		categoryValue,
 		changes,
+		isPlanning,
+		lineChange,
 		moreOf,
 		NOTHING,
 		reach,
+		scaledIn,
+		scaledKnobs,
+		startOf,
 		tierKnobs,
 		tierPrice,
 		undo,
+		unitPrice,
+		type CategoryKnob,
+		type LineKnob,
 		type Change,
 		type Scenario,
 		type Suggestion
@@ -39,11 +49,26 @@
 
 	const id = $props.id();
 	const format = $derived(ctx.format);
-	const forecast = $derived(ctx.budget.result.forecast);
-	const tiers = $derived(tierKnobs(ctx.tiers));
-	const categories = $derived(categoryKnobs(ctx.budget, ctx.accounts));
+	// Before anything is booked, What if starts from the plan, with tickets as budgeted.
+	const planning = $derived(isPlanning(ctx.budget, ctx.tiers));
+	const forecast = $derived(startOf(ctx.budget, planning));
+	const categories = $derived(categoryKnobs(ctx.budget, ctx.accounts, planning));
+	const budgetedTickets = $derived(
+		planning && categories.some((c) => ctx.accounts.find((a) => a.id === c.id)?.role != null)
+	);
+	const tiers = $derived(budgetedTickets ? [] : tierKnobs(ctx.tiers));
+	const scaled = $derived(
+		scaledKnobs(ctx.budget, ctx.budgetLines, ctx.assumptions, ctx.accounts, planning)
+	);
+	// A category with lines that scale moves with the assumptions; its own handle sits on top.
+	const shifted = (c: CategoryKnob): CategoryKnob => {
+		const d = scaledIn(c.id, scaled, scenario);
+		return d ? { ...c, forecast: c.forecast + d, min: c.min + d, max: c.max + d } : c;
+	};
 	// The width of a category bar stands for this much, the same for every category.
-	const scale = $derived(Math.max(1, ...categories.map((c) => c.max)));
+	const scale = $derived(
+		Math.max(1, ...categories.map((c) => c.max + Math.max(0, scaledIn(c.id, scaled, scenario))))
+	);
 	// Under 2 % of the expenses: behind a button, so the bars that matter stay in view.
 	const small = $derived(Math.round(ctx.budget.expense.forecast * 0.02));
 
@@ -54,11 +79,29 @@
 	// Reach starts at the plan: what was meant to be left over.
 	let target = $state<number | null>(untrack(() => ctx.budget.result.estimate));
 
-	const figures = $derived(bridge(forecast, tiers, categories, scenario));
+	const figures = $derived(bridge(forecast, tiers, categories, scenario, scaled));
 	const change = $derived(figures.result - forecast);
-	const list = $derived(changes(tiers, categories, scenario));
+	const list = $derived(changes(tiers, categories, scenario, scaled));
 	const gap = $derived(target === null ? 0 : target - figures.result);
-	const suggestions = $derived(reach(gap, tiers, categories, scenario));
+	const suggestions = $derived(reach(gap, tiers, categories, scenario, scaled));
+	const parts = $derived<Part[]>([
+		...(tiers.length ? (['tickets'] as const) : []),
+		...(scaled.assumptions.length ? (['assumptions'] as const) : []),
+		'income',
+		'expenses'
+	]);
+
+	const nameOf = (id: number) => ctx.assumptions.find((a) => a.id === id)?.name ?? '?';
+	const names = (l: LineKnob) => l.per.map(nameOf).join(' × ');
+	// Each line under the first assumption it scales with.
+	const under = (assumption: number) =>
+		scaled.lines
+			.filter((l) => l.per[0] === assumption)
+			.map((line) => ({
+				line,
+				price: unitPrice(line, scenario),
+				figure: lineChange(line, scaled, scenario).value
+			}));
 
 	const fold = $derived(level('A2'));
 	const bars = $derived(level('D2'));
@@ -88,11 +131,20 @@
 
 	function chip(c: Change) {
 		if (c.part === 'more') return `${c.name} +${c.value}`;
-		if (c.part === 'price') return `${c.name} at ${formatAmount(c.value, format)}`;
+		if (c.part === 'price' || c.part === 'unit')
+			return `${c.name} at ${formatAmount(c.value, format)}`;
+		if (c.part === 'assumption') return `${c.name} ${c.value}`;
 		return `${c.name} ${formatAmount(c.value, format, 'always')}`;
 	}
+	const lineCategory = (line: number) => scaled.lines.find((l) => l.id === line)?.category ?? 0;
 	const chipColor = (c: Change) =>
-		c.part === 'category' ? colorOfCategory(c.id) : colorOfTier(c.id);
+		c.part === 'category'
+			? colorOfCategory(c.id)
+			: c.part === 'unit'
+				? colorOfCategory(lineCategory(c.id))
+				: c.part === 'assumption'
+					? 'var(--color-ink)'
+					: colorOfTier(c.id);
 
 	// Jumping to a part: it comes into view and its heading lights up for a moment.
 	const headings: Partial<Record<Part, HTMLElement>> = {};
@@ -114,11 +166,15 @@
 
 	function apply(s: Suggestion) {
 		scenario = s.scenario;
-		void show(s.kind === 'cut' ? 'expenses' : 'tickets');
+		void show(s.kind === 'cut' ? 'expenses' : s.kind === 'assumption' ? 'assumptions' : 'tickets');
 	}
 
 	const suggestionColor = (s: Suggestion) =>
-		s.kind === 'cut' ? colorOfCategory(s.category.id) : colorOfTier(s.tier.id);
+		s.kind === 'cut'
+			? colorOfCategory(s.category.id)
+			: s.kind === 'assumption'
+				? 'var(--color-ink)'
+				: colorOfTier(s.tier.id);
 </script>
 
 <div class="summary">
@@ -133,7 +189,7 @@
 		>
 		{#if change}
 			<span class="label" data-testid="plugin-what-if-change" transition:fade={{ duration: 120 }}
-				>{formatAmount(change, format, 'always')} on the forecast</span
+				>{formatAmount(change, format, 'always')} on the {planning ? 'plan' : 'forecast'}</span
 			>
 		{/if}
 	</div>
@@ -166,7 +222,15 @@
 
 {#if open}
 	<div class="body" {id} transition:slide={{ duration: fold === 'off' ? 0 : 220 }}>
-		<Bridge {figures} {format} level={bars} {amounts} onpick={show} />
+		<Bridge
+			{figures}
+			start={planning ? 'Plan' : 'Forecast'}
+			{parts}
+			{format}
+			level={bars}
+			{amounts}
+			onpick={show}
+		/>
 
 		<div class="changes">
 			<div class="chips">
@@ -191,6 +255,26 @@
 
 		{#if mode === 'try'}
 			<div class="try" in:fade={{ duration: fold === 'off' ? 0 : 140 }}>
+				{#if scaled.assumptions.length}
+					<section>
+						<h3 bind:this={headings.assumptions}>Assumptions</h3>
+						<div class="assumptions">
+							{#each scaled.assumptions as a (a.id)}
+								<Assumption
+									knob={a}
+									value={assumptionValue(a, scenario)}
+									lines={under(a.id)}
+									{names}
+									{format}
+									colorOf={colorOfCategory}
+									onvalue={(v) => set('assumption', a.id, v)}
+									onprice={(line, p) => set('unit', line, p)}
+								/>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
 				{#if tiers.length}
 					<section>
 						<h3 bind:this={headings.tickets}>Tickets still to sell</h3>
@@ -216,14 +300,15 @@
 								<section>
 									<h3 bind:this={headings[g.part]}>{g.title}</h3>
 									{#each g.shown as c (c.id)}
+										{@const d = scaledIn(c.id, scaled, scenario)}
 										<div transition:slide={{ duration: fold === 'off' ? 0 : 160 }}>
 											<CategoryBar
-												knob={c}
-												value={categoryValue(c, scenario)}
+												knob={shifted(c)}
+												value={categoryValue(c, scenario) + d}
 												{scale}
 												color={colorOfCategory(c.id)}
 												{format}
-												onvalue={(v) => set('category', c.id, v)}
+												onvalue={(v) => set('category', c.id, v - d)}
 											/>
 										</div>
 									{/each}
@@ -240,7 +325,7 @@
 						<span class="legend">
 							<span><i class="booked"></i>booked</span>
 							<span><i class="rest"></i>still to come</span>
-							<span><i class="tick"></i>forecast</span>
+							<span><i class="tick"></i>{planning ? 'plan' : 'forecast'}</span>
 						</span>
 					</div>
 				{/if}
@@ -404,6 +489,12 @@
 		font-weight: 400;
 		color: var(--color-ink-muted);
 		scroll-margin: var(--spacing-8);
+	}
+
+	.assumptions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-6);
 	}
 
 	.categories {

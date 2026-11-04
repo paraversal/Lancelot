@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	export type Part = 'tickets' | 'income' | 'expenses';
+	export type Part = 'tickets' | 'assumptions' | 'income' | 'expenses';
 </script>
 
 <script lang="ts">
@@ -14,12 +14,18 @@
 
 	let {
 		figures,
+		start = 'Forecast',
+		parts = ['tickets', 'assumptions', 'income', 'expenses'],
 		format,
 		level,
 		amounts,
 		onpick
 	}: {
 		figures: Bridge;
+		/** What the first bar is: the forecast, or the plan while planning. */
+		start?: 'Forecast' | 'Plan';
+		/** The parts there is something to change in; the others get no bar. */
+		parts?: Part[];
 		format: NumberFormat;
 		/** How the bars move (D2). */
 		level: Level;
@@ -38,15 +44,17 @@
 
 	const rows = $derived.by(() => {
 		const f = figures;
-		const out: Row[] = [{ label: 'Forecast', from: 0, to: f.forecast, total: 'forecast' }];
+		const out: Row[] = [{ label: start, from: 0, to: f.forecast, total: 'forecast' }];
 		let at = f.forecast;
 		const steps: [string, number, Part][] = [
 			['Tickets', f.tickets, 'tickets'],
 			['Prices', f.prices, 'tickets'],
+			['Assumptions', f.assumptions, 'assumptions'],
 			['Income', f.income, 'income'],
 			['Expenses', f.expenses, 'expenses']
 		];
 		for (const [label, change, part] of steps) {
+			if (!parts.includes(part)) continue;
 			out.push({ label, from: at, to: at + change, part });
 			at += change;
 		}

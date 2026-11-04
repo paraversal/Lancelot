@@ -1,7 +1,7 @@
 <script lang="ts">
-	// One budget line (R-BUD-1): its category, description and estimate, as an amount or as
-	// quantity × unit price, possibly times assumptions such as the guests expected (R-BUD-6), and
-	// whether it is complete. Below, the receipt lines linked to it
+	// One budget line (R-BUD-1): its category, description and estimate, as an amount, as count ×
+	// unit price, or as a price per assumption such as the guests expected (R-BUD-6), and whether
+	// it is complete. Below, the receipt lines linked to it
 	// (R-BUD-2), each opening its transaction in the ledger.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -57,7 +57,7 @@
 		] ?? ''
 	);
 	let description = $state('');
-	let mode = $state<'amount' | 'quantity'>('amount');
+	let mode = $state<'amount' | 'quantity' | 'per'>('amount');
 	let amount = $state<Cents | null>(null);
 	let quantity = $state('');
 	let unitPrice = $state<Cents | null>(null);
@@ -74,7 +74,8 @@
 		complete = line?.complete ?? false;
 		const e = line?.estimate;
 		if (e?.type === 'quantity') {
-			mode = 'quantity';
+			// Saved as 2 × Guests × price: a count as well, so it stays a count with its chips.
+			mode = e.per.length && e.quantity === 1 ? 'per' : 'quantity';
 			quantity = String(e.quantity);
 			unitPrice = e.unitPrice;
 			per = [...e.per];
@@ -100,7 +101,9 @@
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
-	const count = $derived(/^\d+$/.test(quantity.trim()) ? Number(quantity.trim()) : null);
+	const count = $derived(
+		mode === 'per' ? 1 : /^\d+$/.test(quantity.trim()) ? Number(quantity.trim()) : null
+	);
 	const picked = $derived(per.flatMap((id) => snapshot.assumptions.filter((a) => a.id === id)));
 	// A preview: the core works out the estimate that counts.
 	const total = $derived(
@@ -119,6 +122,19 @@
 				].join(' × ') + ' = '
 			: '= '
 	);
+
+	const names = $derived(picked.map((a) => a.name).join(' × '));
+
+	// The mode before the latest switch: Segmented sets the new one before it calls back.
+	let last = untrack(() => mode);
+	function changeMode(to: 'amount' | 'quantity' | 'per') {
+		error = null;
+		// A count stops scaling, and a price per assumption has no count of its own.
+		if (to === 'quantity' && last === 'per') per = [];
+		last = to;
+		if (to === 'per' && !per.length && snapshot.assumptions.length === 1)
+			per = [snapshot.assumptions[0].id];
+	}
 
 	function toggle(id: AssumptionId) {
 		per = per.includes(id) ? per.filter((p) => p !== id) : [...per, id];
@@ -156,6 +172,7 @@
 			if (amount === null) return missing('estimate', 'enter an amount');
 			return { ...shared, estimate: { type: 'amount', amount } };
 		}
+		if (mode === 'per' && !per.length) return missing('estimate.per', 'choose an assumption');
 		if (count === null) return missing('estimate.quantity', 'enter a whole number');
 		if (unitPrice === null) return missing('estimate.unitPrice', 'enter a price');
 		return { ...shared, estimate: { type: 'quantity', quantity: count, unitPrice, per } };
@@ -264,9 +281,12 @@
 				bind:value={mode}
 				options={[
 					{ value: 'amount', label: 'Amount' },
-					{ value: 'quantity', label: 'Quantity × price' }
+					{ value: 'quantity', label: 'Count × price' },
+					...(snapshot.assumptions.length || mode === 'per'
+						? [{ value: 'per' as const, label: 'Per assumption' }]
+						: [])
 				]}
-				onchange={() => (error = null)}
+				onchange={changeMode}
 			/>
 			{#if mode === 'amount'}
 				<AmountField
@@ -276,25 +296,9 @@
 					oninput={(v) => (amount = v)}
 				/>
 			{:else}
-				<div class="times">
-					<TextField
-						label="Quantity"
-						value={quantity}
-						oninput={(v) => (quantity = v)}
-						oncommit={(v) => (quantity = v ?? '')}
-					/>
-					<span class="x">×</span>
-					<AmountField
-						label="Unit price"
-						value={unitPrice}
-						{format}
-						bind:invalid={unitPriceInvalid}
-						oninput={(v) => (unitPrice = v)}
-					/>
-				</div>
-				{#if snapshot.assumptions.length}
+				{#if mode === 'per' || per.length}
 					<div class="per" role="group" aria-label="Times">
-						<span class="form-label">Times</span>
+						<span class="form-label">{mode === 'per' ? 'Per' : 'Times'}</span>
 						{#each snapshot.assumptions as a (a.id)}
 							<Chip
 								label={a.name}
@@ -303,6 +307,32 @@
 								onclick={() => toggle(a.id)}
 							/>
 						{/each}
+					</div>
+				{/if}
+				{#if mode === 'per'}
+					<AmountField
+						label={names ? `Price per ${names}` : 'Price per'}
+						value={unitPrice}
+						{format}
+						bind:invalid={unitPriceInvalid}
+						oninput={(v) => (unitPrice = v)}
+					/>
+				{:else}
+					<div class="times">
+						<TextField
+							label="Count"
+							value={quantity}
+							oninput={(v) => (quantity = v)}
+							oncommit={(v) => (quantity = v ?? '')}
+						/>
+						<span class="x">×</span>
+						<AmountField
+							label="Unit price"
+							value={unitPrice}
+							{format}
+							bind:invalid={unitPriceInvalid}
+							oninput={(v) => (unitPrice = v)}
+						/>
 					</div>
 				{/if}
 				{#if total !== null}<span class="hint" data-testid="budget-line-total"

@@ -291,7 +291,7 @@ describe('The budget line panel', () => {
 	it('saves the unit price typed just before Save, not the old one', async () => {
 		render(BudgetLinePanel, { line: quantityLine(), category: null, onclose: () => {} });
 		const held = hold(api.parseSum);
-		await type(screen.getByLabelText('Unit price'), '30');
+		await type(screen.getByLabelText('Price per Guests'), '30');
 		await saveDuringRead(held, cents(3000));
 		expect(api.updateBudgetLine.mock.calls[0][1].estimate).toEqual({
 			type: 'quantity',
@@ -304,7 +304,7 @@ describe('The budget line panel', () => {
 
 	it('does not save an estimate it cannot read', async () => {
 		render(BudgetLinePanel, { line: quantityLine(), category: null, onclose: () => {} });
-		await typeUnreadable(screen.getByLabelText('Unit price'));
+		await typeUnreadable(screen.getByLabelText('Price per Guests'));
 		await clickSave();
 		await settle();
 		expect(api.updateBudgetLine).not.toHaveBeenCalled();
@@ -315,7 +315,7 @@ describe('The budget line panel', () => {
 		await fireEvent.click(screen.getByText('Amount'));
 		await settle();
 		await typeUnreadable(amountInputs()[0]);
-		await fireEvent.click(screen.getByText('Quantity × price'));
+		await fireEvent.click(screen.getByText('Count × price'));
 		await settle();
 		await clickSave();
 		await settle();
@@ -327,7 +327,7 @@ describe('A field that comes back', () => {
 	it('starts readable, so the form says what is missing', async () => {
 		render(BudgetLinePanel, { line: null, category: 7, onclose: () => {} });
 		await typeUnreadable(amountInputs()[0]);
-		await fireEvent.click(screen.getByText('Quantity × price'));
+		await fireEvent.click(screen.getByText('Count × price'));
 		await settle();
 		await fireEvent.click(screen.getByText('Amount'));
 		await settle();

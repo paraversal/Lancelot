@@ -136,4 +136,37 @@ describe('A budget line that scales', () => {
 			per: [2]
 		});
 	});
+
+	it('asks for a price per assumption, without a count', async () => {
+		load();
+		render(BudgetLinePanel, { line: ticketSales(), category: null, onclose: () => {} });
+		expect(screen.getByRole('radio', { name: 'Per assumption' }).getAttribute('aria-checked')).toBe(
+			'true'
+		);
+		expect(screen.queryByRole('textbox', { name: 'Count' })).toBeNull();
+		expect(screen.getByRole('textbox', { name: 'Price per Guests' })).toBeTruthy();
+
+		// A count of its own stops scaling.
+		await fireEvent.click(screen.getByRole('radio', { name: 'Count × price' }));
+		expect(screen.queryByRole('group', { name: 'Times' })).toBeNull();
+		expect(screen.getByRole('textbox', { name: 'Count' })).toBeTruthy();
+	});
+
+	it('keeps a count that also scales as count × price, with its assumptions', () => {
+		load();
+		const line = {
+			...ticketSales(),
+			estimate: { type: 'quantity' as const, quantity: 2, unitPrice: 450, per: [1] }
+		};
+		render(BudgetLinePanel, { line, category: null, onclose: () => {} });
+		expect(screen.getByRole('radio', { name: 'Count × price' }).getAttribute('aria-checked')).toBe(
+			'true'
+		);
+		expect(screen.getByRole('button', { name: /Guests/ }).getAttribute('aria-pressed')).toBe(
+			'true'
+		);
+		expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
+			'2 × 260 × 4,50 € = 2.340,00 €'
+		);
+	});
 });
