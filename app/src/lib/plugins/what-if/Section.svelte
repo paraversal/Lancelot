@@ -1,46 +1,124 @@
 <script lang="ts">
-	// Sliders against the forecast. They live here until the page is left: nothing is saved, and
-	// nothing they show reaches the ledger or the event file.
+	// What if: ideas tried against the forecast. Folded, it shows the result they lead to. Open, it
+	// shows how the forecast becomes that result, with the tiers and categories to change (Try), or
+	// works back from a target (Reach). Nothing is saved: the scenario lives here until the page is
+	// left, and nothing it shows reaches the ledger or the event file.
+	import { tick, untrack } from 'svelte';
+	import { flip } from 'svelte/animate';
+	import { fade, slide } from 'svelte/transition';
+	import { categoryColor, tierColor } from '../../colors';
 	import Button from '../../components/Button.svelte';
+	import Icon from '../../components/Icon.svelte';
+	import Segmented from '../../components/Segmented.svelte';
 	import { formatAmount } from '../../format';
+	import { flipOptions, popIn } from '../../motion/effects';
+	import { level } from '../../motion/mode.svelte';
+	import MovingAmount from '../../motion/MovingAmount.svelte';
 	import type { BudgetSectionProps } from '../api';
-	import Knob from './Knob.svelte';
+	import Bridge, { type Part } from './Bridge.svelte';
+	import CategoryBar from './CategoryBar.svelte';
+	import Reach from './Reach.svelte';
 	import {
+		bridge,
 		categoryKnobs,
 		categoryValue,
+		changes,
 		moreOf,
 		NOTHING,
-		outcome,
-		PRICE_STEP,
+		reach,
 		tierKnobs,
 		tierPrice,
-		type Scenario
+		undo,
+		type Change,
+		type Scenario,
+		type Suggestion
 	} from './scenario';
+	import Tier from './Tier.svelte';
 
 	let { ctx }: BudgetSectionProps = $props();
 
+	const id = $props.id();
 	const format = $derived(ctx.format);
 	const forecast = $derived(ctx.budget.result.forecast);
 	const tiers = $derived(tierKnobs(ctx.tiers));
 	const categories = $derived(categoryKnobs(ctx.budget, ctx.accounts));
-	const groups = $derived([
-		{ title: 'Income', knobs: categories.filter((c) => c.kind === 'income') },
-		{ title: 'Expenses', knobs: categories.filter((c) => c.kind === 'expense') }
-	]);
+	// The width of a category bar stands for this much, the same for every category.
+	const scale = $derived(Math.max(1, ...categories.map((c) => c.max)));
+	// Under 2 % of the expenses: behind a button, so the bars that matter stay in view.
+	const small = $derived(Math.round(ctx.budget.expense.forecast * 0.02));
 
 	let scenario = $state<Scenario>(NOTHING);
 	let open = $state(false);
-	const result = $derived(outcome(forecast, tiers, categories, scenario));
-	const change = $derived(result - forecast);
-	const moved = $derived(
-		[scenario.more, scenario.price, scenario.category].some((steps) =>
-			Object.values(steps).some((n) => n !== 0)
-		)
-	);
+	let mode = $state<'try' | 'reach'>('try');
+	let showSmall = $state(false);
+	// Reach starts at the plan: what was meant to be left over.
+	let target = $state<number | null>(untrack(() => ctx.budget.result.estimate));
 
-	function set(part: keyof Scenario, id: number, value: number) {
-		scenario = { ...scenario, [part]: { ...scenario[part], [id]: value } };
+	const figures = $derived(bridge(forecast, tiers, categories, scenario));
+	const change = $derived(figures.result - forecast);
+	const list = $derived(changes(tiers, categories, scenario));
+	const gap = $derived(target === null ? 0 : target - figures.result);
+	const suggestions = $derived(reach(gap, tiers, categories, scenario));
+
+	const fold = $derived(level('A2'));
+	const bars = $derived(level('D2'));
+	const amounts = $derived(level('A5'));
+
+	const colorOfCategory = (cat: number) => {
+		const account = ctx.accounts.find((a) => a.id === cat);
+		return account ? categoryColor(account, ctx.accounts) : 'var(--color-ink-muted)';
+	};
+	const colorOfTier = (tier: number) => tierColor(tiers.findIndex((t) => t.id === tier));
+	const groups = $derived(
+		(['income', 'expense'] as const).map((kind) => {
+			const all = categories.filter((c) => c.kind === kind);
+			return {
+				kind,
+				title: kind === 'income' ? 'Income' : 'Expenses',
+				part: (kind === 'income' ? 'income' : 'expenses') as Part,
+				shown: all.filter((c) => showSmall || c.forecast >= small)
+			};
+		})
+	);
+	const hidden = $derived(categories.filter((c) => c.forecast < small).length);
+
+	function set(part: keyof Scenario, key: number, value: number) {
+		scenario = { ...scenario, [part]: { ...scenario[part], [key]: value } };
 	}
+
+	function chip(c: Change) {
+		if (c.part === 'more') return `${c.name} +${c.value}`;
+		if (c.part === 'price') return `${c.name} at ${formatAmount(c.value, format)}`;
+		return `${c.name} ${formatAmount(c.value, format, 'always')}`;
+	}
+	const chipColor = (c: Change) =>
+		c.part === 'category' ? colorOfCategory(c.id) : colorOfTier(c.id);
+
+	// Jumping to a part: it comes into view and its heading lights up for a moment.
+	const headings: Partial<Record<Part, HTMLElement>> = {};
+	async function show(part: Part) {
+		mode = 'try';
+		await tick();
+		const heading = headings[part];
+		if (!heading) return;
+		heading.scrollIntoView?.({ block: 'nearest', behavior: fold === 'off' ? 'auto' : 'smooth' });
+		if (bars !== 'off')
+			heading.animate(
+				[{ backgroundColor: 'var(--color-marker)' }, { backgroundColor: 'transparent' }],
+				{
+					duration: 1100,
+					easing: 'ease-out'
+				}
+			);
+	}
+
+	function apply(s: Suggestion) {
+		scenario = s.scenario;
+		void show(s.kind === 'cut' ? 'expenses' : 'tickets');
+	}
+
+	const suggestionColor = (s: Suggestion) =>
+		s.kind === 'cut' ? colorOfCategory(s.category.id) : colorOfTier(s.tier.id);
 </script>
 
 <div class="summary">
@@ -48,61 +126,138 @@
 		<span class="label">Result</span>
 		<strong
 			class="result"
-			class:plus={result > 0}
-			class:minus={result < 0}
-			data-testid="plugin-what-if-result">{formatAmount(result, format, 'always')}</strong
+			class:plus={figures.result > 0}
+			class:minus={figures.result < 0}
+			data-testid="plugin-what-if-result"
+			><MovingAmount value={figures.result} {format} sign="always" level={amounts} /></strong
 		>
 		{#if change}
-			<span class="label" data-testid="plugin-what-if-change"
+			<span class="label" data-testid="plugin-what-if-change" transition:fade={{ duration: 120 }}
 				>{formatAmount(change, format, 'always')} on the forecast</span
 			>
 		{/if}
 	</div>
 	<span class="actions">
-		{#if moved}<Button size="sm" onclick={() => (scenario = NOTHING)}>Reset</Button>{/if}
-		<Button size="sm" onclick={() => (open = !open)}>{open ? 'Hide' : 'Adjust'}</Button>
+		{#if open}
+			<span transition:fade={{ duration: 120 }}>
+				<Segmented
+					label="What if"
+					options={[
+						{ value: 'try', label: 'Try' },
+						{ value: 'reach', label: 'Reach' }
+					]}
+					bind:value={mode}
+				/>
+			</span>
+		{/if}
+		<button
+			type="button"
+			class="toggle"
+			class:open
+			aria-expanded={open}
+			aria-controls={id}
+			onclick={() => (open = !open)}
+		>
+			{open ? 'Hide' : 'Adjust'}
+			<span class="chevron"><Icon name="down" size={14} /></span>
+		</button>
 	</span>
 </div>
 
 {#if open}
-	<div class="groups">
-		{#if tiers.length}
-			<section>
-				<h3>Tickets still to sell</h3>
-				{#each tiers as t (t.id)}
-					<Knob
-						label={t.name}
-						text={`+${moreOf(t, scenario)}`}
-						range={t.more}
-						value={moreOf(t, scenario)}
-						oninput={(v) => set('more', t.id, v)}
-					/>
-					<Knob
-						label={`${t.name} price`}
-						text={formatAmount(tierPrice(t, scenario), format)}
-						range={t.priceSteps}
-						value={(tierPrice(t, scenario) - t.price) / PRICE_STEP}
-						oninput={(v) => set('price', t.id, v)}
-					/>
+	<div class="body" {id} transition:slide={{ duration: fold === 'off' ? 0 : 220 }}>
+		<Bridge {figures} {format} level={bars} {amounts} onpick={show} />
+
+		<div class="changes">
+			<div class="chips">
+				{#each list as c (`${c.part}:${c.id}`)}
+					<button
+						type="button"
+						class="chip"
+						aria-label="Undo {chip(c)}"
+						onclick={() => (scenario = undo(scenario, c.part, c.id))}
+						animate:flip={flipOptions(level('B3'))}
+						in:popIn={{ level: level('D4') }}
+						out:fade={{ duration: 90 }}
+					>
+						<span class="dot" style:background={chipColor(c)}></span>
+						{chip(c)}
+						<Icon name="x" size={12} />
+					</button>
 				{/each}
-			</section>
+			</div>
+			<Button size="sm" disabled={!list.length} onclick={() => (scenario = NOTHING)}>Reset</Button>
+		</div>
+
+		{#if mode === 'try'}
+			<div class="try" in:fade={{ duration: fold === 'off' ? 0 : 140 }}>
+				{#if tiers.length}
+					<section>
+						<h3 bind:this={headings.tickets}>Tickets still to sell</h3>
+						{#each tiers as t (t.id)}
+							<Tier
+								knob={t}
+								color={colorOfTier(t.id)}
+								more={moreOf(t, scenario)}
+								price={tierPrice(t, scenario)}
+								{format}
+								level={bars}
+								onmore={(n) => set('more', t.id, n)}
+								onprice={(p) => set('price', t.id, p)}
+							/>
+						{/each}
+					</section>
+				{/if}
+
+				{#if categories.length}
+					<div class="categories">
+						{#each groups as g (g.kind)}
+							{#if g.shown.length}
+								<section>
+									<h3 bind:this={headings[g.part]}>{g.title}</h3>
+									{#each g.shown as c (c.id)}
+										<div transition:slide={{ duration: fold === 'off' ? 0 : 160 }}>
+											<CategoryBar
+												knob={c}
+												value={categoryValue(c, scenario)}
+												{scale}
+												color={colorOfCategory(c.id)}
+												{format}
+												onvalue={(v) => set('category', c.id, v)}
+											/>
+										</div>
+									{/each}
+								</section>
+							{/if}
+						{/each}
+					</div>
+					<div class="foot">
+						{#if hidden}
+							<Button size="sm" onclick={() => (showSmall = !showSmall)}
+								>{showSmall ? 'Fewer categories' : `${hidden} smaller categories`}</Button
+							>
+						{/if}
+						<span class="legend">
+							<span><i class="booked"></i>booked</span>
+							<span><i class="rest"></i>still to come</span>
+							<span><i class="tick"></i>forecast</span>
+						</span>
+					</div>
+				{/if}
+			</div>
+		{:else}
+			<div in:fade={{ duration: fold === 'off' ? 0 : 140 }}>
+				<Reach
+					bind:target
+					planned={ctx.budget.result.estimate}
+					{gap}
+					{suggestions}
+					{format}
+					colorOf={suggestionColor}
+					onapply={apply}
+				/>
+			</div>
 		{/if}
-		{#each groups as g (g.title)}
-			{#if g.knobs.length}
-				<section>
-					<h3>{g.title}</h3>
-					{#each g.knobs as c (c.id)}
-						<Knob
-							label={c.name}
-							text={formatAmount(categoryValue(c, scenario), format)}
-							range={c.range}
-							value={(categoryValue(c, scenario) - c.forecast) / c.step}
-							oninput={(v) => set('category', c.id, v)}
-						/>
-					{/each}
-				</section>
-			{/if}
-		{/each}
 	</div>
 {/if}
 
@@ -132,37 +287,170 @@
 		font-weight: 600;
 	}
 
-	.actions {
-		display: flex;
-		gap: var(--spacing-2);
-	}
-
-	.groups {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-		gap: var(--spacing-6) var(--spacing-8);
-		padding-top: var(--spacing-3);
-	}
-
-	section {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-1);
-		min-width: 0;
-	}
-
-	h3 {
-		margin: 0 0 var(--spacing-1);
-		font-size: var(--type-xs);
-		font-weight: 400;
-		color: var(--color-ink-muted);
-	}
-
 	.plus {
 		color: var(--color-plus);
 	}
 
 	.minus {
 		color: var(--color-minus);
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-3);
+	}
+
+	.toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		height: 28px;
+		padding: 0 8px 0 10px;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-field);
+		background: none;
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.toggle:hover {
+		background: var(--color-paper-sunk);
+	}
+
+	.chevron {
+		display: inline-flex;
+		transition: transform var(--motion-normal) var(--spring-soft);
+	}
+
+	.open .chevron {
+		transform: rotate(180deg);
+	}
+
+	.body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-6);
+		padding-top: var(--spacing-4);
+		container-type: inline-size;
+	}
+
+	/* One line, always: a change coming or going never moves what is below. */
+	.changes {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-3);
+		height: 28px;
+	}
+
+	.chips {
+		display: flex;
+		flex: 1;
+		gap: var(--spacing-2);
+		min-width: 0;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.chip {
+		display: inline-flex;
+		flex: none;
+		align-items: center;
+		gap: 6px;
+		height: 26px;
+		padding: 0 8px 0 10px;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-pill);
+		background: var(--color-field);
+		font-size: var(--type-xs);
+		color: var(--color-ink);
+		cursor: pointer;
+	}
+
+	.chip:hover {
+		border-color: var(--color-ink-muted);
+	}
+
+	.chip :global(svg) {
+		color: var(--color-ink-muted);
+	}
+
+	.dot {
+		flex: none;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+	}
+
+	.try {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-8);
+	}
+
+	section {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	h3 {
+		align-self: flex-start;
+		margin: 0 0 var(--spacing-2) calc(-1 * var(--spacing-1));
+		padding: 1px var(--spacing-1);
+		border-radius: var(--radius-sm);
+		font-size: var(--type-xs);
+		font-weight: 400;
+		color: var(--color-ink-muted);
+		scroll-margin: var(--spacing-8);
+	}
+
+	.categories {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+		gap: var(--spacing-6) var(--spacing-10);
+		margin-bottom: calc(-1 * var(--spacing-4));
+	}
+
+	.foot {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--spacing-3) var(--spacing-6);
+	}
+
+	.legend {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-4);
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+	}
+
+	.legend span {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.legend i {
+		width: 14px;
+		height: 10px;
+		border-radius: 2px;
+	}
+
+	.legend .booked {
+		background: var(--color-ink-muted);
+	}
+
+	.legend .rest {
+		background: color-mix(in srgb, var(--color-ink-muted) 25%, var(--color-field));
+	}
+
+	.legend .tick {
+		width: 2px;
+		height: 12px;
+		background: var(--color-ink);
 	}
 </style>

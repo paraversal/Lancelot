@@ -25,10 +25,6 @@ The Cash box count plugin has a list of denominations in `cash-count/records.ts`
 
 Proposals for plugins, each only when wanted. The seams they need are named; `readTable`, wider proposals and the report slot exist already.
 
-### What if's interface
-
-The plugin works, but its interface isn't right yet and is to be reworked.
-
 ### Card and PayPal settlements
 
 Pull a payout from SumUp, Stripe or PayPal, or read its export, and book it as gross income and fees rather than the net amount that reaches the bank.

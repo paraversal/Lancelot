@@ -97,7 +97,7 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 **Ticket API** pulls tickets from a data source into the same review (R-TKT-3). Not yet tried with a real provider.
 
-**What if** tries ideas against the forecast on the Budget page: more tickets per tier up to its quota, another price for those still to sell, and each category's figure, which can't go below what is booked. The sliders aren't saved, and nothing they show reaches the ledger.
+**What if** tries ideas against the forecast on the Budget page. Folded, it shows the result they lead to; opened, a bridge shows how the forecast becomes that result, ticket by ticket, price, income and expenses, against a line at zero. **Try** changes things directly: each tier is a row of its places, where a click on a free one sells up to it and steppers change the count and the price of the tickets still to sell; each category is a bar on one shared scale, dragged to a new figure, which can't go below what is booked. Every change shows as a chip that undoes it alone. **Reach** works back from a target, the plan by default or break-even: it says how far off the result is and suggests ways there, more tickets of a tier, all of them at a higher price, or a smaller expense, and Apply adds one to the scenario. Nothing is saved, and nothing it shows reaches the ledger.
 
 **Cash box count** adds up notes and coins under both amounts when counting a cash account, and fills in the amount. The pieces are kept when the count is saved, and say so if the amount is changed afterwards. Settings can leave out denominations a group doesn't use, which a template copies. Euro only, like the app.
 
