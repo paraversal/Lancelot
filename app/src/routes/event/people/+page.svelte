@@ -25,10 +25,13 @@
 
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
 
-	// Opened from the overview's open items: `/event/people?person=7`.
+	// Opened from the overview's open items: `/event/people?person=7`, and from a payout without a
+	// method straight into editing: `/event/people?person=7&edit`.
 	onMount(() => {
 		const id = Number(page.url.searchParams.get('person'));
-		if (people.some((p) => p.account === id)) open(id);
+		if (!people.some((p) => p.account === id)) return;
+		open(id);
+		editing = page.url.searchParams.has('edit') && !session.closed;
 	});
 
 	function open(id: number) {

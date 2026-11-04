@@ -20,6 +20,8 @@
 	let error = $state<string | null>(null);
 
 	const people = (n: number) => (n === 1 ? '1 person' : `${n} people`);
+	/** People with nothing to pay them by, who keep Mark as paid from recording them. */
+	const unpayable = $derived(list.payouts.filter((p) => !p.iban && !p.otherMethod).length);
 	const group = (iban: string) => iban.replace(/(.{4})/g, '$1 ').trim();
 	const accountName = (id: number) => snapshot.accounts.find((a) => a.id === id)?.name ?? '';
 	const today = new Date().toISOString().slice(0, 10);
@@ -82,6 +84,7 @@
 				<span class="muted"
 					>{people(list.payouts.length)} · {formatAmount(list.payoutTotal, format)}</span
 				>
+				{#if unpayable}<span class="attention">{unpayable} without a method</span>{/if}
 			</div>
 			{#if list.payouts.length}
 				<div class="row head">
@@ -92,13 +95,22 @@
 				</div>
 				{#each list.payouts as p (p.person)}
 					<div class="row">
-						<span class="person"><strong>{p.name}</strong><small>{p.holder}</small></span>
+						<span class="person"
+							><strong>{p.name}</strong>{#if p.holder !== p.name}<small>{p.holder}</small
+								>{/if}</span
+						>
 						{#if p.otherMethod}
 							<span class="iban other">{p.otherMethod}</span>
 						{:else if p.iban}
 							<span class="iban">{group(p.iban)}</span>
-						{:else}
+						{:else if session.closed}
 							<span class="iban attention"><Icon name="warn" size={14} />No method</span>
+						{:else}
+							<span class="iban"
+								><a class="attention" href="/event/people?person={p.person}&edit"
+									><Icon name="warn" size={14} />No method</a
+								></span
+							>
 						{/if}
 						{#if !panel}<span class="reference muted">{p.otherMethod ? '' : p.reference}</span
 							>{:else}<span class="grow"></span>{/if}
@@ -368,6 +380,18 @@
 	.attention {
 		color: var(--color-attention);
 		font-weight: 600;
+	}
+
+	.title .attention {
+		font-size: 13px;
+	}
+
+	a.attention {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 
 	.toggle {

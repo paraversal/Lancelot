@@ -14,7 +14,7 @@ export function describe(item: OpenItem, snapshot: EventSnapshot, format: Number
 	switch (item.type) {
 		case 'personBalance':
 			return {
-				text: `${name(item.person)} ${item.net > 0 ? 'is owed' : 'holds'}`,
+				text: `${name(item.person)} ${item.net > 0 ? 'is owed' : 'owes'}`,
 				amount: Math.abs(item.net)
 			};
 		case 'missingReceipt': {

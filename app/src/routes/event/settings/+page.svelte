@@ -271,7 +271,7 @@
 	{/if}
 {/snippet}
 
-{#snippet categoryGroup(title: string, list: typeof categories)}
+{#snippet categoryGroup(title: string, kind: string, list: typeof categories)}
 	{#if list.length}
 		<span class="form-label group">{title}</span>
 		<ul class="accounts">
@@ -283,7 +283,7 @@
 					</span>
 					{#if centres.length}
 						<Select
-							name="{a.name} starts in"
+							name="{a.name} ({kind}) starts in"
 							value={a.costCentre ?? 0}
 							options={centreOptions}
 							onchange={(v) =>
@@ -398,6 +398,7 @@
 								<label class="toggle" title="Counts and statements leave out opening counts">
 									<input
 										type="checkbox"
+										aria-label="Net movement, {a.name}"
 										checked={a.netMovement}
 										onchange={(e) => {
 											const { checked } = e.currentTarget;
@@ -636,8 +637,8 @@
 				<p class="note">The cost centre beside a category is where its new lines start.</p>
 			{/if}
 			<div class="categories">
-				{@render categoryGroup('Expenses', expenses)}
-				{@render categoryGroup('Income', income)}
+				{@render categoryGroup('Expenses', 'expense', expenses)}
+				{@render categoryGroup('Income', 'income', income)}
 			</div>
 		</section>
 	</fieldset>
@@ -657,6 +658,7 @@
 							<label class="toggle">
 								<input
 									type="checkbox"
+									aria-label="{plugin.name} on"
 									checked={on}
 									onchange={(e) => {
 										const { checked } = e.currentTarget;

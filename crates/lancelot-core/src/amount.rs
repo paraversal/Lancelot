@@ -91,7 +91,7 @@ pub struct ParsedSum {
 pub enum AmountError {
     #[error("no amount entered")]
     Empty,
-    #[error("only digits, `.` and `,` are allowed")]
+    #[error("use only digits, a comma or point, and + or −")]
     InvalidCharacter,
     #[error("thousands separators must form groups of three")]
     BadGrouping,

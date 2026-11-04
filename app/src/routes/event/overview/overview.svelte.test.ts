@@ -51,7 +51,7 @@ describe('Overview', () => {
 		expect(text(cash)).toContain('2,90 € less than recorded');
 		expect(text(cash)).toContain('412,90 €');
 		expect(screen.getByText('Anna is owed')).toBeTruthy();
-		expect(screen.getByText('Bob holds')).toBeTruthy();
+		expect(screen.getByText('Bob owes')).toBeTruthy();
 		expect(screen.getByText('No receipt: Cups and ice')).toBeTruthy();
 	});
 

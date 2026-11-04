@@ -185,8 +185,7 @@ const walks = {
 	async overview() {
 		await reset('example');
 		await goTo('/event/overview');
-		await shot('overview', { height: 1000 });
-		// The README shows a shorter one in the reader's theme.
+		// The README and the manual's first figure share this one; the README also has it dark.
 		await shot('readme-overview', { height: 720 });
 		await page.emulateMedia({ colorScheme: 'dark' });
 		await shot('readme-overview-dark', { height: 720 });
