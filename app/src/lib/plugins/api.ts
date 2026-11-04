@@ -104,7 +104,11 @@ export interface PluginContext {
 	parseDate(text: string): Promise<string>;
 	/** What this plugin's data source is called; null until it is set up in Settings. */
 	readonly dataSource: string | null;
-	/** Asks the data source for these fields. Nothing else in its answer reaches the plugin. */
+	/**
+	 * Asks the data source for these fields. Nothing else in its answer reaches the plugin. A field
+	 * declared optional is left out of a row that lacks it, and out of `fields` when the source has
+	 * no name for it.
+	 */
 	pull(fields: string[]): Promise<Pulled>;
 }
 
@@ -132,7 +136,8 @@ export type ReportSectionProps = { ctx: PluginContext };
 export type DataSourceSpec = {
 	/** The usual name of the provider's list. */
 	list: string;
-	fields: { key: string; label: string; usually: string }[];
+	/** An optional field may be left blank in Settings, and missing from an item. */
+	fields: { key: string; label: string; usually: string; optional?: boolean }[];
 };
 
 export interface Plugin {

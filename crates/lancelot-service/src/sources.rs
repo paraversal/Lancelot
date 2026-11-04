@@ -35,7 +35,8 @@ pub struct DataSource {
     pub auth_header: String,
     /// The top-level key of the list of items.
     pub list: String,
-    /// What the plugin calls a field, and what the provider calls it.
+    /// What the plugin calls a field, and what the provider calls it. A field the provider
+    /// doesn't have is left out, which only an optional one may be.
     pub fields: BTreeMap<String, String>,
 }
 
@@ -48,15 +49,21 @@ pub struct DataSourceView {
     pub has_token: bool,
 }
 
-/// What a pull read: the fields asked for of every item that has them all.
+/// What a pull read: the fields asked for of every item that has all the required ones. An
+/// optional field an item lacks is left out of its row.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub struct Pulled {
     pub label: String,
+    /// The fields read: those asked for, less an optional one the source has no name for.
+    pub fields: Vec<String>,
     /// SHA-256 of the rows, lower-case hex. The same hash means the same figures.
     pub sha256: String,
     pub rows: Vec<BTreeMap<String, String>>,
     pub problems: Vec<PullProblem>,
+    /// Optional fields that items it read lack. Not problems here, but a plugin may treat them
+    /// as such, like Ticket API an order when the others have one.
+    pub missing: Vec<PullProblem>,
 }
 
 /// An item that was not read: the field it lacks. Listed, never dropped silently (R-TKT-4).
@@ -155,15 +162,14 @@ pub(crate) fn clean(source: DataSource) -> Result<DataSource, ApiError> {
             "use only letters, digits, - and _ here",
         ));
     }
-    let mut fields = BTreeMap::new();
-    for (key, value) in source.fields {
-        let value = name(
-            &value,
-            &format!("fields.{key}"),
-            "enter the provider's field name",
-        )?;
-        fields.insert(key, value);
-    }
+    // A blank name means the provider has no such field. Whether that is allowed depends on the
+    // plugin, so it is checked when pulling.
+    let fields = source
+        .fields
+        .into_iter()
+        .map(|(key, value)| (key, value.trim().to_owned()))
+        .filter(|(_, value)| !value.is_empty())
+        .collect();
     Ok(DataSource {
         label: name(&source.label, "label", "enter a name")?,
         url,
@@ -182,11 +188,13 @@ fn text_of(value: Option<&Value>) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// Takes the fields asked for from a response.
+/// Takes the fields asked for from a response. Those in `optional` may be missing: from the
+/// source, when the provider doesn't have them, or from an item.
 pub(crate) fn read_rows(
     body: &[u8],
     source: &DataSource,
     fields: &[String],
+    optional: &[String],
 ) -> Result<Pulled, ApiError> {
     let shape = |message: String| ApiError::new("data_source_shape", message);
     let value: Value =
@@ -195,42 +203,54 @@ pub(crate) fn read_rows(
         .get(&source.list)
         .and_then(Value::as_array)
         .ok_or_else(|| shape(format!("the response has no list called `{}`", source.list)))?;
-    let names = fields
-        .iter()
-        .map(|field| {
-            source
-                .fields
-                .get(field)
-                .map(|name| (field, name))
-                .ok_or_else(|| shape(format!("no provider field is set for `{field}`")))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let is_optional = |field: &String| optional.contains(field);
+    let mut names = Vec::new();
+    for field in fields {
+        match source.fields.get(field) {
+            Some(name) => names.push((field, name)),
+            None if is_optional(field) => {}
+            None => return Err(shape(format!("no provider field is set for `{field}`"))),
+        }
+    }
 
     let mut rows = Vec::new();
     let mut problems = Vec::new();
+    let mut missing = Vec::new();
     for (item, row) in items.iter().zip(1..) {
+        let mut lacks = Vec::new();
         let mut read = BTreeMap::new();
+        let mut complete = true;
         for (field, name) in &names {
             match text_of(item.get(name.as_str())) {
                 Some(text) => {
                     read.insert((*field).clone(), text);
                 }
-                None => problems.push(PullProblem {
+                None if is_optional(field) => lacks.push(PullProblem {
                     row,
                     field: (*field).clone(),
                 }),
+                None => {
+                    complete = false;
+                    problems.push(PullProblem {
+                        row,
+                        field: (*field).clone(),
+                    });
+                }
             }
         }
-        if read.len() == names.len() {
+        if complete {
             rows.push(read);
+            missing.extend(lacks);
         }
     }
     let hash = Sha256::digest(serde_json::to_vec(&rows).unwrap_or_default());
     Ok(Pulled {
         label: source.label.clone(),
+        fields: names.into_iter().map(|(field, _)| field.clone()).collect(),
         sha256: hash.iter().map(|b| format!("{b:02x}")).collect(),
         rows,
         problems,
+        missing,
     })
 }
 
@@ -241,8 +261,9 @@ pub struct PullRequest {
 }
 
 impl PullRequest {
-    /// Asks the provider. Redirects aren't followed, so the token goes only to the address given.
-    pub fn run(&self, fields: &[String]) -> Result<Pulled, ApiError> {
+    /// Asks the provider for `fields`, of which those in `optional` may be missing. Redirects
+    /// aren't followed, so the token goes only to the address given.
+    pub fn run(&self, fields: &[String], optional: &[String]) -> Result<Pulled, ApiError> {
         let source = &self.source;
         check_url(&source.url)?;
         let agent: Agent = Agent::config_builder()
@@ -272,7 +293,7 @@ impl PullRequest {
             .limit(MAX_RESPONSE)
             .read_to_vec()
             .map_err(unreachable)?;
-        read_rows(&body, source, fields)
+        read_rows(&body, source, fields, optional)
     }
 }
 
@@ -304,7 +325,7 @@ mod tests {
             {"name": "Beer"},
             {"qty": [1]}
         ]}"#;
-        let pulled = read_rows(body, &source("https://x.example"), &wanted()).unwrap();
+        let pulled = read_rows(body, &source("https://x.example"), &wanted(), &[]).unwrap();
         assert_eq!(
             pulled.rows,
             [BTreeMap::from([
@@ -324,17 +345,17 @@ mod tests {
     #[test]
     fn says_what_is_wrong_with_a_response() {
         let s = source("https://x.example");
-        let read = |body: &[u8]| read_rows(body, &s, &wanted()).unwrap_err().message;
+        let read = |body: &[u8]| read_rows(body, &s, &wanted(), &[]).unwrap_err().message;
         assert!(read(b"<html>").contains("not JSON"));
         assert!(read(br#"{"beer": []}"#).contains("`drinks`"));
-        let other = read_rows(br#"{"drinks": []}"#, &s, &["size".to_owned()]).unwrap_err();
+        let other = read_rows(br#"{"drinks": []}"#, &s, &["size".to_owned()], &[]).unwrap_err();
         assert!(other.message.contains("`size`"));
     }
 
     #[test]
     fn the_hash_follows_the_figures_and_not_the_rest() {
         let s = source("https://x.example");
-        let hash = |body: &[u8]| read_rows(body, &s, &wanted()).unwrap().sha256;
+        let hash = |body: &[u8]| read_rows(body, &s, &wanted(), &[]).unwrap().sha256;
         let one = hash(br#"{"drinks": [{"name": "Mate", "qty": 1, "at": "10:00"}]}"#);
         assert_eq!(
             one,
@@ -355,6 +376,36 @@ mod tests {
     }
 
     #[test]
+    fn an_optional_field_may_be_missing_from_an_item_or_the_source() {
+        let body = br#"{"drinks": [{"name": "Mate", "qty": 2}, {"name": "Beer"}]}"#;
+        let s = source("https://x.example");
+        let optional = ["quantity".to_owned()];
+        let pulled = read_rows(body, &s, &wanted(), &optional).unwrap();
+        assert!(pulled.problems.is_empty());
+        assert_eq!(
+            pulled.missing,
+            [PullProblem {
+                row: 2,
+                field: "quantity".into()
+            }]
+        );
+        assert_eq!(pulled.rows.len(), 2);
+        assert_eq!(pulled.rows[1].get("quantity"), None);
+        assert_eq!(pulled.fields, wanted());
+
+        // Left blank in the source: not read at all, and said so.
+        let mut without = s.clone();
+        without.fields.insert("quantity".into(), " ".into());
+        let without = clean(without).unwrap();
+        let pulled = read_rows(body, &without, &wanted(), &optional).unwrap();
+        assert_eq!(pulled.fields, ["name"]);
+        assert!(pulled.rows.iter().all(|r| !r.contains_key("quantity")));
+        // A required one can't be left blank.
+        let error = read_rows(body, &without, &wanted(), &[]).unwrap_err();
+        assert!(error.message.contains("`quantity`"));
+    }
+
+    #[test]
     fn a_source_needs_every_name() {
         let error = |change: fn(&mut DataSource)| {
             let mut s = source("https://x.example");
@@ -364,10 +415,6 @@ mod tests {
         assert_eq!(error(|s| s.label = " ".into()), "label");
         assert_eq!(error(|s| s.list = String::new()), "list");
         assert_eq!(error(|s| s.auth_header = "a b".into()), "authHeader");
-        let field = error(|s| {
-            s.fields.insert("name".into(), " ".into());
-        });
-        assert_eq!(field, "fields.name");
     }
 
     /// One answer from a local server, and the auth header it was asked with.
@@ -396,7 +443,7 @@ mod tests {
             source: source(&url),
             token: Some("secret".into()),
         }
-        .run(&wanted())
+        .run(&wanted(), &[])
         .unwrap();
         assert_eq!(pulled.rows[0]["quantity"], "3");
         assert_eq!(pulled.label, "Drinks app");
@@ -410,7 +457,7 @@ mod tests {
             source: source(&url),
             token: Some("secret".into()),
         }
-        .run(&wanted())
+        .run(&wanted(), &[])
         .unwrap_err();
         assert_eq!(error.code, "data_source_status");
         assert!(error.message.contains("401"), "{}", error.message);

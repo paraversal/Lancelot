@@ -17,6 +17,7 @@ authHeader: string,
  */
 list: string, 
 /**
- * What the plugin calls a field, and what the provider calls it.
+ * What the plugin calls a field, and what the provider calls it. A field the provider
+ * doesn't have is left out, which only an optional one may be.
  */
 fields: { [key in string]: string }, };

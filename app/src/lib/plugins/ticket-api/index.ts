@@ -11,7 +11,8 @@ export const ticketApi: Plugin = {
 		list: 'tickets',
 		fields: [
 			{ key: 'tier', label: 'Tier', usually: 'tier' },
-			{ key: 'order', label: 'Order', usually: 'order' }
+			// Left blank, the tickets count per tier (R-TKT-12).
+			{ key: 'order', label: 'Order', usually: 'order', optional: true }
 		]
 	}
 };

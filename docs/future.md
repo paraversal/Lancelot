@@ -61,17 +61,17 @@ Plugins are built in today (technical design §10). When another group wants its
 
 ## Data sources as connections
 
-**Today** there is one mechanism, used by Ticket API and Stock and sales alike: a plugin declares the fields it wants as `dataSource`, Settings draws the form, and `lancelot_service::sources` makes the request, so neither plugin has code of its own for the network. But a source belongs to one plugin: it is stored by plugin id, holds the whole setup (URL, token header, list, field names), reads one list, and needs every field on every item. So one provider that serves both tickets and drink sales is set up twice, with its token twice, and a field that a provider only sometimes has can't be asked for.
+**Today** there is one mechanism, used by Ticket API and Stock and sales alike: a plugin declares the fields it wants as `dataSource`, Settings draws the form, and `lancelot_service::sources` makes the request, so neither plugin has code of its own for the network. But a source belongs to one plugin: it is stored by plugin id, holds the whole setup (URL, token header, list, field names), and reads one list. So one provider that serves both tickets and drink sales is set up twice, with its token twice. (Fields can already be optional, which is how Ticket API reads a provider without order IDs.)
 
 **The idea:** split what a provider is from what a plugin reads of it.
 
 - **A connection** is the app's: a label, a base URL, the token header and the token in the keychain. It is set up once in Settings → Data sources and can serve several plugins.
-- **A feed** stays the plugin's: which connection, the path or list, and the field names. The plugin still declares the fields it wants, now each required or optional. Optional fields are what Ticket API needs for sheets without order IDs: a missing order would then be `null`, and the batch is one without order IDs instead of a list of problems.
+- **A feed** stays the plugin's: which connection, the path or list, and the field names. The plugin still declares the fields it wants, each required or optional, as it already can.
 - **Destinations stay as they are.** What a feed's rows mean is the plugin's, and money still only moves through `proposeImport` and `proposeEntry`. A general "pull anything into any destination" layer in the core would have to know what tickets, drinks and payouts mean, which is exactly what plugins are for. Card payouts ([Card and PayPal settlements](#card-and-paypal-settlements)) would be another feed on a connection, not a new mechanism.
 
 **What it costs:** a second level in Settings, a migration of `data-sources.json` (each source becomes a connection and a feed), and a permission. Today a plugin can only reach the source set up for it, which is the boundary a third-party loader would rely on ([Third-party plugins](#third-party-plugins)). With shared connections, the treasurer grants a plugin a connection when setting up its feed, and the manifest of a loaded plugin would name what it may ask for. The token never reaches a plugin either way.
 
-**When:** once a second plugin really shares a provider, or a provider needs optional fields. Until then the per-plugin source is simpler to set up and to explain.
+**When:** once a second plugin really shares a provider. Until then the per-plugin source is simpler to set up and to explain.
 
 ## Data sources in the event file
 
