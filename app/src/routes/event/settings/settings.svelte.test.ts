@@ -33,8 +33,10 @@ describe('The settings page', () => {
 	it('keeps categories apart from the cost centres', () => {
 		open();
 		render(Page);
-		expect(within(block('Cost centres')).queryByLabelText('Kitchen starts in')).toBeNull();
-		expect(within(block('Categories')).getByLabelText('Kitchen starts in')).toBeTruthy();
+		expect(
+			within(block('Cost centres')).queryByLabelText('Kitchen (expense) starts in')
+		).toBeNull();
+		expect(within(block('Categories')).getByLabelText('Kitchen (expense) starts in')).toBeTruthy();
 	});
 
 	it('groups categories by kind', () => {
@@ -50,6 +52,6 @@ describe('The settings page', () => {
 		render(Page);
 		const categories = block('Categories');
 		expect(within(categories).getByText('Kitchen')).toBeTruthy();
-		expect(within(categories).queryByLabelText('Kitchen starts in')).toBeNull();
+		expect(within(categories).queryByLabelText('Kitchen (expense) starts in')).toBeNull();
 	});
 });

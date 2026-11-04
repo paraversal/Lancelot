@@ -608,6 +608,7 @@
 										></span>
 										<div class="category">
 											<ChoiceField
+												ariaLabel={split ? `Category ${i + 1}` : 'Category'}
 												value={line.account}
 												options={categories}
 												addLabel="New category…"
