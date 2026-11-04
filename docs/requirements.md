@@ -130,11 +130,12 @@ Example of netting: Bob received €300 of ticket money and advanced €120 for 
 
 ### 5.5 Budget (plan vs actual)
 
-- **R-BUD-1** Budget lines per event: category, optional cost centre, description, and the estimate, either as an amount or as quantity × unit price.
+- **R-BUD-1** Budget lines per event: category, optional cost centre, description, and the estimate, either as an amount or as quantity × unit price, where the quantity can scale with assumptions (R-BUD-6).
 - **R-BUD-2** Actual transaction lines can be linked to a budget line (many-to-one), which must be of the line's category. The entry form offers every budget line of its kind, and choosing one from another category changes the line's category.
 - **R-BUD-3** A plan-vs-actual view per line, per category, per cost centre and in total.
 - **R-BUD-4** A **forecast** result: for each budget line, use the actual amount if it is marked complete, otherwise the cautious one of the estimate and the actual so far: the larger for an expense line, the smaller for an income line. Unbudgeted actuals are added on top. The view shows how far the forecast is from the plan and the lines furthest from it.
 - **R-BUD-5** Budget lines are planning data only and never affect real balances.
+- **R-BUD-6** **Assumptions** per event: named whole numbers the budget is planned on, such as the guests or days expected. A quantity estimate can be multiplied by one or more of them, each at most once, and follows their values; the forecast (R-BUD-4) uses the resulting estimate. An assumption a budget line uses can't be deleted. A template brings its assumptions, and copying a budget matches them by name, adding the missing ones. Like budget lines, they are planning data only (R-BUD-5).
 
 ### 5.6 Ticket sales
 

@@ -142,7 +142,9 @@ pub fn build(t: &mut impl Target) -> Mock {
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
     // The budget. The mockups have none, so it is made up: some lines over, some under, some
-    // complete, and a few receipts left unbudgeted (Deposit, cups, cables, decoration).
+    // complete, and a few receipts left unbudgeted (Deposit, cups, cables, decoration). The
+    // ticket sales scale with the guests expected (R-BUD-6).
+    let guests = t.edit(|b| b.add_assumption("Guests", 260));
     let mut plan = |category, description: &str, estimate, complete| {
         t.budget(BudgetLineDraft {
             cost_centre: tag(category),
@@ -156,8 +158,14 @@ pub fn build(t: &mut impl Target) -> Mock {
     let times = |quantity, text| Estimate::Quantity {
         quantity,
         unit_price: eur(text),
+        per: Vec::new(),
     };
-    let b_tickets = plan(tickets, "Ticket sales", times(260, "25"), true);
+    let per_guest = Estimate::Quantity {
+        quantity: 1,
+        unit_price: eur("25"),
+        per: vec![guests],
+    };
+    let b_tickets = plan(tickets, "Ticket sales", per_guest, true);
     let b_bar = plan(donations, "Bar donations", amount("700"), false);
     let b_hall = plan(venue, "Hall rent", amount("1.800"), true);
     let b_catering = plan(food, "Catering", amount("1.100"), true);

@@ -17,7 +17,7 @@ use tempfile::TempDir;
 
 const SAMPLE: &str = "sample-v1.lancelot";
 /// A regenerated sample would hide a schema edited in place, so its bytes are pinned too.
-const SAMPLE_SHA256: &str = "dd2ff016e1782967149cf2b14a6b34683dd05cae3721a119d38a8d09320c4d55";
+const SAMPLE_SHA256: &str = "04611ab6d5d810855b125f0469b10623fa21037c7b71655852c9226ab51fd117";
 
 fn sample_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -343,6 +343,9 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     assert_eq!(book.plugin_records().count(), 11);
     assert!(book.plugin_records().all(|r| r.plugin == "drinks"));
     assert_eq!(book.budget().result.estimate, eur("2.305"));
+    let guests = book.assumptions().next().unwrap();
+    assert_eq!((guests.name.as_str(), guests.value), ("Guests", 260));
+    assert_eq!(book.lines_scaling_with(guests.id), 1);
 
     let anna = book
         .account_by_name(AccountKind::Person, "Anna")
@@ -351,7 +354,7 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let iban = book.person(anna).unwrap().iban.as_ref().unwrap();
     assert_eq!(iban.as_str(), "DE89370400440532013000");
 
-    assert_eq!(store.change_log(10_000).unwrap().len(), 104);
+    assert_eq!(store.change_log(10_000).unwrap().len(), 105);
 
     assert_eq!(book.attachments().count(), 11);
     let receipts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/receipts");

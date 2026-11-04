@@ -74,6 +74,21 @@ CREATE TABLE budget_line (             -- R-BUD-1; planning data only (R-BUD-5)
   CHECK ((amount IS NULL) = (quantity IS NOT NULL) AND (quantity IS NULL) = (unit_price IS NULL))
 ) STRICT;
 
+CREATE TABLE assumption (              -- R-BUD-6: a number the budget is planned on; planning data only
+  id    INTEGER PRIMARY KEY,
+  name  TEXT NOT NULL,
+  value INTEGER NOT NULL CHECK (value >= 0)
+) STRICT;
+
+CREATE TABLE budget_line_assumption (  -- R-BUD-6: a quantity estimate times these, in order
+  budget_line_id INTEGER NOT NULL REFERENCES budget_line(id) ON DELETE CASCADE,
+  position       INTEGER NOT NULL,
+  assumption_id  INTEGER NOT NULL REFERENCES assumption(id),
+  PRIMARY KEY (budget_line_id, position),
+  UNIQUE (budget_line_id, assumption_id)
+) STRICT;
+CREATE INDEX budget_line_assumption_assumption ON budget_line_assumption(assumption_id);
+
 CREATE TABLE plugin_record (           -- technical design §10; the core never reads the value's meaning
   id     INTEGER PRIMARY KEY,
   plugin TEXT NOT NULL,

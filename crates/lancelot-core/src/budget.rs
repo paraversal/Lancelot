@@ -9,7 +9,8 @@ use ts_rs::TS;
 
 use crate::ledger::Ledger;
 use crate::model::{
-    Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentre, CostCentreId, Txn, TxnId,
+    Account, AccountId, AccountKind, Assumption, AssumptionId, BudgetLine, BudgetLineId,
+    CostCentre, CostCentreId, Txn, TxnId,
 };
 use crate::money::{Cents, MoneyError};
 
@@ -84,6 +85,7 @@ impl Budget {
     pub fn compute(
         accounts: &BTreeMap<AccountId, Account>,
         budget_lines: &BTreeMap<BudgetLineId, BudgetLine>,
+        assumptions: &BTreeMap<AssumptionId, Assumption>,
         cost_centres: &BTreeMap<CostCentreId, CostCentre>,
         txns: &BTreeMap<TxnId, Txn>,
         ledger: &Ledger,
@@ -105,7 +107,7 @@ impl Budget {
         for b in budget_lines.values() {
             let category = accounts.get(&b.draft.category);
             let kind = category.map(|a| a.kind);
-            let estimate = b.draft.estimate.total()?;
+            let estimate = b.draft.estimate.total(assumptions)?;
             let actual = linked.get(&b.id).copied().unwrap_or_default();
             let forecast = if b.draft.complete || category.is_some_and(follows_the_tickets) {
                 actual

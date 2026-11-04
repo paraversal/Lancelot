@@ -286,6 +286,23 @@ pub(crate) fn persist<'a>(
 
     saved(
         log,
+        "assumption",
+        "DELETE FROM assumption WHERE id = ?1",
+        before,
+        after,
+        |b| b.assumptions().map(|a| (a.id.0, a)),
+        |id, a| {
+            conn.execute(
+                "INSERT INTO assumption (id, name, value) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (id) DO UPDATE SET name = excluded.name, value = excluded.value",
+                params![id, a.name, a.value],
+            )?;
+            Ok(())
+        },
+    )?;
+
+    saved(
+        log,
         "budget_line",
         "DELETE FROM budget_line WHERE id = ?1",
         before,
@@ -293,12 +310,18 @@ pub(crate) fn persist<'a>(
         |b| b.budget_lines().map(|l| (l.id.0, l)),
         |id, b| {
             let d = &b.draft;
-            let (amount, quantity, unit_price) = match d.estimate {
-                Estimate::Amount { amount } => (Some(amount.get()), None, None),
+            let (amount, quantity, unit_price, per) = match &d.estimate {
+                Estimate::Amount { amount } => (Some(amount.get()), None, None, &[][..]),
                 Estimate::Quantity {
                     quantity,
                     unit_price,
-                } => (None, Some(i64::from(quantity)), Some(unit_price.get())),
+                    per,
+                } => (
+                    None,
+                    Some(i64::from(*quantity)),
+                    Some(unit_price.get()),
+                    &per[..],
+                ),
             };
             conn.execute(
                         "INSERT INTO budget_line (id, category_id, description, amount, quantity, unit_price, complete, cost_centre_id)
@@ -319,6 +342,17 @@ pub(crate) fn persist<'a>(
                             d.cost_centre.map(|c| c.0)
                         ],
                     )?;
+            conn.execute(
+                "DELETE FROM budget_line_assumption WHERE budget_line_id = ?1",
+                [id],
+            )?;
+            for (position, assumption) in per.iter().enumerate() {
+                conn.execute(
+                    "INSERT INTO budget_line_assumption (budget_line_id, position, assumption_id)
+                     VALUES (?1, ?2, ?3)",
+                    params![id, position as i64, assumption.0],
+                )?;
+            }
             Ok(())
         },
     )?;
@@ -602,6 +636,7 @@ pub(crate) fn persist<'a>(
             ("next_txn_id", next.txn),
             ("next_attachment_id", next.attachment),
             ("next_budget_line_id", next.budget_line),
+            ("next_assumption_id", next.assumption),
             ("next_tier_id", next.tier),
             ("next_import_id", next.import),
             ("next_manual_sale_id", next.manual_sale),

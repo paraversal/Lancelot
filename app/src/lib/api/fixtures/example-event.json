@@ -1354,8 +1354,11 @@
       "description": "Ticket sales",
       "estimate": {
         "type": "quantity",
-        "quantity": 260,
-        "unitPrice": 2500
+        "quantity": 1,
+        "unitPrice": 2500,
+        "per": [
+          1
+        ]
       },
       "complete": true,
       "costCentre": null
@@ -1400,7 +1403,8 @@
       "estimate": {
         "type": "quantity",
         "quantity": 3,
-        "unitPrice": 25000
+        "unitPrice": 25000,
+        "per": []
       },
       "complete": false,
       "costCentre": null
@@ -1412,7 +1416,8 @@
       "estimate": {
         "type": "quantity",
         "quantity": 30,
-        "unitPrice": 1400
+        "unitPrice": 1400,
+        "per": []
       },
       "complete": false,
       "costCentre": 1
@@ -1449,6 +1454,13 @@
       },
       "complete": false,
       "costCentre": null
+    }
+  ],
+  "assumptions": [
+    {
+      "id": 1,
+      "name": "Guests",
+      "value": 260
     }
   ],
   "budget": {

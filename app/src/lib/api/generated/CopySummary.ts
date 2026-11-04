@@ -4,7 +4,7 @@ import type { Currency } from "./Currency";
 /**
  * What a copy adds, and what it leaves alone because the event already has it.
  */
-export type CopySummary = { personsAdded: number, personsSkipped: number, budgetLinesAdded: number, budgetLinesSkipped: number, categoriesAdded: number, costCentresAdded: number, 
+export type CopySummary = { personsAdded: number, personsSkipped: number, budgetLinesAdded: number, budgetLinesSkipped: number, categoriesAdded: number, costCentresAdded: number, assumptionsAdded: number, 
 /**
  * A budget in another currency can't be copied: its amounts would mean something else.
  */

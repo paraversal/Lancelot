@@ -9,7 +9,8 @@ use ts_rs::TS;
 use super::{Book, clean_details};
 use crate::error::DomainError;
 use crate::model::{
-    Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentreId, Event, EventDetails,
+    Account, AccountId, AccountKind, Assumption, AssumptionId, BudgetLine, BudgetLineId,
+    CostCentreId, Estimate, Event, EventDetails,
 };
 use crate::money::Currency;
 use crate::plugin::PluginScope;
@@ -33,6 +34,7 @@ pub struct CopySummary {
     pub budget_lines_skipped: u32,
     pub categories_added: u32,
     pub cost_centres_added: u32,
+    pub assumptions_added: u32,
     /// A budget in another currency can't be copied: its amounts would mean something else.
     pub source_currency: Currency,
 }
@@ -53,7 +55,7 @@ pub struct TemplateSummary {
 
 impl Book {
     /// A new event with the source's setup and none of its money (R-EVT-3): accounts, categories,
-    /// cost centres, persons, budget lines, tiers and plugins' setup records. The
+    /// cost centres, persons, budget lines with their assumptions, tiers and plugins' setup records. The
     /// source's own ids carry over, which is safe because ids only mean something within a file.
     pub fn from_template(source: &Book, details: EventDetails) -> Result<Book, DomainError> {
         let details = clean_details(details)?;
@@ -110,8 +112,9 @@ impl Book {
 
     /// Copies persons and budget lines from another event (R-ISO-4). It never overwrites: a person
     /// with the same name and a budget line with the same category and description stay as they
-    /// are. A category or cost centre the budget needs is created when it is missing. A budget
-    /// can only come from an event in the same currency.
+    /// are. A category, cost centre or assumption the budget needs is created when it is missing;
+    /// an assumption that exists keeps its own value. A budget can only come from an event in the
+    /// same currency.
     pub fn copy_from(
         &mut self,
         source: &Book,
@@ -173,6 +176,12 @@ impl Book {
                 .draft
                 .cost_centre
                 .and_then(|c| self.matching_centre(source, c, summary));
+            if let Estimate::Quantity { per, .. } = &mut draft.estimate {
+                *per = per
+                    .iter()
+                    .filter_map(|a| self.matching_assumption(source, *a, summary))
+                    .collect();
+            }
             self.budget_lines.insert(id, BudgetLine { id, draft });
             summary.budget_lines_added += 1;
         }
@@ -204,6 +213,35 @@ impl Book {
         }
         summary.categories_added += 1;
         id
+    }
+
+    /// The assumption with the same name, else a new one with the source's value.
+    fn matching_assumption(
+        &mut self,
+        source: &Book,
+        id: AssumptionId,
+        summary: &mut CopySummary,
+    ) -> Option<AssumptionId> {
+        let assumption = source.assumptions.get(&id)?;
+        let found = self
+            .assumptions
+            .values()
+            .find(|a| a.name.eq_ignore_ascii_case(&assumption.name))
+            .map(|a| a.id);
+        Some(found.unwrap_or_else(|| {
+            summary.assumptions_added += 1;
+            let id = AssumptionId(self.next.assumption);
+            self.next.assumption += 1;
+            self.assumptions.insert(
+                id,
+                Assumption {
+                    id,
+                    name: assumption.name.clone(),
+                    value: assumption.value,
+                },
+            );
+            id
+        }))
     }
 
     /// The cost centre with the same name, else a new one.

@@ -214,6 +214,7 @@ fn a_file_with_two_records_for_one_key_does_not_load() {
         closing_counts: Vec::new(),
         reconciliations: Vec::new(),
         budget_lines: Vec::new(),
+        assumptions: Vec::new(),
         tiers: Vec::new(),
         imports: Vec::new(),
         manual_sales: Vec::new(),

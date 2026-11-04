@@ -291,8 +291,10 @@ describe('The budget line panel', () => {
 		await saveDuringRead(held, cents(3000));
 		expect(api.updateBudgetLine.mock.calls[0][1].estimate).toEqual({
 			type: 'quantity',
-			quantity: 260,
-			unitPrice: 3000
+			quantity: 1,
+			unitPrice: 3000,
+			// The example's ticket sales scale with its guests, and keep doing so.
+			per: [1]
 		});
 	});
 

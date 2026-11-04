@@ -9,7 +9,7 @@
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLine } from '#lib/api/generated/BudgetLine.ts';
 	import type { Figures } from '#lib/api/generated/Figures.ts';
-	import { furthestFromPlan, isOver, isWaiting } from '#lib/budget.ts';
+	import { formula, furthestFromPlan, isOver, isWaiting } from '#lib/budget.ts';
 	import { categoryColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
@@ -18,6 +18,7 @@
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
+	import Assumptions from './Assumptions.svelte';
 	import BudgetLinePanel from './BudgetLinePanel.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
@@ -227,6 +228,10 @@
 			</div>
 		{/if}
 
+		{#if !session.closed || snapshot.assumptions.length}
+			<Assumptions assumptions={snapshot.assumptions} lines={snapshot.budgetLines} />
+		{/if}
+
 		<div class="table" role="table" aria-label="Budget">
 			<div class="row columns" role="row">
 				<span class="name"></span>
@@ -278,6 +283,11 @@
 									>
 										<span class="name">
 											<span class="title">{r.line.description}</span>
+											{#if formula(r.line.estimate, snapshot.assumptions, format)}
+												<span class="formula"
+													>{formula(r.line.estimate, snapshot.assumptions, format)}</span
+												>
+											{/if}
 											{#if r.line.complete}<span class="done" title="Complete"
 													><Icon name="check" size={14} /></span
 												>{/if}
@@ -572,6 +582,17 @@
 	.row:hover .add,
 	.add:focus-visible {
 		opacity: 1;
+	}
+
+	.formula {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--type-xs);
+		font-weight: 400;
+		color: var(--color-ink-muted);
 	}
 
 	.done {

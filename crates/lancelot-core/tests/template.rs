@@ -222,7 +222,7 @@ fn copying_skips_what_is_already_there() {
         .budget_lines()
         .find(|b| b.draft.description == "hall")
         .unwrap();
-    assert_eq!(hall.draft.estimate.total().unwrap(), eur("1"));
+    assert_eq!(book.budget().line(hall.id).unwrap().estimate, eur("1"));
     let stage = book
         .budget_lines()
         .find(|b| b.draft.description == "Stage")

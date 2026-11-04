@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
-    AccountDraft, AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride,
+    AccountDraft, AccountId, AccountKind, AssetType, AssumptionId, AttachmentId, BlockerOverride,
     BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents,
     ChangeLogEntry, CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId,
     ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange,
@@ -364,6 +364,32 @@ pub async fn budget_line_update(
 #[tauri::command]
 pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) -> Result<OpenEvent> {
     with(&state, |s| s.change(|b| b.delete_budget_line(id)))
+}
+
+#[tauri::command]
+pub async fn assumption_add(
+    state: State<'_, AppState>,
+    name: String,
+    value: u32,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.add_assumption(&name, value)))
+}
+
+#[tauri::command]
+pub async fn assumption_update(
+    state: State<'_, AppState>,
+    id: AssumptionId,
+    name: String,
+    value: u32,
+) -> Result<OpenEvent> {
+    with(&state, |s| {
+        s.change(|b| b.update_assumption(id, &name, value))
+    })
+}
+
+#[tauri::command]
+pub async fn assumption_delete(state: State<'_, AppState>, id: AssumptionId) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.delete_assumption(id)))
 }
 
 #[tauri::command]

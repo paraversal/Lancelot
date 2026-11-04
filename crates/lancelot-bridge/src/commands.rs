@@ -170,6 +170,21 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
 
         "budget_line_delete" => one(s, a, "id", Book::delete_budget_line),
 
+        "assumption_add" => {
+            let name: String = arg(a, "name")?;
+            let value: u32 = arg(a, "value")?;
+            json(s.change(|b| b.add_assumption(&name, value)))
+        }
+
+        "assumption_update" => {
+            let id = arg(a, "id")?;
+            let name: String = arg(a, "name")?;
+            let value: u32 = arg(a, "value")?;
+            json(s.change(|b| b.update_assumption(id, &name, value)))
+        }
+
+        "assumption_delete" => one(s, a, "id", Book::delete_assumption),
+
         "cost_centre_add" => {
             let name: String = arg(a, "name")?;
             json(s.change(|b| b.add_cost_centre(&name)))

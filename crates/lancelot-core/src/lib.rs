@@ -43,11 +43,11 @@ pub use ledger::{
     PersonTotals, ReconciliationStatus,
 };
 pub use model::{
-    Account, AccountDraft, AccountId, AccountKind, AssetType, Attachment, AttachmentId,
-    BlockerOverride, BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount,
-    CostCentre, CostCentreId, Estimate, Event, EventDetails, Flow, ImportId, Line, ManualSaleId,
-    OpenItem, Origin, Person, PluginRecordId, Reconciliation, ReconciliationId, Role, TierId, Txn,
-    TxnId, TxnKind,
+    Account, AccountDraft, AccountId, AccountKind, AssetType, Assumption, AssumptionId, Attachment,
+    AttachmentId, BlockerOverride, BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId,
+    ClosingCount, CostCentre, CostCentreId, Estimate, Event, EventDetails, Flow, ImportId, Line,
+    ManualSaleId, OpenItem, Origin, Person, PluginRecordId, Reconciliation, ReconciliationId, Role,
+    TierId, Txn, TxnId, TxnKind,
 };
 pub use money::{Cents, Currency, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};

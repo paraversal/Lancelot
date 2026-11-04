@@ -174,6 +174,7 @@ fn an_estimate_can_be_quantity_times_unit_price() {
             estimate: Estimate::Quantity {
                 quantity: 40,
                 unit_price: eur("12,49"),
+                per: Vec::new(),
             },
             ..amount(drinks, "Crates", "0")
         })
@@ -225,6 +226,7 @@ fn rejects_invalid_budget_lines() {
         estimate: Estimate::Quantity {
             quantity,
             unit_price,
+            per: Vec::new(),
         },
         ..amount(kitchen, "Food", "0")
     };
@@ -355,6 +357,7 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
                 estimate: Estimate::Quantity {
                     quantity: 40,
                     unit_price: eur("12,50"),
+                    per: Vec::new(),
                 },
                 complete: true,
                 ..amount(drinks, "Crates", "0")

@@ -2,6 +2,7 @@
 // each entry says what it is and which of its fields moved. Names are as they were at the time,
 // which also keeps them for what has been deleted since.
 import type { Account } from './api/generated/Account';
+import type { Assumption } from './api/generated/Assumption';
 import type { Attachment } from './api/generated/Attachment';
 import type { BudgetLine } from './api/generated/BudgetLine';
 import type { Cancellation } from './api/generated/Cancellation';
@@ -234,7 +235,11 @@ class Describer {
 				const estimate =
 					v.estimate.type === 'amount'
 						? this.amount(v.estimate.amount)
-						: `${v.estimate.quantity} × ${this.amount(v.estimate.unitPrice)}`;
+						: [
+								String(v.estimate.quantity),
+								...(v.estimate.per ?? []).map((a) => this.named('assumption', a)),
+								this.amount(v.estimate.unitPrice)
+							].join(' × ');
 				return {
 					noun: 'Budget line',
 					name: v.description,
@@ -245,6 +250,14 @@ class Describer {
 						field('Cost centre', this.named('cost_centre', v.costCentre)),
 						field('Complete', yes(v.complete))
 					]
+				};
+			}
+			case 'assumption': {
+				const v = value as Assumption;
+				return {
+					noun: 'Assumption',
+					name: v.name,
+					fields: [field('Name', v.name), field('Value', String(v.value))]
 				};
 			}
 			case 'cost_centre': {

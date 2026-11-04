@@ -58,6 +58,10 @@ pub enum DomainError {
     UnknownCostCentre { field: String },
     #[error("this line has the cost centre of its budget line")]
     WrongCostCentre { field: String },
+    #[error("unknown assumption")]
+    UnknownAssumption { field: String },
+    #[error("budget lines scale with this assumption, so it cannot be deleted")]
+    AssumptionInUse,
     #[error("this plugin record is not valid")]
     InvalidPluginRecord { field: String },
     #[error("unknown checkpoint")]
@@ -145,6 +149,8 @@ impl DomainError {
             DomainError::BudgetLineInUse => "budget_line_in_use",
             DomainError::UnknownCostCentre { .. } => "unknown_cost_centre",
             DomainError::WrongCostCentre { .. } => "wrong_cost_centre",
+            DomainError::UnknownAssumption { .. } => "unknown_assumption",
+            DomainError::AssumptionInUse => "assumption_in_use",
             DomainError::InvalidPluginRecord { .. } => "invalid_plugin_record",
             DomainError::UnknownReconciliation => "unknown_reconciliation",
             DomainError::DuplicateCheckpoint { .. } => "duplicate_checkpoint",
@@ -187,6 +193,7 @@ impl DomainError {
             | DomainError::WrongBudgetLine { field }
             | DomainError::UnknownCostCentre { field }
             | DomainError::WrongCostCentre { field }
+            | DomainError::UnknownAssumption { field }
             | DomainError::InvalidPluginRecord { field }
             | DomainError::DuplicateCheckpoint { field } => Some(field),
             DomainError::BudgetLineInUse => Some("category"),

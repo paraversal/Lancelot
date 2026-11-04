@@ -7,6 +7,7 @@ import type { AccountDraft } from './generated/AccountDraft';
 import type { AccountKind } from './generated/AccountKind';
 import type { Attachment } from './generated/Attachment';
 import type { AssetType } from './generated/AssetType';
+import type { AssumptionId } from './generated/AssumptionId';
 import type { AttachmentId } from './generated/AttachmentId';
 import type { Added } from './generated/Added';
 import type { ApiError as ApiErrorData } from './generated/ApiError';
@@ -188,6 +189,14 @@ export const api = {
 		call<OpenEvent>('budget_line_update', { id, draft }),
 	/** The linked actuals stay and count as unbudgeted. */
 	deleteBudgetLine: (id: BudgetLineId) => call<OpenEvent>('budget_line_delete', { id }),
+
+	addAssumption: (name: string, value: number) =>
+		call<OpenEvent>('assumption_add', { name, value }),
+	/** Every budget line that scales with it follows. */
+	updateAssumption: (id: AssumptionId, name: string, value: number) =>
+		call<OpenEvent>('assumption_update', { id, name, value }),
+	/** Refused while a budget line scales with it. */
+	deleteAssumption: (id: AssumptionId) => call<OpenEvent>('assumption_delete', { id }),
 
 	addCostCentre: (name: string) => call<OpenEvent>('cost_centre_add', { name }),
 	renameCostCentre: (id: CostCentreId, name: string) =>

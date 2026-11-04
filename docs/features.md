@@ -57,6 +57,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 ## Budget
 
 - Budget lines as an amount or as quantity × unit price, each of which can be marked complete (R-BUD-1).
+- Assumptions such as `Guests 250` or `Days 3`, edited in place above the table. A quantity can be multiplied by any of them, `2 × Guests × Days × 4,50 €`, so changing one changes every line that scales with it. The table shows each such line's formula, the line's panel previews the total as it is made up, and an assumption can only be deleted while no line uses it (R-BUD-6).
 - Plan against actual per line, category and cost centre, and in total, with what isn't budgeted (R-BUD-3).
 - A cautious forecast of the result, on the Budget page and the Overview (R-BUD-4).
 - How far the forecast is from the plan, and the three lines furthest from it, each opening the line.

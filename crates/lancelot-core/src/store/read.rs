@@ -9,10 +9,10 @@ use super::codec::{text_date, text_enum, text_timestamp};
 use crate::book::{BookParts, NextIds};
 use crate::iban::validate_iban;
 use crate::model::{
-    Account, AccountId, Attachment, AttachmentId, BudgetLine, BudgetLineDraft, BudgetLineId,
-    CancellationId, ClosingCount, CostCentre, CostCentreId, Estimate, Event, EventDetails,
-    ImportId, Line, ManualSaleId, Origin, Person, PluginRecordId, Reconciliation, ReconciliationId,
-    TierId, Txn, TxnId,
+    Account, AccountId, Assumption, AssumptionId, Attachment, AttachmentId, BudgetLine,
+    BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre, CostCentreId,
+    Estimate, Event, EventDetails, ImportId, Line, ManualSaleId, Origin, Person, PluginRecordId,
+    Reconciliation, ReconciliationId, TierId, Txn, TxnId,
 };
 use crate::money::Cents;
 use crate::plugin::PluginRecord;
@@ -295,6 +295,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         });
     }
 
+    let mut per = budget_line_assumptions(conn)?;
     let mut stmt = conn.prepare(
         "SELECT id, category_id, description, amount, quantity, unit_price, complete, cost_centre_id
          FROM budget_line ORDER BY id",
@@ -323,6 +324,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
                     StoreError::corrupt(format!("quantity out of range: {quantity}"))
                 })?,
                 unit_price: cents(unit_price)?,
+                per: per.remove(&id).unwrap_or_default(),
             },
             _ => {
                 return Err(StoreError::corrupt(format!(
@@ -342,6 +344,12 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         });
     }
 
+    if let Some(id) = per.keys().next() {
+        return Err(StoreError::corrupt(format!(
+            "assumptions for budget line {id}, which has no quantity"
+        )));
+    }
+
     let (tiers, imports, manual_sales) = tickets(conn)?;
     let cancellations = cancellations(conn)?;
 
@@ -355,6 +363,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
         closing_counts,
         reconciliations: reconciliations(conn)?,
         budget_lines,
+        assumptions: assumptions(conn)?,
         tiers,
         imports,
         manual_sales,
@@ -366,6 +375,7 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             txn: next_id(conn, "next_txn_id")?,
             attachment: next_id(conn, "next_attachment_id")?,
             budget_line: next_id(conn, "next_budget_line_id")?,
+            assumption: next_id(conn, "next_assumption_id")?,
             tier: next_id(conn, "next_tier_id")?,
             import: next_id(conn, "next_import_id")?,
             manual_sale: next_id(conn, "next_manual_sale_id")?,
@@ -375,6 +385,46 @@ pub(crate) fn parts(conn: &Connection) -> Result<BookParts, StoreError> {
             reconciliation: next_id(conn, "next_reconciliation_id")?,
         },
     })
+}
+
+fn assumptions(conn: &Connection) -> Result<Vec<Assumption>, StoreError> {
+    let mut stmt = conn.prepare("SELECT id, name, value FROM assumption ORDER BY id")?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, i64>(2)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, name, value) = row?;
+        out.push(Assumption {
+            id: AssumptionId(id),
+            name,
+            value: u32::try_from(value).map_err(|_| {
+                StoreError::corrupt(format!("assumption value out of range: {value}"))
+            })?,
+        });
+    }
+    Ok(out)
+}
+
+/// The assumptions each budget line's quantity is multiplied by, in order.
+fn budget_line_assumptions(
+    conn: &Connection,
+) -> Result<BTreeMap<i64, Vec<AssumptionId>>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT budget_line_id, assumption_id FROM budget_line_assumption
+         ORDER BY budget_line_id, position",
+    )?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))?;
+    let mut out: BTreeMap<i64, Vec<AssumptionId>> = BTreeMap::new();
+    for row in rows {
+        let (line, assumption) = row?;
+        out.entry(line).or_default().push(AssumptionId(assumption));
+    }
+    Ok(out)
 }
 
 fn cost_centres(conn: &Connection) -> Result<Vec<CostCentre>, StoreError> {
