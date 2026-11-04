@@ -1,6 +1,7 @@
 //! The frozen event file in `fixtures/events`, written by schema version 1.
-//! It is never rewritten. A file an earlier version wrote must keep opening with the same figures,
-//! so every schema change has to be a migration (technical design §3.2).
+//! Once the first real event is entered it is never rewritten: a file an earlier version wrote must
+//! keep opening with the same figures, so every schema change has to be a migration. Until then the
+//! schema is edited in place and this file is written again (technical design §3.2).
 
 mod common;
 
@@ -16,7 +17,7 @@ use tempfile::TempDir;
 
 const SAMPLE: &str = "sample-v1.lancelot";
 /// A regenerated sample would hide a schema edited in place, so its bytes are pinned too.
-const SAMPLE_SHA256: &str = "9d42e35281981c5328ec3336453fb8f036a6e30f4888648c385f1dcbb6f54c73";
+const SAMPLE_SHA256: &str = "04611ab6d5d810855b125f0469b10623fa21037c7b71655852c9226ab51fd117";
 
 fn sample_path(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -92,12 +93,14 @@ fn write_the_sample() {
     let (mut store, _) = Store::create(
         &path,
         EventDetails {
-            name: "Sommerfest 2026".into(),
+            currency: Default::default(),
+            name: "Summer Festival 2026".into(),
             starts_on: Some(june(12)),
             ends_on: Some(june(14)),
-            location: Some("Festwiese".into()),
+            location: Some("Riverside Park".into()),
             notes: Some("The sample of the event file format.".into()),
         },
+        &two_accounts(),
         options(),
     )
     .unwrap();
@@ -112,8 +115,17 @@ fn write_the_sample() {
                     holder: Some("Anna Beispiel".into()),
                     iban: Some(validate_iban("DE89370400440532013000").unwrap()),
                     bic: Some("COBADEFFXXX".into()),
+                    other_method: None,
                     contact: Some("anna@example.invalid".into()),
                     notes: Some("Pays for the kitchen".into()),
+                },
+            )?;
+            b.update_person(
+                m.malte,
+                "Malte",
+                Person {
+                    other_method: Some("PayPal: malte@example.invalid".into()),
+                    ..Person::default()
                 },
             )?;
             b.add_cost_centre("Workshop")?;
@@ -187,10 +199,10 @@ fn write_the_sample() {
                 terms: terms(10_000),
                 note: None,
             })?;
-            let verein = asset(b, "Verein account");
-            let movement = b.ledger().balance(verein);
+            let bank = asset(b, "Bank account");
+            let movement = b.ledger().balance(bank);
             let date = time::macros::date!(2026 - 07 - 01);
-            b.add_reconciliation(verein, date, movement)?;
+            b.add_reconciliation(bank, date, movement)?;
             Ok::<_, DomainError>(())
         })
         .unwrap();
@@ -245,7 +257,15 @@ fn a_new_file_has_the_schema_of_the_migrated_sample() {
     let migrated = copy_of_sample(&dir);
     drop(opened(&migrated));
     let new = dir.path().join("new.lancelot");
-    drop(Store::create(&new, new_book().event().details.clone(), options()).unwrap());
+    drop(
+        Store::create(
+            &new,
+            new_book().event().details.clone(),
+            &two_accounts(),
+            options(),
+        )
+        .unwrap(),
+    );
 
     let (migrated, new) = (read_only(&migrated), read_only(&new));
     assert_eq!(schema(&migrated), schema(&new));
@@ -263,7 +283,10 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let book = store.book();
     let l = book.ledger();
 
-    assert_eq!(book.event().details.location.as_deref(), Some("Festwiese"));
+    assert_eq!(
+        book.event().details.location.as_deref(),
+        Some("Riverside Park")
+    );
     assert_eq!(book.event().closed_at, Some(now()));
     assert_eq!(book.event().closing_overrides.len(), 7);
 
@@ -271,7 +294,7 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     assert_eq!(l.income_total(), eur("7.754"));
     assert_eq!(l.expense_total(), eur("5.367,30"));
     assert_eq!(raw_sum(book), 0);
-    assert_eq!(l.balance(asset(book, "Verein account")), eur("2.052,20"));
+    assert_eq!(l.balance(asset(book, "Bank account")), eur("2.052,20"));
     assert_eq!(l.balance(asset(book, "Cash box")), eur("476,90"));
     assert_eq!(l.balance(asset(book, "Bar float")), eur("100"));
     let w = l.where_the_money_is();
@@ -305,15 +328,12 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let refunds: Vec<_> = tickets.cancellations.iter().map(|c| c.refund).collect();
     assert_eq!(refunds, [eur("32"), Cents::ZERO, eur("32")]);
 
-    let verein = asset(book, "Verein account");
+    let bank = asset(book, "Bank account");
     let checkpoints: Vec<_> = book
         .reconciliations()
         .map(|r| (r.account, r.amount))
         .collect();
-    assert_eq!(
-        checkpoints,
-        [(verein, eur("1.757")), (verein, eur("2.052,20"))]
-    );
+    assert_eq!(checkpoints, [(bank, eur("1.757")), (bank, eur("2.052,20"))]);
     assert_eq!(
         book.closing_count(asset(book, "Cash box"))
             .map(|c| c.amount),
@@ -323,6 +343,9 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     assert_eq!(book.plugin_records().count(), 11);
     assert!(book.plugin_records().all(|r| r.plugin == "drinks"));
     assert_eq!(book.budget().result.estimate, eur("2.305"));
+    let guests = book.assumptions().next().unwrap();
+    assert_eq!((guests.name.as_str(), guests.value), ("Guests", 260));
+    assert_eq!(book.lines_scaling_with(guests.id), 1);
 
     let anna = book
         .account_by_name(AccountKind::Person, "Anna")
@@ -331,7 +354,7 @@ fn the_sample_opens_with_the_figures_it_was_frozen_with() {
     let iban = book.person(anna).unwrap().iban.as_ref().unwrap();
     assert_eq!(iban.as_str(), "DE89370400440532013000");
 
-    assert_eq!(store.change_log(10_000).unwrap().len(), 103);
+    assert_eq!(store.change_log(10_000).unwrap().len(), 105);
 
     assert_eq!(book.attachments().count(), 11);
     let receipts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/receipts");

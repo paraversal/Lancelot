@@ -5,12 +5,12 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use lancelot_core::{
-    AccountId, AccountKind, AssetType, AttachmentId, BlockerOverride, BudgetLineDraft,
-    BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents, ChangeLogEntry,
-    CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId, ImportPreview,
-    ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange, ReconciliationId,
-    Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft, TierId, TxnDraft,
-    TxnId,
+    AccountDraft, AccountId, AccountKind, AssetType, AssumptionId, AttachmentId, BlockerOverride,
+    BudgetLineDraft, BudgetLineId, CancellationDraft, CancellationEdit, CancellationId, Cents,
+    ChangeLogEntry, CopyChoice, CopySummary, CostCentreId, EventDetails, ImportDeletion, ImportId,
+    ImportPreview, ManualSaleDraft, ManualSaleId, Parsed, ParsedSum, Person, PluginChange,
+    ReconciliationId, Resolution, Table, TemplateSummary, TicketBatch, TicketShare, TierDraft,
+    TierId, TxnDraft, TxnId,
 };
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
@@ -69,11 +69,12 @@ pub async fn event_create(
     state: State<'_, AppState>,
     path: PathBuf,
     details: EventDetails,
+    accounts: Vec<AccountDraft>,
     template: Option<PathBuf>,
 ) -> Result<OpenEvent> {
     with(&state, |s| match &template {
         Some(template) => s.create_event_from(&path, details, template),
-        None => s.create_event(&path, details),
+        None => s.create_event(&path, details, &accounts),
     })
 }
 
@@ -366,6 +367,32 @@ pub async fn budget_line_delete(state: State<'_, AppState>, id: BudgetLineId) ->
 }
 
 #[tauri::command]
+pub async fn assumption_add(
+    state: State<'_, AppState>,
+    name: String,
+    value: u32,
+) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.add_assumption(&name, value)))
+}
+
+#[tauri::command]
+pub async fn assumption_update(
+    state: State<'_, AppState>,
+    id: AssumptionId,
+    name: String,
+    value: u32,
+) -> Result<OpenEvent> {
+    with(&state, |s| {
+        s.change(|b| b.update_assumption(id, &name, value))
+    })
+}
+
+#[tauri::command]
+pub async fn assumption_delete(state: State<'_, AppState>, id: AssumptionId) -> Result<OpenEvent> {
+    with(&state, |s| s.change(|b| b.delete_assumption(id)))
+}
+
+#[tauri::command]
 pub async fn cost_centre_add(state: State<'_, AppState>, name: String) -> Result<OpenEvent> {
     with(&state, |s| s.change(|b| b.add_cost_centre(&name)))
 }
@@ -469,9 +496,10 @@ pub async fn data_source_pull(
     state: State<'_, AppState>,
     id: String,
     fields: Vec<String>,
+    optional: Vec<String>,
 ) -> Result<Pulled> {
     let request = with(&state, |s| s.pull_request(&id))?;
-    tauri::async_runtime::spawn_blocking(move || request.run(&fields))
+    tauri::async_runtime::spawn_blocking(move || request.run(&fields, &optional))
         .await
         .map_err(|e| ApiError::new("internal", e.to_string()))?
 }
@@ -625,9 +653,12 @@ pub async fn payouts_mark_paid(
     state: State<'_, AppState>,
     account: AccountId,
     date: String,
+    people: Vec<AccountId>,
 ) -> Result<OpenEvent> {
     let date = lancelot_core::parse_date(&date)?;
-    with(&state, |s| s.change(|b| b.mark_payouts_paid(account, date)))
+    with(&state, |s| {
+        s.change(|b| b.mark_payouts_paid(account, date, &people))
+    })
 }
 
 /// Opens the print dialog for the window, e.g. to save the payout list as PDF.

@@ -1,6 +1,7 @@
 {
   "event": {
-    "name": "Sommerfest 2026",
+    "name": "Summer Festival 2026",
+    "currency": "EUR",
     "startsOn": "2026-06-12",
     "endsOn": "2026-06-14",
     "location": null,
@@ -17,7 +18,7 @@
     {
       "id": 1,
       "kind": "asset",
-      "name": "Verein account",
+      "name": "Bank account",
       "role": null,
       "assetType": "bank",
       "netMovement": true,
@@ -192,6 +193,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -227,6 +229,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -252,6 +255,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -282,6 +286,7 @@
       "holder": null,
       "iban": null,
       "bic": null,
+      "otherMethod": null,
       "contact": null,
       "notes": null,
       "summary": {
@@ -758,7 +763,7 @@
       "id": 10,
       "kind": "expense",
       "date": "2026-06-13",
-      "description": "Großmarkt",
+      "description": "Wholesale market",
       "counterparty": null,
       "notes": null,
       "lines": [
@@ -1315,8 +1320,9 @@
         "holder": "Anna",
         "iban": null,
         "bic": null,
+        "otherMethod": null,
         "amount": 21240,
-        "reference": "Auslagen Sommerfest 2026 Anna"
+        "reference": "Reimbursement Summer Festival 2026 Anna"
       },
       {
         "person": 15,
@@ -1324,8 +1330,9 @@
         "holder": "Malte",
         "iban": null,
         "bic": null,
+        "otherMethod": null,
         "amount": 11000,
-        "reference": "Auslagen Sommerfest 2026 Malte"
+        "reference": "Reimbursement Summer Festival 2026 Malte"
       }
     ],
     "payoutTotal": 32240,
@@ -1347,8 +1354,11 @@
       "description": "Ticket sales",
       "estimate": {
         "type": "quantity",
-        "quantity": 260,
-        "unitPrice": 2500
+        "quantity": 1,
+        "unitPrice": 2500,
+        "per": [
+          1
+        ]
       },
       "complete": true,
       "costCentre": null
@@ -1393,7 +1403,8 @@
       "estimate": {
         "type": "quantity",
         "quantity": 3,
-        "unitPrice": 25000
+        "unitPrice": 25000,
+        "per": []
       },
       "complete": false,
       "costCentre": null
@@ -1405,7 +1416,8 @@
       "estimate": {
         "type": "quantity",
         "quantity": 30,
-        "unitPrice": 1400
+        "unitPrice": 1400,
+        "per": []
       },
       "complete": false,
       "costCentre": 1
@@ -1444,61 +1456,77 @@
       "costCentre": null
     }
   ],
+  "assumptions": [
+    {
+      "id": 1,
+      "name": "Guests",
+      "value": 260
+    }
+  ],
   "budget": {
     "lines": [
       {
         "line": 1,
         "estimate": 650000,
         "actual": 652750,
-        "forecast": 652750
+        "forecast": 652750,
+        "fromPlan": 2750
       },
       {
         "line": 2,
         "estimate": 70000,
         "actual": 81250,
-        "forecast": 70000
+        "forecast": 70000,
+        "fromPlan": 0
       },
       {
         "line": 3,
         "estimate": 180000,
         "actual": 180000,
-        "forecast": 180000
+        "forecast": 180000,
+        "fromPlan": 0
       },
       {
         "line": 4,
         "estimate": 110000,
         "actual": 109850,
-        "forecast": 109850
+        "forecast": 109850,
+        "fromPlan": 150
       },
       {
         "line": 5,
         "estimate": 75000,
         "actual": 100150,
-        "forecast": 100150
+        "forecast": 100150,
+        "fromPlan": -25150
       },
       {
         "line": 6,
         "estimate": 42000,
         "actual": 42000,
-        "forecast": 42000
+        "forecast": 42000,
+        "fromPlan": 0
       },
       {
         "line": 7,
         "estimate": 45000,
         "actual": 50000,
-        "forecast": 50000
+        "forecast": 50000,
+        "fromPlan": -5000
       },
       {
         "line": 8,
         "estimate": 22500,
         "actual": 22500,
-        "forecast": 22500
+        "forecast": 22500,
+        "fromPlan": 0
       },
       {
         "line": 9,
         "estimate": 15000,
         "actual": 0,
-        "forecast": 15000
+        "forecast": 15000,
+        "fromPlan": 0
       }
     ],
     "categories": [
@@ -1588,6 +1616,7 @@
       "actual": 202750,
       "forecast": 176500
     },
+    "fromPlan": -54000,
     "costCentres": [
       {
         "costCentre": 1,
@@ -1649,6 +1678,7 @@
     "imports": [],
     "manualSales": [],
     "conflicts": [],
+    "orderIds": null,
     "cancellations": [],
     "sales": []
   },
@@ -1710,7 +1740,7 @@
         "centre": 1,
         "cost": 95,
         "donation": 200,
-        "name": "Pils 0,33"
+        "name": "Lager 0,33"
       }
     },
     {
@@ -1735,7 +1765,7 @@
         "centre": 1,
         "cost": 95,
         "donation": 200,
-        "name": "Radler 0,33"
+        "name": "Shandy 0,33"
       }
     },
     {
@@ -1760,7 +1790,7 @@
         "centre": 1,
         "cost": 140,
         "donation": 300,
-        "name": "Apfelschorle 1,0"
+        "name": "Apple spritzer 1,0"
       }
     },
     {

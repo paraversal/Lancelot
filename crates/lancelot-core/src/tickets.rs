@@ -39,7 +39,21 @@ pub struct TicketBatch {
 #[ts(export)]
 pub struct BatchTicket {
     pub tier: String,
-    pub order: String,
+    /// The order it belongs to. A source without order IDs leaves it out on every ticket, and
+    /// an event's imports either all have them or none do.
+    #[serde(default)]
+    pub order: Option<String>,
+}
+
+/// The order every ticket of a source without order IDs is kept under: one per tier, with no
+/// name. A real order ID is never empty, so they can't be mixed up.
+pub const NO_ORDER: &str = "";
+
+impl TicketBatch {
+    /// Whether its tickets have order IDs. `None` without tickets, which fits any event.
+    pub fn order_ids(&self) -> Option<bool> {
+        self.tickets.first().map(|t| t.order.is_some())
+    }
 }
 
 /// Whether the event sells tickets at all, and where the sheet's money arrives.
@@ -162,6 +176,11 @@ pub struct OrderCount {
 }
 
 impl TicketImport {
+    /// Whether its tickets have order IDs. `None` without tickets.
+    pub fn order_ids(&self) -> Option<bool> {
+        self.orders.first().map(|o| o.order != NO_ORDER)
+    }
+
     /// Tickets per tier.
     pub fn counts(&self) -> BTreeMap<TierId, u32> {
         let mut out = BTreeMap::new();
@@ -286,7 +305,10 @@ pub(crate) fn orders(batch: &TicketBatch, tiers: &BTreeMap<TierId, Tier>) -> Ord
     let mut unknown: Vec<UnknownTier> = Vec::new();
     for row in &batch.tickets {
         match tiers.values().find(|t| t.matches(&row.tier)) {
-            Some(t) => *counts.entry((row.order.clone(), t.id)).or_insert(0) += 1,
+            Some(t) => {
+                let order = row.order.clone().unwrap_or_else(|| NO_ORDER.to_owned());
+                *counts.entry((order, t.id)).or_insert(0) += 1;
+            }
             None => match unknown.iter_mut().find(|u| same_name(&u.name, &row.tier)) {
                 Some(u) => u.rows += 1,
                 None => unknown.push(UnknownTier {
@@ -323,6 +345,9 @@ pub struct ImportPreview {
     pub tickets: u32,
     /// Tier names that match no tier or alias. They block the import until mapped.
     pub unknown: Vec<UnknownTier>,
+    /// The event's other imports have order IDs and this one has none, or the other way round.
+    /// It blocks the import.
+    pub order_ids_differ: bool,
     /// Every tier that has tickets before or after, in tier order.
     pub tiers: Vec<TierChange>,
     /// Orders with fewer tickets of a tier than before (R-TKT-12).
@@ -423,6 +448,7 @@ pub(crate) fn preview(
         current,
         tickets: orders.iter().map(|o| o.count).sum(),
         unknown,
+        order_ids_differ: false,
         tiers: changes.into_values().collect(),
         removed,
         receipts_lost: Vec::new(),
@@ -491,6 +517,11 @@ pub(crate) fn clean_tier(
         }
     }
     Ok(draft)
+}
+
+/// Whether an event's imports have order IDs, `None` until one has tickets.
+pub(crate) fn order_ids(imports: &BTreeMap<ImportId, TicketImport>) -> Option<bool> {
+    imports.values().find_map(TicketImport::order_ids)
 }
 
 /// The imports in the order they count in: by date, then by id. The last one is the current one.
@@ -679,8 +710,11 @@ pub struct Tickets {
     pub imports: Vec<ImportSummary>,
     /// By date, then by id.
     pub manual_sales: Vec<ManualSaleView>,
-    /// By order ID.
+    /// By order ID. Without order IDs there is one, for the order with no name ([`NO_ORDER`]).
     pub conflicts: Vec<OrderConflict>,
+    /// Whether the imports have order IDs. `None` until an import has tickets: then either
+    /// kind can be imported.
+    pub order_ids: Option<bool>,
     /// Oldest first.
     pub cancellations: Vec<CancellationView>,
     /// Sales over time, oldest first (R-TKT-8).
@@ -844,6 +878,7 @@ impl Tickets {
             imports,
             manual_sales,
             conflicts,
+            order_ids: order_ids(imports_by_id),
             cancellations: views,
             sales: sales_points,
         })
@@ -1025,6 +1060,10 @@ fn order_conflicts(
             .filter(|o| o.order == *order)
             .map(|o| o.tier)
             .collect();
+        // Without order IDs a tier that grew just sold more: it says nothing about the removal.
+        if *order == NO_ORDER {
+            continue;
+        }
         conflict.added = tiers
             .into_iter()
             .filter(|tier| !conflict.removed.iter().any(|r| r.tier == *tier))
@@ -1064,7 +1103,7 @@ mod tests {
                 .iter()
                 .map(|(tier, order)| BatchTicket {
                     tier: (*tier).into(),
-                    order: (*order).into(),
+                    order: Some((*order).into()),
                 })
                 .collect(),
         }

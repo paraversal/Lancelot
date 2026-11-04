@@ -8,6 +8,10 @@ export type PayoutRow = { person: AccountId, name: string,
  */
 holder: string, 
 /**
- * Normalised (no spaces); `None` while the person has no IBAN.
+ * Normalised (no spaces); `None` without an IBAN, or when another method applies.
  */
-iban: string | null, bic: string | null, amount: Cents, reference: string, };
+iban: string | null, bic: string | null, 
+/**
+ * The method when it isn't a bank transfer, such as a PayPal address or cash.
+ */
+otherMethod: string | null, amount: Cents, reference: string, };

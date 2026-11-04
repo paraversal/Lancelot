@@ -8,6 +8,7 @@
 
 	let {
 		label,
+		ariaLabel,
 		value,
 		options,
 		addLabel,
@@ -18,6 +19,8 @@
 		onadd
 	}: {
 		label?: string;
+		/** The name for a field without a label of its own, such as a split line's category. */
+		ariaLabel?: string;
 		value: AccountId | null;
 		options: { value: AccountId; label: string; group?: string }[];
 		/** The last option, e.g. `New person…`. */
@@ -76,6 +79,7 @@
 		<input
 			{id}
 			bind:this={input}
+			aria-label={label ? undefined : addLabel.replace(/…$/, '')}
 			type="text"
 			bind:value={name}
 			onkeydown={(e) => {
@@ -94,6 +98,7 @@
 		<select
 			{id}
 			bind:this={select}
+			aria-label={label ? undefined : ariaLabel}
 			value={value === null ? '' : String(value)}
 			onchange={(e) => picked(e.currentTarget.value)}
 		>

@@ -81,6 +81,11 @@ export interface PluginContext {
 	readonly budget: Budget;
 	/** The ticket tiers with what was sold of each. No orders, so no one's purchase. */
 	readonly tiers: TierFigures[];
+	/**
+	 * Whether the event's ticket imports have order IDs; null until one has tickets. A batch of the
+	 * other kind is refused. The orders themselves stay out of plugins.
+	 */
+	readonly ticketOrderIds: boolean | null;
 	/** This plugin's records, in creation order. */
 	readonly records: PluginRecord[];
 	/** Applies the changes together. A null value removes a record. */
@@ -107,7 +112,11 @@ export interface PluginContext {
 	parseDate(text: string): Promise<string>;
 	/** What this plugin's data source is called; null until it is set up in Settings. */
 	readonly dataSource: string | null;
-	/** Asks the data source for these fields. Nothing else in its answer reaches the plugin. */
+	/**
+	 * Asks the data source for these fields. Nothing else in its answer reaches the plugin. A field
+	 * declared optional is left out of a row that lacks it, and out of `fields` when the source has
+	 * no name for it.
+	 */
 	pull(fields: string[]): Promise<Pulled>;
 }
 
@@ -151,7 +160,8 @@ export type ReportSectionProps = { ctx: PluginContext };
 export type DataSourceSpec = {
 	/** The usual name of the provider's list. */
 	list: string;
-	fields: { key: string; label: string; usually: string }[];
+	/** An optional field may be left blank in Settings, and missing from an item. */
+	fields: { key: string; label: string; usually: string; optional?: boolean }[];
 };
 
 export interface Plugin {

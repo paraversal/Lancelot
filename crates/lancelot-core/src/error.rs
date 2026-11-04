@@ -28,6 +28,10 @@ pub enum DomainError {
     UnknownTxn,
     #[error("unknown person")]
     UnknownPerson,
+    #[error("at least one account is needed")]
+    NoAccounts,
+    #[error("a budget can't be copied from an event in another currency")]
+    OtherCurrency,
     #[error("a name is needed")]
     EmptyName { field: String },
     #[error("this name is already used")]
@@ -54,6 +58,10 @@ pub enum DomainError {
     UnknownCostCentre { field: String },
     #[error("this line has the cost centre of its budget line")]
     WrongCostCentre { field: String },
+    #[error("unknown assumption")]
+    UnknownAssumption { field: String },
+    #[error("budget lines scale with this assumption, so it cannot be deleted")]
+    AssumptionInUse,
     #[error("this plugin record is not valid")]
     InvalidPluginRecord { field: String },
     #[error("unknown checkpoint")]
@@ -86,6 +94,10 @@ pub enum DomainError {
     UnknownCancellation,
     #[error("no such order with tickets of this tier in the sheet")]
     UnknownOrder,
+    #[error(
+        "the event's other imports have order IDs and these tickets have none, or the other way round: delete the imports to switch"
+    )]
+    OrderIdsDiffer,
     #[error("that is more tickets than are left to cancel")]
     TooManyTickets,
     #[error("the refund must be between 0 and 100 %")]
@@ -122,6 +134,8 @@ impl DomainError {
             DomainError::MissingNote => "missing_note",
             DomainError::UnknownTxn => "unknown_txn",
             DomainError::UnknownPerson => "unknown_person",
+            DomainError::NoAccounts => "no_accounts",
+            DomainError::OtherCurrency => "other_currency",
             DomainError::EmptyName { .. } => "empty_name",
             DomainError::DuplicateName { .. } => "duplicate_name",
             DomainError::InvalidBic => "invalid_bic",
@@ -135,6 +149,8 @@ impl DomainError {
             DomainError::BudgetLineInUse => "budget_line_in_use",
             DomainError::UnknownCostCentre { .. } => "unknown_cost_centre",
             DomainError::WrongCostCentre { .. } => "wrong_cost_centre",
+            DomainError::UnknownAssumption { .. } => "unknown_assumption",
+            DomainError::AssumptionInUse => "assumption_in_use",
             DomainError::InvalidPluginRecord { .. } => "invalid_plugin_record",
             DomainError::UnknownReconciliation => "unknown_reconciliation",
             DomainError::DuplicateCheckpoint { .. } => "duplicate_checkpoint",
@@ -151,6 +167,7 @@ impl DomainError {
             DomainError::UnknownManualSale => "unknown_manual_sale",
             DomainError::UnknownCancellation => "unknown_cancellation",
             DomainError::UnknownOrder => "unknown_order",
+            DomainError::OrderIdsDiffer => "order_ids_differ",
             DomainError::TooManyTickets => "too_many_tickets",
             DomainError::RefundTooHigh => "refund_too_high",
             DomainError::SaleHasCancellations => "sale_has_cancellations",
@@ -176,6 +193,7 @@ impl DomainError {
             | DomainError::WrongBudgetLine { field }
             | DomainError::UnknownCostCentre { field }
             | DomainError::WrongCostCentre { field }
+            | DomainError::UnknownAssumption { field }
             | DomainError::InvalidPluginRecord { field }
             | DomainError::DuplicateCheckpoint { field } => Some(field),
             DomainError::BudgetLineInUse => Some("category"),

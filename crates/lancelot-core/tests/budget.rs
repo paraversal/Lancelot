@@ -28,13 +28,46 @@ fn linked(account: AccountId, value: &str, line: BudgetLineId) -> SplitLine {
 }
 
 fn spend(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
-    let payer = asset(book, "Verein account");
+    let payer = asset(book, "Bank account");
     save(book, "Receipt", Entry::Expense { payer, lines })
 }
 
 fn earn(book: &mut Book, lines: Vec<SplitLine>) -> TxnId {
     let destination = asset(book, "Cash box");
     save(book, "Takings", Entry::Income { destination, lines })
+}
+
+#[test]
+fn how_far_the_forecast_is_from_plan_has_the_sign_of_its_effect_on_the_result() {
+    let mut book = new_book();
+    let kitchen = expense(&book, "Kitchen");
+    let donations = income(&book, "General");
+    let food = book
+        .add_budget_line(amount(kitchen, "Food", "1.000"))
+        .unwrap();
+    let gifts = book
+        .add_budget_line(amount(donations, "Gifts", "500"))
+        .unwrap();
+    let from_plan = |b: &Book, id: BudgetLineId| {
+        b.budget()
+            .lines
+            .iter()
+            .find(|l| l.line == id)
+            .unwrap()
+            .from_plan
+    };
+
+    // Spending more lowers the result. Income still short of its estimate does too.
+    spend(&mut book, vec![linked(kitchen, "1.200", food)]);
+    earn(&mut book, vec![linked(donations, "300", gifts)]);
+    assert_eq!(from_plan(&book, food), eur("-200"));
+    assert_eq!(from_plan(&book, gifts), eur("-200"));
+    assert_eq!(book.budget().from_plan, eur("-400"));
+
+    // Something unbudgeted is in the total, but belongs to no line.
+    spend(&mut book, vec![split(kitchen, "50")]);
+    assert_eq!(from_plan(&book, food), eur("-200"));
+    assert_eq!(book.budget().from_plan, eur("-450"));
 }
 
 #[test]
@@ -141,6 +174,7 @@ fn an_estimate_can_be_quantity_times_unit_price() {
             estimate: Estimate::Quantity {
                 quantity: 40,
                 unit_price: eur("12,49"),
+                per: Vec::new(),
             },
             ..amount(drinks, "Crates", "0")
         })
@@ -166,11 +200,11 @@ fn budget_lines_never_change_a_balance() {
 fn rejects_invalid_budget_lines() {
     let mut book = new_book();
     let kitchen = expense(&book, "Kitchen");
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let err = |book: &mut Book, d: BudgetLineDraft| book.add_budget_line(d).unwrap_err();
 
     assert_eq!(
-        err(&mut book, amount(verein, "Food", "10")),
+        err(&mut book, amount(bank, "Food", "10")),
         DomainError::WrongAccountKind {
             field: "category".into()
         }
@@ -192,6 +226,7 @@ fn rejects_invalid_budget_lines() {
         estimate: Estimate::Quantity {
             quantity,
             unit_price,
+            per: Vec::new(),
         },
         ..amount(kitchen, "Food", "0")
     };
@@ -220,7 +255,7 @@ fn a_link_stays_within_its_category() {
     let food = book
         .add_budget_line(amount(kitchen, "Food", "100"))
         .unwrap();
-    let payer = asset(&book, "Verein account");
+    let payer = asset(&book, "Bank account");
     let receipt = |lines| draft("Receipt", Entry::Expense { payer, lines });
 
     let wrong = book.save_txn(
@@ -307,7 +342,8 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("budget.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
 
     let kitchen = expense(store.book(), "Kitchen");
     let drinks = expense(store.book(), "General");
@@ -321,13 +357,14 @@ fn budget_lines_and_links_survive_saving_and_reopening() {
                 estimate: Estimate::Quantity {
                     quantity: 40,
                     unit_price: eur("12,50"),
+                    per: Vec::new(),
                 },
                 complete: true,
                 ..amount(drinks, "Crates", "0")
             })
         })
         .unwrap();
-    let payer = asset(store.book(), "Verein account");
+    let payer = asset(store.book(), "Bank account");
     store
         .change(|book| {
             book.save_txn(

@@ -6,12 +6,19 @@
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
 	import type { TicketSectionProps } from '../api';
-	import { columnsOf, isSheet, SHEET_EXTENSIONS, sheetOf, type Sheet } from './records';
+	import {
+		columnsOf,
+		columnsRead,
+		isSheet,
+		SHEET_EXTENSIONS,
+		sheetOf,
+		type Sheet
+	} from './records';
 	import SheetPanel from './SheetPanel.svelte';
 
 	let { ctx, proposeImport, setPanel }: TicketSectionProps = $props();
 
-	const columns = $derived(columnsOf(ctx.records));
+	const columns = $derived(columnsOf(ctx.records, ctx.ticketOrderIds));
 	let dragging = $state(false);
 	let path = $state<string | null>(null);
 	let sheet = $state<Sheet | null>(null);
@@ -37,7 +44,7 @@
 		sheet = null;
 		error = null;
 		try {
-			sheet = sheetOf(await ctx.readTable(next, [columns.tier, columns.order]));
+			sheet = sheetOf(await ctx.readTable(next, columnsRead(columns)), columns.orderIds);
 		} catch (e) {
 			if (!(e instanceof Error)) throw e;
 			error = e.message;
@@ -103,7 +110,7 @@
 {:else}
 	<div class="row">
 		<button type="button" class="link" title="Columns read" onclick={showColumns}>
-			Reads {columns.tier} · {columns.order}
+			Reads {columns.tier} · {columns.orderIds ? columns.order : 'no order IDs'}
 		</button>
 		<Button size="sm" icon="upload" onclick={choose}>Import sheet</Button>
 	</div>

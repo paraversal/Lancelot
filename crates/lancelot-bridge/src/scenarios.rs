@@ -11,16 +11,23 @@ use lancelot_service::api::ApiError;
 use rusqlite::Connection;
 use time::macros::date;
 
-use crate::common::{eur, mock};
+use crate::common::{eur, mock, two_accounts};
 
 /// The start screen with its recent events; nothing open. The state the bridge starts in.
 pub const START: &str = "start";
 /// Every scenario, for the error message and the tests.
-pub const ALL: &[&str] = &[START, "example", "empty", "conflict", "closed"];
+pub const ALL: &[&str] = &[
+    START,
+    "example",
+    "empty",
+    "conflict",
+    "no-order-ids",
+    "closed",
+];
 
-pub const EXAMPLE_FILE: &str = "sommerfest-2026.lancelot";
-const DAMAGED_FILE: &str = "winterfest-2025.lancelot";
-const LOCKED_FILE: &str = "sommerfest-2025.lancelot";
+pub const EXAMPLE_FILE: &str = "summer-festival-2026.lancelot";
+const DAMAGED_FILE: &str = "winter-festival-2025.lancelot";
+const LOCKED_FILE: &str = "summer-festival-2025.lancelot";
 
 fn store_error(e: StoreError) -> ApiError {
     ApiError::new("scenario", e.to_string())
@@ -28,6 +35,7 @@ fn store_error(e: StoreError) -> ApiError {
 
 fn details(name: &str) -> EventDetails {
     EventDetails {
+        currency: Default::default(),
         name: name.to_owned(),
         starts_on: Some(date!(2026 - 06 - 12)),
         ends_on: Some(date!(2026 - 06 - 14)),
@@ -37,8 +45,13 @@ fn details(name: &str) -> EventDetails {
 }
 
 fn example(path: &Path, name: &str) -> Result<Store, ApiError> {
-    let (mut store, _) =
-        Store::create(path, details(name), StoreOptions::default()).map_err(store_error)?;
+    let (mut store, _) = Store::create(
+        path,
+        details(name),
+        &two_accounts(),
+        StoreOptions::default(),
+    )
+    .map_err(store_error)?;
     mock::build(&mut store);
     Ok(store)
 }
@@ -55,6 +68,21 @@ fn tier(name: &str, price: &str, fee_bp: u32) -> TierDraft {
 
 /// Two imports of the ticket sheet, the second with an order gone: an open conflict.
 fn conflict(store: &mut Store) -> Result<(), ApiError> {
+    two_imports(
+        store,
+        ["import-1.ods", "import-2.ods"],
+        &["Ticket", "Order ID"],
+    )
+}
+
+/// The same sheets the other way round, read without their order IDs: Regular and Supporter
+/// have fewer tickets than before, a conflict on the sheet. (In the order of `conflict`, new
+/// sales would hide the cancelled ones.)
+fn no_order_ids(store: &mut Store) -> Result<(), ApiError> {
+    two_imports(store, ["import-2.ods", "import-1.ods"], &["Ticket"])
+}
+
+fn two_imports(store: &mut Store, files: [&str; 2], columns: &[&str]) -> Result<(), ApiError> {
     for draft in [
         tier("Early Bird", "25", 0),
         tier("Regular", "32", 250),
@@ -65,13 +93,13 @@ fn conflict(store: &mut Store) -> Result<(), ApiError> {
             .map_err(store_error)?;
     }
     let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/tickets");
-    for (file, day) in [("import-1.ods", 1), ("import-2.ods", 8)] {
+    for (file, day) in files.into_iter().zip([1, 8]) {
         let data =
             std::fs::read(fixtures.join(file)).map_err(|e| ApiError::new("io", e.to_string()))?;
         let date = date!(2026 - 06 - 01)
             .replace_day(day)
             .map_err(|e| ApiError::new("scenario", e.to_string()))?;
-        let columns = ["Ticket".to_owned(), "Order ID".to_owned()];
+        let columns: Vec<String> = columns.iter().map(|&c| c.to_owned()).collect();
         let table = read_table(file, &data, &columns, NumberFormat::De)
             .map_err(|e| ApiError::new("scenario", e.to_string()))?;
         store
@@ -116,17 +144,18 @@ pub fn load(service: &mut Service, dir: &Path, scenario: &str) -> Result<Option<
 
     // Opened once each, so the start screen lists them as recent events.
     let example_path = dir.join(EXAMPLE_FILE);
-    let mut main = example(&example_path, "Sommerfest 2026")?;
+    let mut main = example(&example_path, "Summer Festival 2026")?;
     match scenario {
         "conflict" => conflict(&mut main)?,
+        "no-order-ids" => no_order_ids(&mut main)?,
         "closed" => close(&mut main)?,
         _ => {}
     }
     drop(main);
     let damaged_path = dir.join(DAMAGED_FILE);
-    drop(example(&damaged_path, "Winterfest 2025")?);
+    drop(example(&damaged_path, "Winter Festival 2025")?);
     let locked_path = dir.join(LOCKED_FILE);
-    drop(example(&locked_path, "Sommerfest 2025")?);
+    drop(example(&locked_path, "Summer Festival 2025")?);
     for path in [&damaged_path, &locked_path, &example_path] {
         service.open_event(path)?;
     }
@@ -138,7 +167,11 @@ pub fn load(service: &mut Service, dir: &Path, scenario: &str) -> Result<Option<
     match scenario {
         START => {}
         "empty" => {
-            service.create_event(&dir.join("neues-fest.lancelot"), details("Neues Fest"))?;
+            service.create_event(
+                &dir.join("new-festival.lancelot"),
+                details("New Festival"),
+                &two_accounts(),
+            )?;
         }
         _ => {
             service.open_event(&example_path)?;

@@ -1,22 +1,26 @@
 <script lang="ts">
 	// One budget line (R-BUD-1): its category, description and estimate, as an amount or as
-	// quantity × unit price, and whether it is complete. Below, the receipt lines linked to it
+	// quantity × unit price, possibly times assumptions such as the guests expected (R-BUD-6), and
+	// whether it is complete. Below, the receipt lines linked to it
 	// (R-BUD-2), each opening its transaction in the ledger.
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
+	import type { AssumptionId } from '#lib/api/generated/AssumptionId.ts';
 	import type { BudgetLine } from '#lib/api/generated/BudgetLine.ts';
 	import type { BudgetLineDraft } from '#lib/api/generated/BudgetLineDraft.ts';
 	import type { Cents } from '#lib/api/generated/Cents.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
+	import Chip from '#lib/components/Chip.svelte';
 	import ChoiceField from '#lib/components/ChoiceField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
+	import { isOver } from '#lib/budget.ts';
 	import { formatAmount, formatDate } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -57,6 +61,8 @@
 	let amount = $state<Cents | null>(null);
 	let quantity = $state('');
 	let unitPrice = $state<Cents | null>(null);
+	/** The assumptions the quantity is multiplied by, in the order they were picked. */
+	let per = $state<AssumptionId[]>([]);
 	let complete = $state(false);
 	let costCentre = $state(0); // 0: none
 	const startsIn = (id: AccountId | null) =>
@@ -71,18 +77,67 @@
 			mode = 'quantity';
 			quantity = String(e.quantity);
 			unitPrice = e.unitPrice;
+			per = [...e.per];
 		} else if (e) amount = e.amount;
 	});
+	let amountInvalid = $state(false);
+	let unitPriceInvalid = $state(false);
+	const values = () =>
+		JSON.stringify([
+			category,
+			description,
+			mode,
+			amount,
+			amountInvalid,
+			quantity,
+			unitPrice,
+			per,
+			unitPriceInvalid,
+			complete,
+			costCentre
+		]);
+	const clean = values();
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
 	const count = $derived(/^\d+$/.test(quantity.trim()) ? Number(quantity.trim()) : null);
+	const picked = $derived(per.flatMap((id) => snapshot.assumptions.filter((a) => a.id === id)));
+	// A preview: the core works out the estimate that counts.
 	const total = $derived(
-		mode === 'amount' ? amount : count !== null && unitPrice !== null ? count * unitPrice : null
+		mode === 'amount'
+			? amount
+			: count !== null && unitPrice !== null
+				? picked.reduce((n, a) => n * a.value, count) * unitPrice
+				: null
 	);
+	const breakdown = $derived(
+		picked.length && count !== null && unitPrice !== null
+			? [
+					...(count === 1 ? [] : [String(count)]),
+					...picked.map((a) => String(a.value)),
+					formatAmount(unitPrice, format)
+				].join(' × ') + ' = '
+			: '= '
+	);
+
+	function toggle(id: AssumptionId) {
+		per = per.includes(id) ? per.filter((p) => p !== id) : [...per, id];
+		error = null;
+	}
 	const fieldError = (field: string) => (error?.field?.startsWith(field) ? error.message : null);
 
 	const figures = $derived(line ? snapshot.budget.lines.find((f) => f.line === line.id) : null);
+	const over = $derived(
+		!!line &&
+			!!figures &&
+			isOver(
+				snapshot.accounts.find((a) => a.id === line.category)?.kind === 'income'
+					? 'income'
+					: 'expense',
+				figures,
+				line.complete
+			)
+	);
 	const linked = $derived(
 		line
 			? snapshot.txns.flatMap((t) =>
@@ -103,11 +158,13 @@
 		}
 		if (count === null) return missing('estimate.quantity', 'enter a whole number');
 		if (unitPrice === null) return missing('estimate.unitPrice', 'enter a price');
-		return { ...shared, estimate: { type: 'quantity', quantity: count, unitPrice } };
+		return { ...shared, estimate: { type: 'quantity', quantity: count, unitPrice, per } };
 	}
 
 	async function save() {
 		error = null;
+		await amountsRead();
+		if (mode === 'amount' ? amountInvalid : unitPriceInvalid) return;
 		const d = draft();
 		if (!d) return;
 		try {
@@ -144,11 +201,13 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={line ? line.description : 'New budget line'} {onclose}>
+<Panel title={line ? line.description : 'New budget line'} {onclose} dirty={values() !== clean}>
 	{#if figures}
 		<div class="figures">
 			<div><span class="form-label">Estimate</span>{formatAmount(figures.estimate, format)}</div>
-			<div><span class="form-label">Actual</span>{formatAmount(figures.actual, format)}</div>
+			<div class:over>
+				<span class="form-label">Actual</span>{formatAmount(figures.actual, format)}
+			</div>
 			<div>
 				<span class="form-label">Forecast</span><strong
 					>{formatAmount(figures.forecast, format)}</strong
@@ -210,7 +269,12 @@
 				onchange={() => (error = null)}
 			/>
 			{#if mode === 'amount'}
-				<AmountField value={amount} {format} oninput={(v) => (amount = v)} />
+				<AmountField
+					value={amount}
+					{format}
+					bind:invalid={amountInvalid}
+					oninput={(v) => (amount = v)}
+				/>
 			{:else}
 				<div class="times">
 					<TextField
@@ -224,10 +288,26 @@
 						label="Unit price"
 						value={unitPrice}
 						{format}
+						bind:invalid={unitPriceInvalid}
 						oninput={(v) => (unitPrice = v)}
 					/>
 				</div>
-				{#if total !== null}<span class="hint">= {formatAmount(total, format)}</span>{/if}
+				{#if snapshot.assumptions.length}
+					<div class="per" role="group" aria-label="Times">
+						<span class="form-label">Times</span>
+						{#each snapshot.assumptions as a (a.id)}
+							<Chip
+								label={a.name}
+								count={a.value}
+								active={per.includes(a.id)}
+								onclick={() => toggle(a.id)}
+							/>
+						{/each}
+					</div>
+				{/if}
+				{#if total !== null}<span class="hint" data-testid="budget-line-total"
+						>{breakdown}{formatAmount(total, format)}</span
+					>{/if}
 			{/if}
 			{#if fieldError('estimate')}<span class="form-error">{fieldError('estimate')}</span>{/if}
 		</div>
@@ -288,6 +368,10 @@
 		gap: 4px;
 	}
 
+	.figures .over {
+		color: var(--color-attention);
+	}
+
 	.labelled {
 		display: flex;
 		flex-direction: column;
@@ -308,6 +392,13 @@
 	.x {
 		padding-bottom: 10px;
 		color: var(--color-ink-muted);
+	}
+
+	.per {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--spacing-2);
 	}
 
 	.hint {

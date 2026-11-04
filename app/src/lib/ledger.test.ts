@@ -2,16 +2,25 @@ import { describe, expect, it } from 'vitest';
 
 import type { EventSnapshot } from './api/generated/EventSnapshot';
 import example from './api/fixtures/example-event.json';
-import { byCategory, byDay, counts, matches, rows } from './ledger';
+import { byCategory, byDay, counterparties, counts, matches, rows } from './ledger';
 
 // The example event from the mockups, exported by the Rust tests.
 const snapshot = example as EventSnapshot;
 const all = rows(snapshot);
 const find = (title: string) => all.find((r) => r.title === title)!;
 
+describe('counterparties', () => {
+	it('lists each name once, most used first', () => {
+		const txns = ['Metro', 'Hoffmann', ' hoffmann ', null, '', 'Aldi'].map((counterparty) => ({
+			counterparty
+		}));
+		expect(counterparties(txns)).toEqual(['Hoffmann', 'Aldi', 'Metro']);
+	});
+});
+
 describe('rows', () => {
 	it('names who paid and what for', () => {
-		const metro = find('Großmarkt');
+		const metro = find('Wholesale market');
 		expect(metro.who).toBe('Cash box');
 		expect(metro.categories.map((c) => c.name)).toEqual(['Kitchen', 'General']);
 		expect(metro.flow).toBe('out');
@@ -29,18 +38,18 @@ describe('rows', () => {
 
 describe('a ticket refund', () => {
 	it('is money out, from whoever pays it', () => {
-		const [verein, refunds] = [1, 99];
+		const [bank, refunds] = [1, 99];
 		const txn: EventSnapshot['txns'][number] = {
 			...snapshot.txns[0],
 			kind: 'refund',
 			description: 'Refund 1 × Regular',
 			origin: { type: 'ticketRefund', cancellation: 1 },
-			who: verein,
+			who: bank,
 			flow: 'out',
 			needsReceipt: false,
 			lines: [
 				{ account: refunds, amount: 1600, budgetLine: null, costCentre: null },
-				{ account: verein, amount: -1600, budgetLine: null, costCentre: null }
+				{ account: bank, amount: -1600, budgetLine: null, costCentre: null }
 			]
 		};
 		const [row] = rows({
@@ -52,7 +61,7 @@ describe('a ticket refund', () => {
 			]
 		});
 		expect(row.flow).toBe('out');
-		expect(row.who).toBe('Verein account');
+		expect(row.who).toBe('Bank account');
 		expect(row.categories.map((c) => c.name)).toEqual(['Ticket refunds']);
 		expect(matches(row, 'income', '', 'de')).toBe(true);
 	});
@@ -66,8 +75,8 @@ describe('filters and search', () => {
 	it('searches titles, people, categories and amounts, all words required', () => {
 		const titles = (q: string) => all.filter((r) => matches(r, 'all', q, 'de')).map((r) => r.title);
 		expect(titles('anna')).toEqual(['Groceries', 'Change money', 'Reimbursement Anna']);
-		expect(titles('kitchen cash')).toEqual(['Großmarkt', 'Bakery']);
-		expect(titles('391,25')).toEqual(['Großmarkt']);
+		expect(titles('kitchen cash')).toEqual(['Wholesale market', 'Bakery']);
+		expect(titles('391,25')).toEqual(['Wholesale market']);
 		expect(titles('nothing like this')).toEqual([]);
 	});
 });
@@ -83,10 +92,10 @@ describe('grouping', () => {
 		const groups = byCategory(all, snapshot);
 		const kitchen = groups.find((g) => g.label === 'Kitchen')!;
 		expect(kitchen.total).toBe(210000);
-		const metro = kitchen.items.find((i) => i.row.title === 'Großmarkt')!;
+		const metro = kitchen.items.find((i) => i.row.title === 'Wholesale market')!;
 		expect(metro).toMatchObject({ amount: 34275, split: true });
 		const general = groups.find((g) => g.label === 'General' && g.account?.kind === 'expense')!;
-		expect(general.items.find((i) => i.row.title === 'Großmarkt')!.amount).toBe(4850);
+		expect(general.items.find((i) => i.row.title === 'Wholesale market')!.amount).toBe(4850);
 		expect(groups.at(-1)!.label).toBe('Transfers');
 		expect(groups.at(-1)!.items.map((i) => i.row.title)).toEqual([
 			'Reimbursement Clara',

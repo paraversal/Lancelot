@@ -132,7 +132,8 @@ fn records_survive_saving_and_are_logged() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("event.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let change = |changes| move |b: &mut Book| b.apply_plugin_changes("drinks".into(), changes);
 
     store
@@ -213,6 +214,7 @@ fn a_file_with_two_records_for_one_key_does_not_load() {
         closing_counts: Vec::new(),
         reconciliations: Vec::new(),
         budget_lines: Vec::new(),
+        assumptions: Vec::new(),
         tiers: Vec::new(),
         imports: Vec::new(),
         manual_sales: Vec::new(),

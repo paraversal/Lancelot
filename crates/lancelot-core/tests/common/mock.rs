@@ -130,7 +130,7 @@ pub fn build(t: &mut impl Target) -> Mock {
         Ok((centre, donations, drinks, deposit))
     });
     let b = t.book();
-    let (verein, cash) = (asset(b, "Verein account"), asset(b, "Cash box"));
+    let (bank, cash) = (asset(b, "Bank account"), asset(b, "Cash box"));
     let [tickets, other_in] = ["Tickets", "General"].map(|n| income(b, n));
     let [food, venue, tech, other, mobility] =
         ["Kitchen", "Venue", "Tech", "General", "Mobility"].map(|n| expense(b, n));
@@ -142,7 +142,9 @@ pub fn build(t: &mut impl Target) -> Mock {
     let [anna, malte, bob, clara] = ["Anna", "Malte", "Bob", "Clara"].map(|n| t.person(n));
 
     // The budget. The mockups have none, so it is made up: some lines over, some under, some
-    // complete, and a few receipts left unbudgeted (Deposit, cups, cables, decoration).
+    // complete, and a few receipts left unbudgeted (Deposit, cups, cables, decoration). The
+    // ticket sales scale with the guests expected (R-BUD-6).
+    let guests = t.edit(|b| b.add_assumption("Guests", 260));
     let mut plan = |category, description: &str, estimate, complete| {
         t.budget(BudgetLineDraft {
             cost_centre: tag(category),
@@ -156,8 +158,14 @@ pub fn build(t: &mut impl Target) -> Mock {
     let times = |quantity, text| Estimate::Quantity {
         quantity,
         unit_price: eur(text),
+        per: Vec::new(),
     };
-    let b_tickets = plan(tickets, "Ticket sales", times(260, "25"), true);
+    let per_guest = Estimate::Quantity {
+        quantity: 1,
+        unit_price: eur("25"),
+        per: vec![guests],
+    };
+    let b_tickets = plan(tickets, "Ticket sales", per_guest, true);
     let b_bar = plan(donations, "Bar donations", amount("700"), false);
     let b_hall = plan(venue, "Hall rent", amount("1.800"), true);
     let b_catering = plan(food, "Catering", amount("1.100"), true);
@@ -181,7 +189,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     let expense_by = |payer, lines: Vec<SplitLine>| Entry::Expense { payer, lines };
     let settle = |person, amount: &str, direction| Entry::Settle {
         person,
-        account: verein,
+        account: bank,
         amount: eur(amount),
         direction,
     };
@@ -189,7 +197,7 @@ pub fn build(t: &mut impl Target) -> Mock {
     // Income
     t.save(
         "Ticket sheet",
-        income_to(verein, to(b_tickets)(tickets, "6.227,50")),
+        income_to(bank, to(b_tickets)(tickets, "6.227,50")),
     );
     t.save(
         "Tickets, paid to Bob",
@@ -209,9 +217,9 @@ pub fn build(t: &mut impl Target) -> Mock {
     }];
     for (id, (name, taken, returned, left_over, logged, cost, donation)) in [
         ("Club-Mate 0,5", 240, 96, 4, 138, 115, 250),
-        ("Pils 0,33", 480, 312, 0, 165, 95, 200),
-        ("Radler 0,33", 120, 72, 2, 45, 95, 200),
-        ("Apfelschorle 1,0", 72, 48, 2, 22, 140, 300),
+        ("Lager 0,33", 480, 312, 0, 165, 95, 200),
+        ("Shandy 0,33", 120, 72, 2, 45, 95, 200),
+        ("Apple spritzer 1,0", 72, 48, 2, 22, 140, 300),
         ("Water 1,0", 96, 70, 6, 20, 60, 100),
     ]
     .into_iter()
@@ -240,7 +248,7 @@ pub fn build(t: &mut impl Target) -> Mock {
         ..draft(
             "Hoffmann drinks",
             expense_by(
-                verein,
+                bank,
                 vec![
                     to(b_drinks)(drinks, "420"),
                     SplitLine {
@@ -255,16 +263,12 @@ pub fn build(t: &mut impl Target) -> Mock {
 
     // Expenses with receipts
     for (description, payer, lines) in [
-        ("Hall rent", verein, vec![to(b_hall)(venue, "1.800")]),
-        ("PA rental", verein, vec![to(b_pa)(tech, "500")]),
-        ("Catering", verein, vec![to(b_catering)(food, "1.098,50")]),
+        ("Hall rent", bank, vec![to(b_hall)(venue, "1.800")]),
+        ("PA rental", bank, vec![to(b_pa)(tech, "500")]),
+        ("Catering", bank, vec![to(b_catering)(food, "1.098,50")]),
+        ("Event insurance", bank, vec![to(b_insurance)(other, "225")]),
         (
-            "Event insurance",
-            verein,
-            vec![to(b_insurance)(other, "225")],
-        ),
-        (
-            "Großmarkt",
+            "Wholesale market",
             cash,
             vec![to(b_groceries)(food, "342,75"), split(other, "48,50")],
         ),
@@ -310,10 +314,10 @@ pub fn build(t: &mut impl Target) -> Mock {
     // Counted 410,00 € against 412,90 € in the books.
     t.count(cash, eur("410"));
 
-    // The Verein account's statement agrees with the books.
-    let verein = asset(t.book(), "Verein account");
-    let movement = t.book().ledger().balance(verein);
-    t.checkpoint(verein, june(30), movement);
+    // The Bank account's statement agrees with the books.
+    let bank = asset(t.book(), "Bank account");
+    let movement = t.book().ledger().balance(bank);
+    t.checkpoint(bank, june(30), movement);
 
     Mock {
         anna,

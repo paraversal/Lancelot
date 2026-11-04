@@ -134,3 +134,21 @@ export function byCategory(visible: Row[], snapshot: EventSnapshot): Group[] {
 	}
 	return [...groups, moved].filter((g) => g.items.length);
 }
+
+/**
+ * The counterparties of a file's entries, most used first, each once however it was capitalised.
+ * Spelling one the same way matters: the Stock and sales invoice check goes by the name.
+ */
+export function counterparties(txns: readonly { counterparty: string | null }[]): string[] {
+	const seen = new Map<string, { name: string; count: number }>();
+	for (const { counterparty } of txns) {
+		const name = counterparty?.trim();
+		if (!name) continue;
+		const known = seen.get(name.toLowerCase());
+		if (known) known.count++;
+		else seen.set(name.toLowerCase(), { name, count: 1 });
+	}
+	return [...seen.values()]
+		.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+		.map((c) => c.name);
+}

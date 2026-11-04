@@ -51,7 +51,7 @@ A plugin that is switched off for the event shows none of these, and its records
 
 ### What the event holds
 
-`closed`, `format`, `costCentres`, `accounts`, `txns`, `budget`, `tiers` and `figuresOf(centre)` read the event as it is now. They are reactive, so read them in `$derived`. People's bank details and ticket orders are left out on purpose.
+`closed`, `format`, `costCentres`, `accounts`, `txns`, `budget`, `tiers` and `figuresOf(centre)` read the event as it is now. They are reactive, so read them in `$derived`. People's bank details and ticket orders are left out on purpose. `ticketOrderIds` says only whether the event's ticket imports have order IDs, or `null` before the first one with tickets: a ticket source builds its batch the same way, since one of the other kind is refused.
 
 A closed event refuses changes, so hide what would change it when `ctx.closed` holds.
 
@@ -83,7 +83,7 @@ A transfer takes `from` and `to` instead of `counterparty` and `lines`. A settle
 
 ### Setting up categories
 
-`createCostCentre`, `createCategory` and `setCategoryCentre` add to the event's setup, for a button such as "Set up Drinks".
+`createCostCentre`, `createCategory` and `setCategoryCentre` add to the event's setup, as Stock and sales does when it adds a cost centre for goods.
 
 ### Reading a file
 
@@ -109,7 +109,9 @@ for (const { row, cells } of table.rows) {
 
 ### Pulling from a provider
 
-Declare `dataSource` on the plugin. The app draws the form in Settings, keeps the details on this computer and the token in the keychain, and makes the request in Rust. `ctx.pull(fields)` returns only those fields, so a plugin never sees the token. `ctx.dataSource` is the source's name, or `null` until it is set up. A provider's details never go in the repository or an event file.
+Declare `dataSource` on the plugin. The app draws the form in Settings, keeps the details on this computer and the token in the keychain, and makes the request in Rust. `ctx.pull(fields)` returns only those fields, so a plugin never sees the token. `ctx.dataSource` is the source's name, or `null` until it is set up.
+
+A field marked `optional: true` may be left blank in Settings, when the provider doesn't have it, and missing from an item. An item without a required field is a problem and isn't read. One without an optional field is read without it, and listed in `missing` in case the plugin needs it after all. `pulled.fields` says which fields the source has, so a plugin can tell a provider without the field from items that lack it. Ticket API's Order field works this way. A provider's details never go in the repository or an event file.
 
 ## Your own figures
 

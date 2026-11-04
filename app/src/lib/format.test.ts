@@ -6,9 +6,12 @@ import {
 	formatAmount,
 	formatDate,
 	formatDateRange,
+	formatPlain,
 	formatSize,
-	formatTimestamp
+	formatTimestamp,
+	setEventCurrency
 } from './format';
+import type { Currency } from './api/generated/Currency';
 import type { NumberFormat } from './api/generated/NumberFormat';
 import type { SignStyle } from './api/generated/SignStyle';
 
@@ -16,8 +19,9 @@ describe('formatAmount', () => {
 	it('matches the shared fixture', () => {
 		expect(amountCases.length).toBeGreaterThanOrEqual(100);
 		for (const c of amountCases) {
+			const currency = ('currency' in c ? c.currency : 'EUR') as Currency;
 			expect(
-				formatAmount(c.cents, c.format as NumberFormat, c.sign as SignStyle),
+				formatAmount(c.cents, c.format as NumberFormat, c.sign as SignStyle, currency),
 				String(c.cents)
 			).toBe(c.text);
 		}
@@ -26,6 +30,17 @@ describe('formatAmount', () => {
 	it('defaults to a minus for negative amounts only', () => {
 		expect(formatAmount(-31240, 'de')).toBe('−312,40 €');
 		expect(formatAmount(31240, 'en')).toBe('€312.40');
+	});
+
+	it('uses the currency of the open event', () => {
+		setEventCurrency('USD');
+		expect(formatAmount(31240, 'en')).toBe('$312.40');
+		setEventCurrency('EUR');
+	});
+
+	it('leaves the symbol out when asked to', () => {
+		expect(formatPlain(-123456, 'de')).toBe('−1.234,56');
+		expect(formatPlain(123456, 'en')).toBe('1,234.56');
 	});
 });
 

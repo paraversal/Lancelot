@@ -43,13 +43,13 @@ pub use ledger::{
     PersonTotals, ReconciliationStatus,
 };
 pub use model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
-    BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId, ClosingCount, CostCentre,
-    CostCentreId, Estimate, Event, EventDetails, Flow, ImportId, Line, ManualSaleId, OpenItem,
-    Origin, Person, PluginRecordId, Reconciliation, ReconciliationId, Role, TierId, Txn, TxnId,
-    TxnKind,
+    Account, AccountDraft, AccountId, AccountKind, AssetType, Assumption, AssumptionId, Attachment,
+    AttachmentId, BlockerOverride, BudgetLine, BudgetLineDraft, BudgetLineId, CancellationId,
+    ClosingCount, CostCentre, CostCentreId, Estimate, Event, EventDetails, Flow, ImportId, Line,
+    ManualSaleId, OpenItem, Origin, Person, PluginRecordId, Reconciliation, ReconciliationId, Role,
+    TierId, Txn, TxnId, TxnKind,
 };
-pub use money::{Cents, MoneyError};
+pub use money::{Cents, Currency, MoneyError};
 pub use payout::{PayoutRow, Payouts, RepaymentRow, payouts, payouts_csv};
 pub use plugin::{PluginChange, PluginRecord, PluginScope};
 pub use sales::{Profitability, SalesPoint, TierBreakEven, TierSales};
@@ -62,7 +62,7 @@ pub use store::{
 pub use tickets::{
     BatchTicket, Cancellation, CancellationDraft, CancellationEdit, CancellationSource,
     CancellationView, ConflictMatch, ImportDeletion, ImportPreview, ManualSale, ManualSaleDraft,
-    OrderConflict, RefundTerms, RemovedTickets, Resolution, TicketBatch, TicketImport,
+    NO_ORDER, OrderConflict, RefundTerms, RemovedTickets, Resolution, TicketBatch, TicketImport,
     TicketSettings, TicketShare, TicketTotals, Tickets, Tier, TierDraft, ticket_share,
 };
 

@@ -75,7 +75,7 @@ fn the_three_formats_read_the_same_tickets_and_nothing_else() {
         assert_eq!(s.tickets, ods.tickets, "{other}");
     }
     assert_eq!(ods.tickets.len(), 6);
-    assert_eq!(ods.tickets[0].order, "4701");
+    assert_eq!(ods.tickets[0].order.as_deref(), Some("4701"));
     assert_eq!(ods.tickets[0].tier, "Early Bird");
     // Names and e-mail addresses are in the sheet but never read (R-TKT-17).
     let debug = format!("{ods:?}");
@@ -87,8 +87,8 @@ fn an_import_generates_ticket_income_net_of_fees() {
     let (mut book, t) = with_tiers();
     import(&mut book, "import-1.ods", 1);
 
-    // R-TKT-6: one income per tier to the Verein account; the fee is an expense in it.
-    let verein = asset(&book, "Verein account");
+    // R-TKT-6: one income per tier to the Bank account; the fee is an expense in it.
+    let bank = asset(&book, "Bank account");
     let tickets = role(&book, Role::Tickets);
     let fees = role(&book, Role::TicketFees);
     assert_eq!(book.account(fees).unwrap().name, "Ticket fees");
@@ -106,13 +106,13 @@ fn an_import_generates_ticket_income_net_of_fees() {
         [
             (tickets, -eur("96")),
             (fees, eur("2,40")),
-            (verein, eur("93,60"))
+            (bank, eur("93,60"))
         ]
     );
     assert_eq!(income_of(&book, t.early).unwrap().lines.len(), 2);
 
     let ledger = book.ledger();
-    assert_eq!(ledger.balance(verein), eur("188,60"));
+    assert_eq!(ledger.balance(bank), eur("188,60"));
     assert_eq!(ledger.balance(tickets), eur("191"));
     assert_eq!(ledger.balance(fees), eur("2,40"));
     assert_eq!(ledger.result(), eur("188,60"));
@@ -177,7 +177,7 @@ fn a_reimport_shows_its_changes_and_replaces_the_income() {
     assert_eq!(txn_amount(&regular.lines), eur("128"));
     assert_eq!(sold(&book, t.supporter).gross, eur("90"));
     assert_eq!(
-        book.ledger().balance(asset(&book, "Verein account")),
+        book.ledger().balance(asset(&book, "Bank account")),
         eur("264,80")
     );
 
@@ -233,7 +233,7 @@ fn ticket_income_cannot_be_changed_by_hand() {
     import(&mut book, "import-1.ods", 1);
     let id = income_of(&book, t.early).unwrap().id;
     let entry = Entry::Income {
-        destination: asset(&book, "Verein account"),
+        destination: asset(&book, "Bank account"),
         lines: vec![split(role(&book, Role::Tickets), "60")],
     };
     assert_eq!(
@@ -355,7 +355,7 @@ fn a_batch_needs_a_source_and_every_order() {
         Some("source")
     );
     let mut no_order = good;
-    no_order.tickets[0].order = " ".into();
+    no_order.tickets[0].order = Some(" ".into());
     assert_eq!(
         book.import_tickets(&no_order, june(1), now())
             .unwrap_err()
@@ -388,7 +388,8 @@ fn tickets_survive_saving_and_reopening() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let regular = store
         .change(|book| book.add_tier(tier("Regular", "32", 250)))
         .unwrap();
@@ -449,7 +450,8 @@ fn tickets_survive_saving_and_reopening() {
 fn imported_file(dir: &TempDir) -> (std::path::PathBuf, Store) {
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     store
         .change(|book| book.add_tier(tier("Early Bird", "25", 0)))
         .unwrap();
@@ -673,7 +675,7 @@ mod properties {
                 .iter()
                 .map(|(order, tier)| BatchTicket {
                     tier: names[*tier].into(),
-                    order: order.to_string(),
+                    order: Some(order.to_string()),
                 })
                 .collect(),
         }
@@ -681,7 +683,7 @@ mod properties {
 
     proptest! {
         /// After any series of imports with any prices and fees, the ticket income is exactly
-        /// the figures: Verein gets the net, Tickets the gross, fees the rest, and every
+        /// the figures: the bank account gets the net, Tickets the gross, fees the rest, and every
         /// balance still sums to zero (R-TKT-6, R-TKT-10, R-COR-2).
         #[test]
         fn ticket_income_matches_the_figures(
@@ -704,7 +706,7 @@ mod properties {
             let total = book.tickets().total;
             let ledger = book.ledger();
             prop_assert_eq!(raw_sum(&book), 0);
-            prop_assert_eq!(ledger.balance(asset(&book, "Verein account")), total.net);
+            prop_assert_eq!(ledger.balance(asset(&book, "Bank account")), total.net);
             prop_assert_eq!(ledger.balance(role(&book, Role::Tickets)), total.gross);
             let fees = book.account_by_role(Role::TicketFees).map_or(Cents::ZERO, |a| ledger.balance(a.id));
             prop_assert_eq!(fees, total.fees);
@@ -720,6 +722,7 @@ mod properties {
                 closing_counts: Vec::new(),
                 reconciliations: Vec::new(),
                 budget_lines: Vec::new(),
+                assumptions: Vec::new(),
                 tiers: book.tiers().cloned().collect(),
                 imports: book.ticket_imports().cloned().collect(),
                 manual_sales: Vec::new(),
@@ -868,19 +871,19 @@ fn a_refund_keeps_the_ticket_sold_and_books_negative_income() {
         (eur("96"), eur("2,40"), eur("32"), eur("61,60"))
     );
 
-    let verein = asset(&book, "Verein account");
+    let bank = asset(&book, "Bank account");
     let refunds = role(&book, Role::TicketRefunds);
     assert_eq!(book.account(refunds).unwrap().name, "Ticket refunds");
     assert_eq!(book.account(refunds).unwrap().kind, AccountKind::Income);
     // Negative income, shown as such.
     assert_eq!(book.ledger().balance(refunds), -eur("32"));
-    assert_eq!(book.ledger().balance(verein), eur("61,60"));
+    assert_eq!(book.ledger().balance(bank), eur("61,60"));
     assert_eq!(book.ledger().result(), eur("61,60"));
     assert_eq!(raw_sum(&book), 0);
 
     let view = &book.tickets().cancellations[0];
     assert_eq!((view.per_ticket, view.refund), (eur("16"), eur("32")));
-    assert_eq!(view.payer, Some(verein));
+    assert_eq!(view.payer, Some(bank));
     let txn = book.txn(view.txn.unwrap()).unwrap();
     assert_eq!(txn.date, june(20));
     assert_eq!(txn.description, "Refund 2 × Regular");
@@ -906,7 +909,7 @@ fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
     assert_eq!(view.txn.kind, TxnKind::Refund);
     assert_eq!(view.flow, Flow::Out);
     assert!(!view.needs_receipt);
-    assert_eq!(view.who, Some(asset(&book, "Verein account")));
+    assert_eq!(view.who, Some(asset(&book, "Bank account")));
     // Ticket income stays income, and shows with its fee among the splits.
     let income = snapshot
         .txns
@@ -917,7 +920,7 @@ fn a_refund_is_its_own_kind_and_shows_who_pays_it() {
     let Some(Entry::Income { destination, lines }) = &income.entry else {
         panic!("{:?}", income.entry);
     };
-    assert_eq!(*destination, asset(&book, "Verein account"));
+    assert_eq!(*destination, asset(&book, "Bank account"));
     assert_eq!(lines[0].amount, income.amount);
     assert_eq!(lines.len(), 2);
 }
@@ -1207,7 +1210,7 @@ fn conflicts_keep_the_event_from_closing_until_accepted() {
     book.close(
         vec![BlockerOverride {
             item,
-            note: "the Verein is checking".into(),
+            note: "the association is checking".into(),
         }],
         now(),
     )
@@ -1223,7 +1226,8 @@ fn cancellations_survive_saving_and_stay_out_of_the_change_log() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let regular = store
         .change(|book| book.add_tier(tier("Regular", "32", 250)))
         .unwrap();
@@ -1302,7 +1306,8 @@ fn a_file_with_a_cancellation_of_tickets_it_never_had_does_not_open() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("tickets.lancelot");
     let details = new_book().event().details.clone();
-    let (mut store, _) = Store::create(&path, details, StoreOptions::default()).unwrap();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
     let regular = store
         .change(|book| book.add_tier(tier("Regular", "32", 0)))
         .unwrap();
@@ -1374,7 +1379,7 @@ mod conflict_properties {
                 .account_by_role(role)
                 .map_or(Cents::ZERO, |a| ledger.balance(a.id));
             prop_assert_eq!(raw_sum(&book), 0);
-            prop_assert_eq!(ledger.balance(asset(&book, "Verein account")), total.net);
+            prop_assert_eq!(ledger.balance(asset(&book, "Bank account")), total.net);
             prop_assert_eq!(of(Role::Tickets), total.gross);
             prop_assert_eq!(of(Role::TicketFees), total.fees);
             prop_assert_eq!(of(Role::TicketRefunds), -total.refunds);
@@ -1392,6 +1397,7 @@ mod conflict_properties {
                 closing_counts: Vec::new(),
                 reconciliations: Vec::new(),
                 budget_lines: Vec::new(),
+                assumptions: Vec::new(),
                 tiers: book.tiers().cloned().collect(),
                 imports: book.ticket_imports().cloned().collect(),
                 manual_sales: Vec::new(),
@@ -1483,10 +1489,10 @@ fn the_ticket_account_receives_the_sheet_and_is_needed_to_import() {
     );
 
     // The income moves with the setting.
-    let verein = asset(&book, "Verein account");
-    book.set_ticket_account(Some(verein)).unwrap();
+    let bank = asset(&book, "Bank account");
+    book.set_ticket_account(Some(bank)).unwrap();
     assert_eq!(book.ledger().balance(cash), Cents::ZERO);
-    assert_eq!(book.ledger().balance(verein), net);
+    assert_eq!(book.ledger().balance(bank), net);
     let kitchen = expense(&book, "Kitchen");
     assert_eq!(
         book.set_ticket_account(Some(kitchen)).unwrap_err().field(),
@@ -1523,4 +1529,170 @@ fn a_manual_sale_can_go_into_an_account() {
     })
     .unwrap();
     assert_eq!(book.ledger().balance(cash), eur("32"));
+}
+
+// --- sheets without order IDs -----------------------------------------------------------------
+
+/// A sheet with a tier column alone: each name is one ticket.
+fn tier_sheet(name: &str, tiers: &[&str]) -> TicketBatch {
+    let mut text = String::from("Ticket\n");
+    for tier in tiers {
+        text.push_str(&format!("{tier}\n"));
+    }
+    let columns = ["Ticket".to_owned()];
+    TicketBatch::from_table(read_table(name, text.as_bytes(), &columns, NumberFormat::De).unwrap())
+}
+
+fn import_tiers(book: &mut Book, day: u8, tiers: &[&str]) -> Result<ImportId, DomainError> {
+    let sheet = tier_sheet(&format!("tickets-{day}.csv"), tiers);
+    book.import_tickets(&sheet, june(day), now())
+}
+
+#[test]
+fn a_sheet_without_order_ids_counts_per_tier() {
+    let (mut book, t) = with_tiers();
+    let sheet = tier_sheet("tickets.csv", &["Regular", "Regular", "Early Bird", ""]);
+    assert!(sheet.tickets.iter().all(|t| t.order.is_none()));
+    assert_eq!(sheet.tickets.len(), 3);
+    import_tiers(&mut book, 1, &["Regular", "Regular", "Early Bird"]).unwrap();
+    assert_eq!(book.tickets().order_ids, Some(false));
+    assert_eq!(sold(&book, t.regular).sold, 2);
+    assert_eq!(sold(&book, t.early).sold, 1);
+    assert!(income_of(&book, t.regular).is_some());
+}
+
+#[test]
+fn without_order_ids_a_tier_with_fewer_tickets_is_a_conflict() {
+    let (mut book, t) = with_tiers();
+    import_tiers(
+        &mut book,
+        1,
+        &["Regular", "Regular", "Regular", "Early Bird"],
+    )
+    .unwrap();
+    // Regular loses one while Early Bird sells more: only the drop is a conflict, and the sale
+    // in another tier isn't offered as a changed tier.
+    import_tiers(
+        &mut book,
+        2,
+        &["Regular", "Regular", "Early Bird", "Early Bird"],
+    )
+    .unwrap();
+    assert_eq!(conflict_lines(&book), [(NO_ORDER.into(), t.regular, 1)]);
+    assert!(book.tickets().conflicts[0].added.is_empty());
+
+    book.resolve_conflict(NO_ORDER, t.regular, refund(1, 10_000))
+        .unwrap();
+    assert!(book.tickets().conflicts.is_empty());
+    let f = sold(&book, t.regular);
+    assert_eq!((f.sheet, f.cancelled, f.sold), (2, 1, 3));
+}
+
+#[test]
+fn without_order_ids_a_new_sale_hides_a_cancellation_in_the_same_tier() {
+    // The limit of a sheet without order IDs: one ticket gone and one new is the same count.
+    let (mut book, _) = with_tiers();
+    import_tiers(&mut book, 1, &["Regular", "Regular"]).unwrap();
+    import_tiers(&mut book, 2, &["Regular", "Regular"]).unwrap();
+    assert!(book.tickets().conflicts.is_empty());
+}
+
+#[test]
+fn without_order_ids_a_cancellation_names_the_tier_alone() {
+    let (mut book, t) = with_tiers();
+    import_tiers(&mut book, 1, &["Regular", "Regular"]).unwrap();
+    let draft = CancellationDraft {
+        source: CancellationSource::Order {
+            order: NO_ORDER.into(),
+            tier: t.regular,
+        },
+        count: 1,
+        terms: terms(5000),
+        note: None,
+    };
+    let id = book.add_cancellation(draft).unwrap();
+    assert_eq!(sold(&book, t.regular).refunds, eur("16"));
+
+    // The sheet then has one fewer: the cancellation is offered to match it.
+    import_tiers(&mut book, 2, &["Regular"]).unwrap();
+    let removed = &book.tickets().conflicts[0].removed[0];
+    assert_eq!(removed.matches[0].cancellation, id);
+}
+
+#[test]
+fn an_event_takes_imports_of_one_kind_until_they_are_deleted() {
+    let (mut book, _) = with_tiers();
+    assert_eq!(book.tickets().order_ids, None);
+    // A sheet without tickets fits either kind and decides nothing.
+    import_tiers(&mut book, 1, &[]).unwrap();
+    assert_eq!(book.tickets().order_ids, None);
+
+    let with_ids = sheet("import-1.ods");
+    let first = book.import_tickets(&with_ids, june(2), now()).unwrap();
+    assert_eq!(book.tickets().order_ids, Some(true));
+
+    let without = tier_sheet("tickets.csv", &["Regular"]);
+    assert!(book.preview_import(&without, june(3)).order_ids_differ);
+    assert!(!book.preview_import(&with_ids, june(3)).order_ids_differ);
+    assert_eq!(
+        book.import_tickets(&without, june(3), now()),
+        Err(DomainError::OrderIdsDiffer)
+    );
+
+    book.delete_import(first).unwrap();
+    assert_eq!(book.tickets().order_ids, None);
+    book.import_tickets(&without, june(3), now()).unwrap();
+    assert_eq!(
+        book.import_tickets(&with_ids, june(4), now()),
+        Err(DomainError::OrderIdsDiffer)
+    );
+}
+
+#[test]
+fn a_batch_has_an_order_on_every_ticket_or_on_none() {
+    let (mut book, _) = with_tiers();
+    let mut mixed = sheet("import-1.ods");
+    mixed.tickets[1].order = None;
+    assert_eq!(
+        book.import_tickets(&mixed, june(1), now())
+            .unwrap_err()
+            .field(),
+        Some("order")
+    );
+    let mut mixed = tier_sheet("tickets.csv", &["Regular", "Regular"]);
+    mixed.tickets[1].order = Some("4711".into());
+    assert_eq!(
+        book.import_tickets(&mixed, june(1), now())
+            .unwrap_err()
+            .field(),
+        Some("order")
+    );
+}
+
+#[test]
+fn a_sheet_without_order_ids_survives_saving_and_reopening() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("tickets.lancelot");
+    let details = new_book().event().details.clone();
+    let (mut store, _) =
+        Store::create(&path, details, &two_accounts(), StoreOptions::default()).unwrap();
+    let regular = store
+        .change(|book| book.add_tier(tier("Regular", "32", 250)))
+        .unwrap();
+    store
+        .import_tickets(&tier_sheet("a.csv", &["Regular", "Regular"]), june(1))
+        .unwrap();
+    store
+        .import_tickets(&tier_sheet("b.csv", &["Regular"]), june(2))
+        .unwrap();
+    store
+        .change(|book| book.resolve_conflict(NO_ORDER, regular, correction(1)))
+        .unwrap();
+    let book = store.book().clone();
+    drop(store);
+
+    let (reopened, report) = Store::open(&path, StoreOptions::default()).unwrap();
+    assert!(report.is_clean(), "{report:?}");
+    assert_eq!(reopened.book(), &book);
+    assert_eq!(reopened.book().tickets().order_ids, Some(false));
 }

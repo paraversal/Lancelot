@@ -7,6 +7,12 @@ import type { TierFigures } from './api/generated/TierFigures';
 import type { Tickets } from './api/generated/Tickets';
 
 /**
+ * Where tickets of the sheet belong: their order, or the sheet itself when its rows have no order
+ * ID. The core keeps those under an empty order.
+ */
+export const orderName = (order: string) => (order === '' ? 'Sheet' : `Order ${order}`);
+
+/**
  * Income typed into the Tickets category by hand. The sales don't know it, but it is in the
  * category's balance, so the Tickets page shows it to add up with the rest of the app.
  */

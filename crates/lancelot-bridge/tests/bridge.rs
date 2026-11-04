@@ -60,7 +60,7 @@ fn it_starts_with_recent_events_and_nothing_open() {
         .iter()
         .map(|r| r["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names[0], "Sommerfest 2026");
+    assert_eq!(names[0], "Summer Festival 2026");
     assert_eq!(names.len(), 3);
 }
 
@@ -95,6 +95,19 @@ fn the_conflict_scenario_has_an_open_conflict() {
 }
 
 #[test]
+fn the_no_order_ids_scenario_has_a_conflict_per_tier() {
+    let (_dir, mut bridge) = bridge();
+    reset(&mut bridge, "no-order-ids");
+    let (_, open) = invoke(&mut bridge, "event_current", json!({}));
+    let tickets = &open["snapshot"]["tickets"];
+    assert_eq!(tickets["orderIds"], json!(false));
+    let conflicts = tickets["conflicts"].as_array().unwrap();
+    assert_eq!(conflicts.len(), 1, "{conflicts:?}");
+    assert_eq!(conflicts[0]["order"], "");
+    assert_eq!(conflicts[0]["removed"].as_array().unwrap().len(), 2);
+}
+
+#[test]
 fn the_closed_scenario_is_closed() {
     let (_dir, mut bridge) = bridge();
     reset(&mut bridge, "closed");
@@ -120,8 +133,8 @@ fn the_damaged_and_the_locked_file_are_refused_as_in_the_app() {
             .unwrap()["path"]
             .clone()
     };
-    let damaged = path("Winterfest 2025");
-    let locked = path("Sommerfest 2025");
+    let damaged = path("Winter Festival 2025");
+    let locked = path("Summer Festival 2025");
     let (status, error) = invoke(&mut bridge, "event_open", json!({ "path": damaged }));
     assert_eq!((status, error["code"].as_str()), (400, Some("damaged")));
     assert!(error["report"]["issues"].is_array());

@@ -4,13 +4,12 @@ Status: v0.11. Phases 1 and 2 are built, and most of what's left of them needs a
 
 ## Next step
 
-First try the data sources in the desktop app with a real provider and a token in the keychain, which hasn't been done yet. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`), and entering it freezes the file format again. The Budget screen still needs its design (M6). Importing drink sales from a file (M11) follows once there is a sample of the export. Longer-term changes are in [future.md](future.md).
+First try the data sources in the desktop app with a real provider and a token in the keychain, which hasn't been done yet. Then run the next event in parallel with Excel: it is both the M5 parallel run and the Phase 2 exit (`v0.2.0`), and entering it freezes the file format again. Importing drink sales from a file (M11) follows once there is a sample of the export. Longer-term changes are in [future.md](future.md).
 
 ## Still open
 
 - [ ] **Parallel run** with the Excel sheet at the next event (M5). A real event is settled with Lancelot and its final balance matches Excel to the cent. Tag `v0.1.0`.
 - [ ] **Phase 2 exit:** the next event runs with ticket imports, a budget and a Drinks P&L, and Excel is no longer needed. Tag `v0.2.0`.
-- [ ] **Design the Budget screen** in `UI.fig`, and match the page to it (M6).
 - [ ] Try the data sources with a real provider.
 - [ ] Enter a stack of receipts by keyboard: the 30–40 receipts of a past event in under 30 minutes (M3's exit test, yours to try).
 - [ ] Click through the native dialogs and menu in the app (M2).
@@ -20,7 +19,6 @@ First try the data sources in the desktop app with a real provider and a token i
 - **M11 · Drink sales import.** The pull from a data source is done, with a preview, name matching and only per-product totals (R-DRK-6). Importing from a file is left, and needs a sample of the drinks app's export.
 - **M12 · SEPA.** Export the payout list as pain.001 XML (R-PER-6).
 - **M13 · Polished reports.** A typeset settlement PDF that follows the design system.
-- **User manual.** How the event's money is modelled (accounts, people, counts) and how to run an event from opening count to closing, for treasurers who did not build it.
 
 ## Open decisions and dependencies
 
@@ -28,7 +26,7 @@ First try the data sources in the desktop app with a real provider and a token i
 | --------------------------------------------- | ------------ | ------ |
 | Date of the next event: not soon, no deadline | M5           | you    |
 | Apple Developer account for signing           | after v0.1.0 | you    |
-| Sale date column in the ticket sheet          | M8           | Verein |
+| Sale date column in the ticket sheet          | M8           | Association |
 | A real (anonymised) ticket sheet as a fixture | M7           | you    |
 
 ## How we work
@@ -69,11 +67,15 @@ fixtures/                  ticket sheets (.ods), receipts, format cases; the sam
 
 ### Phase 2
 
-- **M6 · Budget and forecast.** Budget lines, plan vs actual, the forecast, the Budget page and the budget in the Overview and report (R-BUD-1 to R-BUD-5, R-SET-2). Only the design is left.
+- **M6 · Budget and forecast.** Budget lines, plan vs actual, the forecast, the Budget page and the budget in the Overview and report, and a page that follows its design (R-BUD-1 to R-BUD-5, R-SET-2).
 - **M7 · Ticket import.** Tiers, sheet imports with a change preview and snapshots, generated income, manual sales, conflicts and refunds (R-TKT-1 to R-TKT-7, R-TKT-10, R-TKT-12 to R-TKT-18).
 - **M8 · Ticket statistics and profitability.** Sales over time, places against the quota and break-even, on the Tickets page and the Overview (R-TKT-8, R-TKT-9).
 - **M9 · Cost centres and Drinks.** Cost centre tags with a P&L and plan vs actual, and the Drinks page, which became a plugin in Stage 7 (R-CC-1, R-CC-2, R-BUD-3, R-SET-3, R-DRK-1 to R-DRK-6).
 - **M10 · Reconciliation and templates.** Statement checkpoints, new events from a template, and copying from another event (R-ACC-4, R-ISO-2, R-ISO-4, R-SET-5, R-EVT-3).
+
+### User manual
+
+Version 1 is in [docs/manual](manual/index.html): what the app is for and what it can't do yet, how the event's money is modelled, and how to run an event from the first budget line to closing, for treasurers who did not build it. Hosting it on GitHub Pages is still to do.
 
 ### Refactoring
 

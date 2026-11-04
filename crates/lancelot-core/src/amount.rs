@@ -3,7 +3,7 @@
 //! Parsing accepts both `1.234,56` and `1,234.56` regardless of the user's setting, as long as
 //! the input is unambiguous. The rules, in order:
 //!
-//! 1. Spaces and `€` are ignored. One leading `-`, `−` or `+` is allowed.
+//! 1. Spaces and currency symbols are ignored. One leading `-`, `−` or `+` is allowed.
 //! 2. The last `.` or `,` followed by 1–2 digits is the decimal separator.
 //! 3. Every other separator is a thousands separator. It must be the other character, and the
 //!    groups must be correct: 1–3 digits first, then exactly 3.
@@ -12,7 +12,7 @@
 //!    read according to the setting. If the setting makes it the thousands separator, the
 //!    amount is accepted and flagged as ambiguous. If the setting makes it the decimal
 //!    separator, it means three decimals and is rejected: for a German user, `1,234` is far more
-//!    likely a typo of `1,23` or `12,34` than a thousand euros.
+//!    likely a typo of `1,23` or `12,34` than a thousand of anything.
 //!
 //! The test cases live in `fixtures/amount-input.json`.
 //!
@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use ts_rs::TS;
 
-use crate::money::{Cents, MAX_AMOUNT};
+use crate::money::{Cents, Currency, MAX_AMOUNT};
 
 /// The app-wide number and date format (R-NF-6). Dates are formatted elsewhere.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
@@ -91,7 +91,7 @@ pub struct ParsedSum {
 pub enum AmountError {
     #[error("no amount entered")]
     Empty,
-    #[error("only digits, `.` and `,` are allowed")]
+    #[error("use only digits, a comma or point, and + or −")]
     InvalidCharacter,
     #[error("thousands separators must form groups of three")]
     BadGrouping,
@@ -133,16 +133,23 @@ fn is_sign(c: char) -> bool {
     c == '-' || c == MINUS || c == '+'
 }
 
+/// Any currency's symbol, not only the event's: a pasted amount can come from anywhere.
+fn without_spaces_and_symbols(input: &str) -> String {
+    let mut text = input.to_owned();
+    for currency in Currency::ALL {
+        text = text.replace(currency.symbol(), "");
+    }
+    text.retain(|c| !c.is_whitespace());
+    text
+}
+
 /// Parses user input into cents. See the module documentation for the rules.
 pub fn parse_amount(
     input: &str,
     format: NumberFormat,
     allow_negative: bool,
 ) -> Result<Parsed, AmountError> {
-    let cleaned: String = input
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '€')
-        .collect();
+    let cleaned = without_spaces_and_symbols(input);
 
     let (negative, body) = match cleaned.chars().next() {
         Some(c) if is_sign(c) => (c != '+', &cleaned[c.len_utf8()..]),
@@ -177,10 +184,7 @@ pub fn parse_sum(
     format: NumberFormat,
     allow_negative: bool,
 ) -> Result<ParsedSum, AmountError> {
-    let cleaned: String = input
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '€')
-        .collect();
+    let cleaned = without_spaces_and_symbols(input);
     let body = cleaned.strip_suffix(is_sign).unwrap_or(&cleaned);
 
     let mut starts: Vec<usize> = body
@@ -277,7 +281,7 @@ fn to_cents(integer: String, decimals: &str) -> Result<i64, AmountError> {
     if integer.len() > 13 {
         return Err(AmountError::TooLarge);
     }
-    let euros: i64 = if integer.is_empty() {
+    let units: i64 = if integer.is_empty() {
         0
     } else {
         integer.parse().map_err(|_| AmountError::TooLarge)?
@@ -294,7 +298,7 @@ fn to_cents(integer: String, decimals: &str) -> Result<i64, AmountError> {
             .parse()
             .map_err(|_| AmountError::InvalidCharacter)?,
     };
-    let total = euros
+    let total = units
         .checked_mul(100)
         .and_then(|e| e.checked_add(cents))
         .ok_or(AmountError::TooLarge)?;
@@ -304,16 +308,22 @@ fn to_cents(integer: String, decimals: &str) -> Result<i64, AmountError> {
     Ok(total)
 }
 
-/// Formats cents for display: `1.234,56 €` (De) or `€1,234.56` (En).
-pub fn format_amount(amount: Cents, format: NumberFormat, sign: SignStyle) -> String {
+/// Formats cents for display: `1.234,56 €` (De) or `€1,234.56` (En). The symbol's place follows
+/// the number format, and a symbol of letters keeps a space: `CHF 1,234.56`.
+pub fn format_amount(
+    amount: Cents,
+    format: NumberFormat,
+    sign: SignStyle,
+    currency: Currency,
+) -> String {
     let value = amount.get();
     let magnitude = value.unsigned_abs();
-    let euros = (magnitude / 100).to_string();
+    let units = (magnitude / 100).to_string();
     let cents = magnitude % 100;
 
-    let mut grouped = String::with_capacity(euros.len() + euros.len() / 3);
-    for (i, digit) in euros.chars().enumerate() {
-        if i > 0 && (euros.len() - i).is_multiple_of(3) {
+    let mut grouped = String::with_capacity(units.len() + units.len() / 3);
+    for (i, digit) in units.chars().enumerate() {
+        if i > 0 && (units.len() - i).is_multiple_of(3) {
             grouped.push(format.thousands_separator());
         }
         grouped.push(digit);
@@ -326,9 +336,13 @@ pub fn format_amount(amount: Cents, format: NumberFormat, sign: SignStyle) -> St
         _ => "",
     };
     let decimal = format.decimal_separator();
+    let symbol = currency.symbol();
     match format {
-        NumberFormat::De => format!("{sign}{grouped}{decimal}{cents:02}\u{a0}€"),
-        NumberFormat::En => format!("{sign}€{grouped}{decimal}{cents:02}"),
+        NumberFormat::De => format!("{sign}{grouped}{decimal}{cents:02}\u{a0}{symbol}"),
+        NumberFormat::En if symbol.len() > 2 && symbol.is_ascii() => {
+            format!("{sign}{symbol}\u{a0}{grouped}{decimal}{cents:02}")
+        }
+        NumberFormat::En => format!("{sign}{symbol}{grouped}{decimal}{cents:02}"),
     }
 }
 
@@ -421,25 +435,31 @@ mod tests {
     fn formats_both_styles() {
         let c = cents(-123_456_789);
         assert_eq!(
-            format_amount(c, De, SignStyle::Plain),
+            format_amount(c, De, SignStyle::Plain, Currency::Eur),
             "−1.234.567,89\u{a0}€"
         );
-        assert_eq!(format_amount(c, En, SignStyle::Plain), "−€1,234,567.89");
         assert_eq!(
-            format_amount(c, De, SignStyle::Magnitude),
+            format_amount(c, En, SignStyle::Plain, Currency::Eur),
+            "−€1,234,567.89"
+        );
+        assert_eq!(
+            format_amount(c, De, SignStyle::Magnitude, Currency::Eur),
             "1.234.567,89\u{a0}€"
         );
-        assert_eq!(format_amount(cents(5), En, SignStyle::Always), "+€0.05");
         assert_eq!(
-            format_amount(Cents::ZERO, De, SignStyle::Always),
+            format_amount(cents(5), En, SignStyle::Always, Currency::Eur),
+            "+€0.05"
+        );
+        assert_eq!(
+            format_amount(Cents::ZERO, De, SignStyle::Always, Currency::Eur),
             "0,00\u{a0}€"
         );
         assert_eq!(
-            format_amount(cents(100_000), De, SignStyle::Plain),
+            format_amount(cents(100_000), De, SignStyle::Plain, Currency::Eur),
             "1.000,00\u{a0}€"
         );
         assert_eq!(
-            format_amount(cents(99_999), En, SignStyle::Plain),
+            format_amount(cents(99_999), En, SignStyle::Plain, Currency::Eur),
             "€999.99"
         );
     }
@@ -535,6 +555,8 @@ mod tests {
         cents: i64,
         format: NumberFormat,
         sign: SignStyle,
+        #[serde(default)]
+        currency: Currency,
         text: String,
     }
 
@@ -546,12 +568,23 @@ mod tests {
         assert!(cases.len() >= 100);
         for case in cases {
             assert_eq!(
-                format_amount(cents(case.cents), case.format, case.sign),
+                format_amount(cents(case.cents), case.format, case.sign, case.currency),
                 case.text,
                 "{}",
                 case.cents
             );
         }
+    }
+
+    #[test]
+    fn symbols_of_every_currency_are_ignored() {
+        assert_eq!(ok("$1,234.56", En).cents, cents(123_456));
+        assert_eq!(ok("£ 12.50", En).cents, cents(1250));
+        assert_eq!(ok("CHF 12,50", De).cents, cents(1250));
+        assert_eq!(
+            parse_sum("CHF 1,50+CHF 2", De, false).unwrap().cents,
+            cents(350)
+        );
     }
 
     fn any_format() -> impl Strategy<Value = NumberFormat> {
@@ -564,8 +597,9 @@ mod tests {
             c in -MAX_AMOUNT.get()..=MAX_AMOUNT.get(),
             display in any_format(),
             setting in any_format(),
+            currency in prop::sample::select(&Currency::ALL[..]),
         ) {
-            let text = format_amount(cents(c), display, SignStyle::Plain);
+            let text = format_amount(cents(c), display, SignStyle::Plain, currency);
             // Whatever the setting, a formatted amount always has two decimals and is read back.
             let parsed = parse_amount(&text, setting, true).unwrap();
             prop_assert_eq!(parsed.cents.get(), c);

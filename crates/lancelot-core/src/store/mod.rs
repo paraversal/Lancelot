@@ -29,7 +29,7 @@ use crate::book::{Book, Saved};
 use crate::entry::TxnDraft;
 use crate::error::DomainError;
 use crate::integrity::{self, Report};
-use crate::model::{AttachmentId, BlockerOverride, EventDetails, ImportId, TxnId};
+use crate::model::{AccountDraft, AttachmentId, BlockerOverride, EventDetails, ImportId, TxnId};
 use crate::tickets::TicketBatch;
 use crate::{APPLICATION_ID, SCHEMA_VERSION};
 
@@ -143,9 +143,10 @@ impl Store {
     pub fn create(
         path: &Path,
         details: EventDetails,
+        accounts: &[AccountDraft],
         options: StoreOptions,
     ) -> Result<(Store, Report), StoreError> {
-        Store::create_with(path, Book::new(details)?, options)
+        Store::create_with(path, Book::new(details, accounts)?, options)
     }
 
     /// Creates a new event file from a template (R-EVT-3).

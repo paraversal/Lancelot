@@ -6,7 +6,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 ## Event files
 
-- Create an event with a name, dates, location and notes, and edit them later (R-EVT-1).
+- Create an event with a name, dates, location, notes and its accounts, and edit them later (R-EVT-1).
 - Each event is one `.lancelot` file holding everything, receipts included (R-ISO-1, R-ATT-2, R-NF-4).
 - The start screen lists recent events, with New and Open.
 - A file that is already open elsewhere or damaged says so, instead of failing silently.
@@ -38,7 +38,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 ## Accounts and categories
 
-- Bank and cash accounts, added and renamed in Settings. An account can count net movement only, for one whose real total doesn't matter (R-ACC-1, R-ISO-3).
+- Bank and cash accounts, named when an event is created and added or renamed in Settings. An event always has at least one. An account can count net movement only, for one whose real total doesn't matter (R-ACC-1, R-ISO-3).
 - Income and expense categories, which can name the cost centre their new lines start in (R-ACC-2).
 - Opening and closing counts per account, with the difference shown (R-ISO-3).
 - Statement checkpoints: enter what a statement showed on a date, and any mismatch becomes an open item (R-ACC-4).
@@ -46,18 +46,23 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 ## People and payouts
 
-- Bank details with the IBAN checked as you type (R-PER-1, R-PER-2).
+- A reimbursement method for each person: a bank transfer with the IBAN checked as you type, or another way in free text (R-PER-1, R-PER-2).
 - Per person: advanced, held, settled and net balance, with each line leading to its entry (R-PER-3, R-TX-5).
-- Payout list with account holder, IBAN, reference and amount, as CSV or PDF, with the advances behind it as an optional appendix (R-PER-4).
+- A settle shows the balance it leaves while you type, whether it is a new entry or a saved one being changed, and marks an amount that is too much (R-TX-4).
+- A saved settle says that changing it corrects the record, not the transfer (R-TX-6).
+- Payout list with reimbursement method and amount, and account holder and reference for a bank transfer, as CSV or PDF, with the advances behind it as an optional appendix (R-PER-4).
 - Record the whole payout list as paid in one action (R-PER-5).
 - Repayment list of the people who owe the event, with Repaid per person (R-PER-7).
 
 ## Budget
 
 - Budget lines as an amount or as quantity × unit price, each of which can be marked complete (R-BUD-1).
+- Assumptions such as `Guests 250` or `Days 3`, edited in place above the table. A quantity can be multiplied by any of them, `2 × Guests × Days × 4,50 €`, so changing one changes every line that scales with it. The table shows each such line's formula, the line's panel previews the total as it is made up, and an assumption can only be deleted while no line uses it (R-BUD-6).
 - Plan against actual per line, category and cost centre, and in total, with what isn't budgeted (R-BUD-3).
 - A cautious forecast of the result, on the Budget page and the Overview (R-BUD-4).
-- The Budget page was built before its design, so it may still change to match one.
+- How far the forecast is from the plan, and the three lines furthest from it, each opening the line.
+- A bar per line of actual against estimate, and a forecast that only repeats the estimate is muted.
+- Start a line from its category, and copy from another event while there are no lines yet.
 
 ## Tickets
 
@@ -68,6 +73,7 @@ Optional per event, and switched off in Settings while the event has no tiers (R
 - Every import goes through a review that shows what changed. A tier it doesn't know blocks the import until it is mapped (R-TKT-4, R-TKT-5).
 - Each import is kept with its date, which can be changed. An import can be deleted, with a preview of what that changes (R-TKT-8).
 - Manual sales for tickets sold outside the regular channels (R-TKT-7).
+- Sheets with or without order IDs. Without them, conflicts are found per tier, and an event's imports all have them or none do (R-TKT-3, R-TKT-12).
 - A removed ticket becomes a conflict, grouped by order, with a badge in the navigation. It is resolved as a refund of 0–100 %, a match to a cancellation, or a correction, wholly or in part (R-TKT-12, R-TKT-13, R-TKT-16).
 - Manual cancellations on an order or a manual sale, and a choice of who pays the refund (R-TKT-14, R-TKT-15).
 - A sales chart over the imports, by places or net income, against the quota (R-TKT-8).
@@ -83,19 +89,20 @@ Optional per event, and switched off in Settings while the event has no tiers (R
 
 Built-in features switched per event in Settings. Each shows in a marked frame, and switching one off hides it and keeps its data in the file.
 
-**Stock and sales**, for drinks or other goods on commission, attached to any cost centre:
+**Stock and sales**, for drinks or other goods from a supplier, attached to any cost centre:
 
-- "Set up Drinks" creates a cost centre with its categories.
-- Per product: cost, donation, and units taken, returned, left over and logged (R-DRK-5).
-- Billed units, the gap against what was logged, and the cost per drink (R-DRK-5, R-DRK-9).
-- Expected donations against what was collected. A paper tally is one product, `Strich` (R-DRK-7).
+- A new cost centre for goods can be added from its settings, with an income and an expense category of its name and a Deposit category.
+- Per cost centre: the supplier, whether the goods are on commission or bought outright, and an optional deposit category (R-DRK-1, R-DRK-2).
+- Per product: cost, donation, and units taken, returned (only on commission), left over and logged (R-DRK-5).
+- Billed units, the gap against what was logged, and the cost per unit gone (R-DRK-5, R-DRK-9).
+- Expected donations against what was collected. A paper tally is one product, `Tally` (R-DRK-7).
 - A table per cost centre in the settlement report, which the report's toolbar can leave out.
-- An invoice check, which can leave out an optional deposit category such as Pfand, and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
+- An invoice check, which leaves out the deposit category, and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
 - Pull logged counts from a data source, reviewing the changes first. A name that matches no product must be mapped once and is then remembered (R-DRK-6). Not yet tried with a real provider.
 
 **Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, even with other lines above them, and the rest of the file is never stored (R-TKT-3, R-TKT-17).
 
-**Ticket API** pulls tickets from a data source into the same review (R-TKT-3). Not yet tried with a real provider.
+**Ticket API** pulls tickets from a data source into the same review, with order IDs or, with the Order field left blank, without (R-TKT-3). Not yet tried with a real provider.
 
 **What if** tries ideas against the forecast on the Budget page. Folded, it shows the result they lead to; opened, a bridge shows how the forecast becomes that result, ticket by ticket, price, income and expenses, against a line at zero. **Try** changes things directly: each tier is a row of its places, where a click on a free one sells up to it and steppers change the count and the price of the tickets still to sell; each category is a bar on one shared scale, dragged to a new figure, which can't go below what is booked. Every change shows as a chip that undoes it alone. **Reach** works back from a target, the plan by default or break-even: it says how far off the result is and suggests ways there, more tickets of a tier, all of them at a higher price, or a smaller expense, and Apply adds one to the scenario. Nothing is saved, and nothing it shows reaches the ledger.
 
@@ -116,4 +123,4 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 - Light, dark, or following the system. Printing stays light (R-NF-9).
 - Two number and date formats, defaulting to the system's (R-NF-6).
 - A reduced motion setting.
-- Shortcuts for new event, open, settings and close in the menu, ⌘1–9 for pages and cost centres, and Esc to close a panel (R-NF-7).
+- Shortcuts for new event, open, settings and close in the menu, ⌘1–9 for pages and cost centres, and Esc to close a panel, pressed twice if that would discard changes (R-NF-7).

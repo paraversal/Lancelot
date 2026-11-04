@@ -9,7 +9,8 @@ use ts_rs::TS;
 
 use crate::ledger::Ledger;
 use crate::model::{
-    Account, AccountId, AccountKind, BudgetLine, BudgetLineId, CostCentre, CostCentreId, Txn, TxnId,
+    Account, AccountId, AccountKind, Assumption, AssumptionId, BudgetLine, BudgetLineId,
+    CostCentre, CostCentreId, Txn, TxnId,
 };
 use crate::money::{Cents, MoneyError};
 
@@ -29,6 +30,9 @@ pub struct BudgetLineFigures {
     pub line: BudgetLineId,
     #[serde(flatten)]
     pub figures: Figures,
+    /// What this line's forecast does to the planned result: negative when it lowers it.
+    #[serde(rename = "fromPlan")]
+    pub from_plan: Cents,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
@@ -69,6 +73,9 @@ pub struct Budget {
     pub expense: Figures,
     /// Income minus expenses. Its actual is the event's result.
     pub result: Figures,
+    /// The forecast result minus the planned one (R-BUD-4).
+    #[serde(rename = "fromPlan")]
+    pub from_plan: Cents,
     /// Every cost centre, in creation order (R-BUD-3).
     #[serde(rename = "costCentres")]
     pub cost_centres: Vec<CostCentreFigures>,
@@ -78,6 +85,7 @@ impl Budget {
     pub fn compute(
         accounts: &BTreeMap<AccountId, Account>,
         budget_lines: &BTreeMap<BudgetLineId, BudgetLine>,
+        assumptions: &BTreeMap<AssumptionId, Assumption>,
         cost_centres: &BTreeMap<CostCentreId, CostCentre>,
         txns: &BTreeMap<TxnId, Txn>,
         ledger: &Ledger,
@@ -99,7 +107,7 @@ impl Budget {
         for b in budget_lines.values() {
             let category = accounts.get(&b.draft.category);
             let kind = category.map(|a| a.kind);
-            let estimate = b.draft.estimate.total()?;
+            let estimate = b.draft.estimate.total(assumptions)?;
             let actual = linked.get(&b.id).copied().unwrap_or_default();
             let forecast = if b.draft.complete || category.is_some_and(follows_the_tickets) {
                 actual
@@ -114,9 +122,15 @@ impl Budget {
                 actual,
                 forecast,
             };
+            let from_plan = if kind == Some(AccountKind::Income) {
+                forecast.checked_sub(estimate)?
+            } else {
+                estimate.checked_sub(forecast)?
+            };
             lines.push(BudgetLineFigures {
                 line: b.id,
                 figures,
+                from_plan,
             });
             let (sum, budgeted) = per_category.entry(b.draft.category).or_default();
             *sum = add(*sum, figures)?;
@@ -210,6 +224,7 @@ impl Budget {
             categories,
             income,
             expense,
+            from_plan: result.forecast.checked_sub(result.estimate)?,
             result,
         })
     }

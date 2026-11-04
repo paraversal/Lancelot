@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One person: contact and bank details, what the event owes them (or they owe), and their
+	// One person: contact details and how they are reimbursed, what the event owes them (or they owe), and their
 	// running balance (R-PER-3). "Edit" turns the panel into the form; "Settle" opens the
 	// settle entry, filled in from the balance.
 	import { goto } from '$app/navigation';
@@ -9,8 +9,9 @@
 	import Button from '#lib/components/Button.svelte';
 	import IbanField from '#lib/components/IbanField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
+	import Segmented from '#lib/components/Segmented.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { formatAmount, formatDate, formatPlain } from '#lib/format.ts';
 	import { stampIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
@@ -35,13 +36,20 @@
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
 	const iban = $derived(person.iban ? person.iban.replace(/(.{4})/g, '$1 ').trim() : null);
-	const fallback = $derived(
-		snapshot.accounts.find((a) => a.id === snapshot.event.defaultReimbursementAccount)?.name
-	);
 
 	function details(patch: Partial<Person>): Person {
-		const { holder, iban, bic, contact, notes } = person;
-		return { holder, iban, bic, contact, notes, ...patch };
+		const { holder, iban, bic, otherMethod, contact, notes } = person;
+		return { holder, iban, bic, otherMethod, contact, notes, ...patch };
+	}
+
+	// Choosing "Other" asks for the text; only the text makes it the person's method. Going back
+	// to the bank removes the text and keeps the bank details, which an other method never touched.
+	let choosingOther = $state(false);
+	const method = $derived(person.otherMethod || choosingOther ? 'other' : 'bank');
+
+	function chooseMethod(next: 'bank' | 'other') {
+		choosingOther = next === 'other';
+		if (next === 'bank' && person.otherMethod) save(person.name, { otherMethod: null });
 	}
 
 	async function save(name: string, patch: Partial<Person> = {}) {
@@ -98,13 +106,35 @@
 
 	{#if editing}
 		<TextField label="Name" value={person.name} required oncommit={(v) => v && save(v)} />
-		<TextField
-			label="Account holder"
-			value={person.holder}
-			oncommit={(v) => save(person.name, { holder: v })}
-		/>
-		<IbanField value={person.iban} oncommit={(v) => save(person.name, { iban: v })} />
-		<TextField label="BIC" value={person.bic} oncommit={(v) => save(person.name, { bic: v })} />
+		<div class="labelled">
+			<span class="form-label">Reimburse by</span>
+			<Segmented
+				label="Reimburse by"
+				value={method}
+				onchange={chooseMethod}
+				options={[
+					{ value: 'bank', label: 'Bank transfer' },
+					{ value: 'other', label: 'Other' }
+				]}
+			/>
+		</div>
+		{#if method === 'other'}
+			<TextField
+				label="Method"
+				value={person.otherMethod}
+				oncommit={(v) => save(person.name, { otherMethod: v })}
+			>
+				{#snippet hint()}Such as a PayPal address, or cash.{/snippet}
+			</TextField>
+		{:else}
+			<TextField
+				label="Account holder"
+				value={person.holder}
+				oncommit={(v) => save(person.name, { holder: v })}
+			/>
+			<IbanField value={person.iban} oncommit={(v) => save(person.name, { iban: v })} />
+			<TextField label="BIC" value={person.bic} oncommit={(v) => save(person.name, { bic: v })} />
+		{/if}
 		<TextField
 			label="Contact"
 			value={person.contact}
@@ -120,14 +150,16 @@
 	{:else}
 		{#if error}<p class="form-error">{error.message}</p>{/if}
 		<section>
-			<span class="form-label">Bank</span>
-			{#if iban}
+			<span class="form-label">Reimburse by</span>
+			{#if person.otherMethod}
+				<strong class="method">{person.otherMethod}</strong>
+			{:else if iban}
 				<strong class="iban">{iban}</strong>
 				<span class="muted"
 					>{[person.holder ?? person.name, person.bic].filter(Boolean).join(' · ')}</span
 				>
 			{:else}
-				<span class="attention">No IBAN</span>
+				<span class="attention">No method</span>
 			{/if}
 		</section>
 
@@ -156,9 +188,7 @@
 						<span class="date">{shortDate(e.date)}</span>
 						<span class="title">{e.title}</span>
 						<span class="effect" class:plus={e.settle}>{formatAmount(e.effect, format)}</span>
-						<span class="running"
-							>{formatAmount(e.balance, format, 'plain').replace(/\s?€|€/, '')}</span
-						>
+						<span class="running">{formatPlain(e.balance, format)}</span>
 					</button>
 				{/each}
 			</div>
@@ -176,7 +206,6 @@
 					{net > 0 ? 'Settle' : 'Repaid'}
 					{formatAmount(net, format, 'magnitude')}
 				</Button>
-				{#if net > 0 && fallback}<span class="muted">from {fallback}</span>{/if}
 			{/if}
 			<span class="grow"></span>
 			{#if !person.entries.length}
@@ -220,6 +249,17 @@
 	.iban {
 		font-weight: 600;
 		letter-spacing: 0.01em;
+	}
+
+	.method {
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+
+	.labelled {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
 	}
 
 	.figure {

@@ -2,9 +2,9 @@
 	// Counting an asset account (R-ISO-3): what was there at the start and what is there at the
 	// end. The start brings money in as an opening entry; the end is compared with the books.
 	import { api, errorMessage } from '#lib/api/index.ts';
-	import AmountField from '#lib/components/AmountField.svelte';
+	import AmountField, { amountsRead } from '#lib/components/AmountField.svelte';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { popIn } from '#lib/motion/effects.ts';
@@ -38,6 +38,22 @@
 	let closingDate = $state<string | null>(end?.date ?? initial.event.endsOn ?? today);
 	let closing = $state<number | null>(end?.amount ?? null);
 	let error = $state<string | null>(null);
+	let openingDateInvalid = $state(false);
+	let openingInvalid = $state(false);
+	let closingDateInvalid = $state(false);
+	let closingInvalid = $state(false);
+	const values = () =>
+		JSON.stringify([
+			openingDate,
+			openingDateInvalid,
+			opening,
+			openingInvalid,
+			closingDate,
+			closingDateInvalid,
+			closing,
+			closingInvalid
+		]);
+	const clean = values();
 
 	// The books as they will be with the opening count typed so far.
 	const computed = $derived(
@@ -61,6 +77,9 @@
 	async function save() {
 		try {
 			error = null;
+			// A count that cannot be read must not be saved as no count at all.
+			await Promise.all([amountsRead(), datesRead()]);
+			if (openingDateInvalid || openingInvalid || closingDateInvalid || closingInvalid) return;
 			await session.change(() =>
 				api.setCounts(
 					account,
@@ -97,7 +116,7 @@
 	{/each}
 {/snippet}
 
-<Panel title={name} {onclose}>
+<Panel title={name} {onclose} dirty={values() !== clean}>
 	{#if !movement}<div class="group">
 			<h3>Opening count</h3>
 			<div class="form-pair">
@@ -105,6 +124,7 @@
 					label="Date"
 					value={openingDate}
 					{format}
+					bind:invalid={openingDateInvalid}
 					oninput={(v) => v && (openingDate = v)}
 					oncommit={(v) => (openingDate = v)}
 				/>
@@ -112,6 +132,7 @@
 					label="Amount"
 					value={opening}
 					{format}
+					bind:invalid={openingInvalid}
 					oninput={(v) => (opening = v)}
 					oncommit={(v) => (opening = v)}
 				/>
@@ -125,6 +146,7 @@
 				label="Date"
 				value={closingDate}
 				{format}
+				bind:invalid={closingDateInvalid}
 				oninput={(v) => v && (closingDate = v)}
 				oncommit={(v) => (closingDate = v)}
 			/>
@@ -134,6 +156,7 @@
 				{format}
 				allowNegative={bank}
 				autofocus
+				bind:invalid={closingInvalid}
 				oninput={(v) => (closing = v)}
 				oncommit={(v) => (closing = v)}
 			/>

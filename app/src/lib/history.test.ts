@@ -148,6 +148,7 @@ describe('historyChanges', () => {
 		const details = {
 			holder: null,
 			iban: null,
+			otherMethod: null,
 			bic: null,
 			contact: 'clara@example.org',
 			notes: null
@@ -168,7 +169,7 @@ describe('historyChanges', () => {
 
 	it('says closing and reopening with the notes on what stayed open', () => {
 		const event = {
-			name: 'Sommerfest',
+			name: 'Summer Festival',
 			startsOn: null,
 			endsOn: null,
 			location: null,
@@ -229,6 +230,47 @@ describe('historyChanges', () => {
 			label: 'Estimate',
 			before: null,
 			after: '40 × €12.50'
+		});
+	});
+
+	it('names the assumptions a budget estimate scales with', () => {
+		const changes = historyChanges(
+			[
+				entry(9, 't3', 'budget_line', 1, 'create', null, {
+					id: 1,
+					category: 2,
+					description: 'Breakfast',
+					estimate: { type: 'quantity', quantity: 2, unitPrice: 450, per: [1] },
+					costCentre: null,
+					complete: false
+				}),
+				entry(
+					8,
+					't2',
+					'assumption',
+					1,
+					'update',
+					{ id: 1, name: 'Guests', value: 250 },
+					{
+						id: 1,
+						name: 'Guests',
+						value: 300
+					}
+				),
+				...setup
+			],
+			'en'
+		);
+		expect(changes[1].rows[0]).toMatchObject({ noun: 'Assumption', name: 'Guests' });
+		expect(changes[1].rows[0].fields).toContainEqual({
+			label: 'Value',
+			before: '250',
+			after: '300'
+		});
+		expect(changes[0].rows[0].fields).toContainEqual({
+			label: 'Estimate',
+			before: null,
+			after: '2 × Guests × €4.50'
 		});
 	});
 

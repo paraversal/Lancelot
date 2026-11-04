@@ -10,7 +10,7 @@
 	import type { RefundTerms } from '#lib/api/generated/RefundTerms.ts';
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
@@ -18,7 +18,7 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
-	import { feeInput, parseCount, parseFee } from '#lib/tickets.ts';
+	import { feeInput, orderName, parseCount, parseFee } from '#lib/tickets.ts';
 	import { ticketShare } from '#lib/tickets.svelte.ts';
 
 	let {
@@ -36,6 +36,8 @@
 	const tiers = $derived(tickets.tiers);
 	const sales = $derived(tickets.manualSales);
 	const current = $derived(tickets.cancellations.find((c) => c.id === id) ?? null);
+	// Without order IDs, a sheet ticket is named by its tier alone.
+	const noOrderIds = $derived(tickets.orderIds === false);
 	const correction = $derived(!!current && current.terms === null);
 	const ticketAccount = $derived(snapshot.ticketSettings.account ?? 0);
 	const tierName = (t: TierId) => tiers.find((x) => x.id === t)?.name ?? '';
@@ -77,6 +79,9 @@
 		payer = current?.payer ?? ticketAccount;
 		note = current?.note ?? null;
 	});
+	const values = () =>
+		JSON.stringify([source, order, tier, sale, count, percent, date, payer, note]);
+	const clean = values();
 
 	const chosenSale = $derived(source === 'sale' ? sales.find((s) => s.id === sale) : undefined);
 	const tierId = $derived(chosenSale?.tier ?? tier);
@@ -99,11 +104,12 @@
 
 	async function save() {
 		error = null;
+		await datesRead();
 		const missing = (field: string, message: string) => void (error = { field, message });
 		if (n === null || Number.isNaN(n)) return missing('count', 'enter a whole number');
 		if (bp === null) return missing('refundBp', 'enter a percentage');
 		if (date === null) return missing('date', 'enter a date');
-		if (!current && source === 'order' && !order?.trim())
+		if (!current && source === 'order' && !noOrderIds && !order?.trim())
 			return missing('order', 'enter the order ID');
 		const terms: RefundTerms = {
 			refundBp: bp,
@@ -117,7 +123,7 @@
 					source:
 						source === 'sale'
 							? { type: 'sale', sale }
-							: { type: 'order', order: order ?? '', tier },
+							: { type: 'order', order: noOrderIds ? '' : (order ?? ''), tier },
 					count: n,
 					terms,
 					note
@@ -146,12 +152,12 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title={correction ? 'Correction' : 'Cancellation'} {onclose}>
+<Panel title={correction ? 'Correction' : 'Cancellation'} {onclose} dirty={values() !== clean}>
 	<fieldset disabled={session.closed}>
 		{#if current}
 			<p class="source">
 				{current.order !== null
-					? `Order ${current.order}`
+					? orderName(current.order)
 					: `Sale: ${chosenSale ? saleLabel(chosenSale) : ''}`}
 				· {current.count} × {tierName(current.tier)}
 			</p>
@@ -159,14 +165,21 @@
 			{#if sales.length}
 				<Segmented
 					options={[
-						{ value: 'order' as Source, label: 'Order' },
+						{ value: 'order' as Source, label: noOrderIds ? 'Sheet' : 'Order' },
 						{ value: 'sale' as Source, label: 'Manual sale' }
 					]}
 					bind:value={source}
 					label="Cancelled from"
 				/>
 			{/if}
-			{#if source === 'order'}
+			{#if source === 'order' && noOrderIds}
+				<Select
+					label="Tier"
+					value={tier}
+					options={tiers.map((t) => ({ value: t.id, label: t.name }))}
+					onchange={(v) => (tier = v)}
+				/>
+			{:else if source === 'order'}
 				<div class="pair">
 					<div class="form-field grow">
 						<TextField
@@ -237,7 +250,12 @@
 				<strong>{formatAmount(-(refund ?? 0), format)}</strong>
 			</div>
 			<Select label="From" value={payer} options={payers} onchange={(v) => (payer = v)} />
-			<TextField label="Note" value={note} oncommit={(v) => (note = v)} />
+			<TextField
+				label="Note"
+				value={note}
+				oninput={(t) => (note = t.trim() || null)}
+				oncommit={(v) => (note = v)}
+			/>
 			{#if current && current.order !== null && current.goneNow < current.count}
 				<p class="meta">
 					{current.count - current.goneNow} still in the sheet. They stay sold until they leave it.

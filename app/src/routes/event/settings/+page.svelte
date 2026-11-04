@@ -18,6 +18,7 @@
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
+	import { currencyLabel } from '#lib/currencies.ts';
 	import { formatAmount, formatDate, formatSize, formatTimestamp } from '#lib/format.ts';
 	import { lingerOut, spin } from '#lib/motion/effects.ts';
 	import Check from '#lib/motion/Check.svelte';
@@ -59,8 +60,8 @@
 	}
 
 	function details(patch: Partial<EventDetails>): EventDetails {
-		const { name, startsOn, endsOn, location, notes } = event;
-		return { name, startsOn, endsOn, location, notes, ...patch };
+		const { name, currency, startsOn, endsOn, location, notes } = event;
+		return { name, currency, startsOn, endsOn, location, notes, ...patch };
 	}
 
 	const update = (patch: Partial<EventDetails>) =>
@@ -270,7 +271,7 @@
 	{/if}
 {/snippet}
 
-{#snippet categoryGroup(title: string, list: typeof categories)}
+{#snippet categoryGroup(title: string, kind: string, list: typeof categories)}
 	{#if list.length}
 		<span class="form-label group">{title}</span>
 		<ul class="accounts">
@@ -282,7 +283,7 @@
 					</span>
 					{#if centres.length}
 						<Select
-							name="{a.name} starts in"
+							name="{a.name} ({kind}) starts in"
 							value={a.costCentre ?? 0}
 							options={centreOptions}
 							onchange={(v) =>
@@ -330,6 +331,10 @@
 						value={event.location}
 						oncommit={(v) => update({ location: v })}
 					/>
+					<div class="labelled">
+						<span class="form-label">Currency</span>
+						<span data-testid="event-currency">{currencyLabel(event.currency)}</span>
+					</div>
 					<TextField
 						label="Notes"
 						value={event.notes}
@@ -393,6 +398,7 @@
 								<label class="toggle" title="Counts and statements leave out opening counts">
 									<input
 										type="checkbox"
+										aria-label="Net movement, {a.name}"
 										checked={a.netMovement}
 										onchange={(e) => {
 											const { checked } = e.currentTarget;
@@ -495,8 +501,8 @@
 						value={format}
 						onchange={setFormat}
 						options={[
-							{ value: 'de', label: '1.234,56 €  ·  31.12.2026' },
-							{ value: 'en', label: '€1,234.56  ·  2026-12-31' }
+							{ value: 'de', label: `${formatAmount(123456, 'de')}  ·  31.12.2026` },
+							{ value: 'en', label: `${formatAmount(123456, 'en')}  ·  2026-12-31` }
 						]}
 					/>
 				</div>
@@ -534,7 +540,7 @@
 			</section>
 
 			{#if !closed}
-				<section>
+				<section id="copy">
 					<h2>Copy from another event</h2>
 					{#if source}
 						<div class="line">
@@ -549,23 +555,31 @@
 								>{source.preview.personsAdded} new · {source.preview.personsSkipped} already here</span
 							>
 						</label>
-						<label class="toggle">
-							<input type="checkbox" bind:checked={copyBudget} />
-							Budget lines
-							<span class="counts"
-								>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped} already here{#if source.preview.categoriesAdded}
-									· {counted(
-										source.preview.categoriesAdded,
-										'new category',
-										'new categories'
-									)}{/if}{#if source.preview.costCentresAdded}
-									· {counted(
-										source.preview.costCentresAdded,
-										'new cost centre',
-										'new cost centres'
-									)}{/if}</span
-							>
-						</label>
+						{#if source.preview.sourceCurrency !== event.currency}
+							<p class="counts" data-testid="copy-other-currency">
+								The budget can't be copied: that event is in {source.preview.sourceCurrency}, and
+								this one is in {event.currency}.
+							</p>
+						{:else}
+							<label class="toggle">
+								<input type="checkbox" bind:checked={copyBudget} />
+								Budget lines
+								<span class="counts"
+									>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped} already
+									here{#if source.preview.categoriesAdded}
+										· {counted(
+											source.preview.categoriesAdded,
+											'new category',
+											'new categories'
+										)}{/if}{#if source.preview.costCentresAdded}
+										· {counted(
+											source.preview.costCentresAdded,
+											'new cost centre',
+											'new cost centres'
+										)}{/if}</span
+								>
+							</label>
+						{/if}
 						<div>
 							<Button
 								size="sm"
@@ -623,8 +637,8 @@
 				<p class="note">The cost centre beside a category is where its new lines start.</p>
 			{/if}
 			<div class="categories">
-				{@render categoryGroup('Expenses', expenses)}
-				{@render categoryGroup('Income', income)}
+				{@render categoryGroup('Expenses', 'expense', expenses)}
+				{@render categoryGroup('Income', 'income', income)}
 			</div>
 		</section>
 	</fieldset>
@@ -644,6 +658,7 @@
 							<label class="toggle">
 								<input
 									type="checkbox"
+									aria-label="{plugin.name} on"
 									checked={on}
 									onchange={(e) => {
 										const { checked } = e.currentTarget;

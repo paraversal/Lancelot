@@ -1,13 +1,16 @@
 <script lang="ts">
 	// Budget (R-BUD-3, R-BUD-4): estimate, actual and forecast per budget line, per category and
 	// in total, for income and expenses. Every figure comes from the core; a line opens in the
-	// panel. Not designed in UI.fig yet: this follows the People page's table and panel.
+	// panel. Follows the Budget frames on the Update page of UI.fig.
+	import { goto } from '$app/navigation';
 	import { centreLink } from '#lib/nav.ts';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
 	import type { BudgetLine } from '#lib/api/generated/BudgetLine.ts';
 	import type { Figures } from '#lib/api/generated/Figures.ts';
+	import { formula, furthestFromPlan, isOver, isWaiting } from '#lib/budget.ts';
+	import { categoryColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatAmount } from '#lib/format.ts';
@@ -18,6 +21,7 @@
 	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
 	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
+	import Assumptions from './Assumptions.svelte';
 	import BudgetLinePanel from './BudgetLinePanel.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
@@ -25,10 +29,11 @@
 	const budget = $derived(snapshot.budget);
 	const a5 = $derived(level('A5'));
 
-	type Row = { line: BudgetLine; figures: Figures; over: boolean };
+	type Row = { line: BudgetLine; figures: Figures; over: boolean; waiting: boolean; used: number };
 	type Group = {
 		id: AccountId;
 		name: string;
+		color: string;
 		figures: Figures;
 		unbudgeted: number;
 		rows: Row[];
@@ -43,15 +48,28 @@
 				.filter((b) => b.category === c.category)
 				.map((line) => {
 					const figures = budget.lines.find((f) => f.line === line.id)!;
-					// An expense over its estimate, or income short of it once complete.
-					const over =
-						kind === 'expense'
-							? figures.actual > figures.estimate
-							: line.complete && figures.actual < figures.estimate;
-					return { line, figures, over };
+					return {
+						line,
+						figures,
+						over: isOver(kind, figures, line.complete),
+						waiting: isWaiting(figures, line.complete),
+						used:
+							figures.estimate > 0
+								? Math.min(1, figures.actual / figures.estimate)
+								: Number(figures.actual > 0)
+					};
 				});
 			if (!rows.length && c.actual === 0) return [];
-			return [{ id: c.category, name: account.name, figures: c, unbudgeted: c.unbudgeted, rows }];
+			return [
+				{
+					id: c.category,
+					name: account.name,
+					color: categoryColor(account, snapshot.accounts),
+					figures: c,
+					unbudgeted: c.unbudgeted,
+					rows
+				}
+			];
 		});
 	}
 	const sections = $derived([
@@ -68,12 +86,24 @@
 	const order = $derived(
 		sections.flatMap((s) => s.groups.flatMap((g) => g.rows.map((r) => r.line.id)))
 	);
+	const empty = $derived(sections.every((s) => !s.groups.length));
+	// Before anything is booked, the forecast would only repeat the plan.
+	const planning = $derived(
+		!session.closed && budget.income.actual === 0 && budget.expense.actual === 0
+	);
+	const furthest = $derived(
+		furthestFromPlan(budget.lines).map((f) => ({
+			...f,
+			description: snapshot.budgetLines.find((b) => b.id === f.line)?.description ?? ''
+		}))
+	);
 
 	let selected = $state<number | null>(null);
 	let adding = $state<AccountId | null | false>(false);
 	const line = $derived(snapshot.budgetLines.find((b) => b.id === selected) ?? null);
 
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
+	const signed = (c: number) => (c === 0 ? '–' : formatAmount(c, format, 'always'));
 
 	const pluginSections = plugins.flatMap((plugin) =>
 		plugin.BudgetSection
@@ -120,29 +150,92 @@
 		<header>
 			<h1>Budget</h1>
 			{#if !session.closed}
-				<Button kind="primary" icon="plus" shortcut="N" onclick={() => add()}>Budget line</Button>
+				<div class="actions">
+					{#if empty}
+						<Button onclick={() => goto('/event/settings#copy')}>Copy from another event</Button>
+					{/if}
+					<Button kind="primary" icon="plus" shortcut="N" onclick={() => add()}>Budget line</Button>
+				</div>
 			{/if}
 		</header>
 
-		<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
-			<div class="figure">
-				<span class="form-label">Forecast</span>
-				<span
-					class="result"
-					class:plus={budget.result.forecast > 0}
-					class:minus={budget.result.forecast < 0}
-					><MovingAmount value={budget.result.forecast} {format} sign="always" level={a5} /></span
-				>
+		{#if !empty}
+			<div class="hero" in:riseIn|global={{ level: level('D1'), i: 0 }}>
+				{#if planning}
+					<div class="figure">
+						<span class="form-label">Planned</span>
+						<span
+							class="result"
+							class:plus={budget.result.estimate > 0}
+							class:minus={budget.result.estimate < 0}
+							>{formatAmount(budget.result.estimate, format, 'always')}</span
+						>
+					</div>
+					<div class="figure">
+						<span class="form-label">Income</span>
+						<span class="total">{formatAmount(budget.income.estimate, format)}</span>
+					</div>
+					<div class="figure">
+						<span class="form-label">Expenses</span>
+						<span class="total">{formatAmount(budget.expense.estimate, format)}</span>
+					</div>
+				{:else if session.closed}
+					<div class="figure">
+						<span class="form-label">Result</span>
+						<span
+							class="result"
+							class:plus={budget.result.actual > 0}
+							class:minus={budget.result.actual < 0}
+							>{formatAmount(budget.result.actual, format, 'always')}</span
+						>
+					</div>
+					<div class="figure">
+						<span class="form-label">Planned</span>
+						<span class="total">{formatAmount(budget.result.estimate, format, 'always')}</span>
+					</div>
+				{:else}
+					<div class="figure">
+						<span class="form-label">Forecast</span>
+						<span
+							class="result"
+							class:plus={budget.result.forecast > 0}
+							class:minus={budget.result.forecast < 0}
+							><MovingAmount
+								value={budget.result.forecast}
+								{format}
+								sign="always"
+								level={a5}
+							/></span
+						>
+					</div>
+					<div class="figure">
+						<span class="form-label">Planned</span>
+						<span class="total">{formatAmount(budget.result.estimate, format, 'always')}</span>
+						{#if budget.fromPlan !== 0}
+							<span class="note wide">
+								{formatAmount(Math.abs(budget.fromPlan), format)}
+								{budget.fromPlan < 0 ? 'above' : 'below'} the forecast
+							</span>
+						{/if}
+					</div>
+					<div class="figure">
+						<span class="form-label">Result so far</span>
+						<span class="total">{formatAmount(budget.result.actual, format, 'always')}</span>
+					</div>
+					{#if furthest.length}
+						<div class="figure furthest wide">
+							<span class="form-label">Furthest from plan</span>
+							{#each furthest as f (f.line)}
+								<button type="button" onclick={() => open(f.line)}>
+									<span class="title">{f.description}</span>
+									<span>{formatAmount(f.fromPlan, format, 'always')}</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/if}
 			</div>
-			<div class="figure">
-				<span class="form-label">Planned</span>
-				<span class="total">{formatAmount(budget.result.estimate, format, 'always')}</span>
-			</div>
-			<div class="figure">
-				<span class="form-label">{session.closed ? 'Result' : 'Result so far'}</span>
-				<span class="total">{formatAmount(budget.result.actual, format, 'always')}</span>
-			</div>
-		</div>
+		{/if}
 
 		{#if !session.closed}
 			{#each pluginSections as { plugin, ctx, Section } (plugin.id)}
@@ -154,78 +247,127 @@
 			{/each}
 		{/if}
 
-		{#each sections as section (section.title)}
-			<div class="rows" role="table" aria-label={section.title}>
-				<div class="row head" role="row">
-					<span class="name">{section.title}</span>
-					<span class="num">Estimate</span>
-					<span class="num">Actual</span>
-					<span class="num">Forecast</span>
-				</div>
-				{#each section.groups as g (g.id)}
-					<div class="row category" role="row">
-						<span class="name">{g.name}</span>
-						<span class="num">{cell(g.figures.estimate)}</span>
-						<span class="num">{cell(g.figures.actual)}</span>
-						<span class="num">{cell(g.figures.forecast)}</span>
-					</div>
-					{#each g.rows as r (r.line.id)}
-						<button
-							type="button"
-							class="row line"
-							class:selected={selected === r.line.id}
-							role="row"
-							onclick={() => open(r.line.id)}
-						>
-							<span class="name">
-								{r.line.description}
-								{#if r.line.complete}<span class="done" title="Complete"
-										><Icon name="check" size={14} /></span
-									>{/if}
-							</span>
-							<span class="num">{cell(r.figures.estimate)}</span>
-							<span class="num" class:over={r.over}>{cell(r.figures.actual)}</span>
-							<span class="num">{cell(r.figures.forecast)}</span>
-						</button>
-					{/each}
-					{#if g.unbudgeted !== 0}
-						<div class="row line unbudgeted" role="row">
-							<span class="name">Not budgeted</span>
-							<span class="num"></span>
-							<span class="num">{cell(g.unbudgeted)}</span>
-							<span class="num">{cell(g.unbudgeted)}</span>
+		{#if !session.closed || snapshot.assumptions.length}
+			<Assumptions assumptions={snapshot.assumptions} lines={snapshot.budgetLines} />
+		{/if}
+
+		<div class="table" role="table" aria-label="Budget">
+			<div class="row columns" role="row">
+				<span class="name"></span>
+				<span class="bar-space"></span>
+				<span class="num">Estimate</span>
+				<span class="num">Actual</span>
+				<span class="num">Forecast</span>
+			</div>
+
+			{#if !empty}
+				{#each sections as section (section.title)}
+					{#if section.groups.length}
+						<div class="section" role="rowgroup" aria-label={section.title}>
+							<div class="row heading" role="row">
+								<span class="name">{section.title}</span>
+								<span class="bar-space"></span>
+								<span class="num">{cell(section.total.estimate)}</span>
+								<span class="num">{cell(section.total.actual)}</span>
+								<span class="num">{cell(section.total.forecast)}</span>
+							</div>
+							{#each section.groups as g (g.id)}
+								<div class="row category" role="row">
+									<span class="name">
+										<span class="dot" style:background={g.color}></span>
+										{g.name}
+										{#if !session.closed}
+											<button
+												type="button"
+												class="add"
+												aria-label="New budget line in {g.name}"
+												onclick={() => add(g.id)}><Icon name="plus" size={14} /></button
+											>
+										{/if}
+									</span>
+									<span class="bar-space"></span>
+									<span class="num">{cell(g.figures.estimate)}</span>
+									<span class="num" class:muted={g.figures.actual === 0}
+										>{cell(g.figures.actual)}</span
+									>
+									<span class="num">{cell(g.figures.forecast)}</span>
+								</div>
+								{#each g.rows as r (r.line.id)}
+									<button
+										type="button"
+										class="row line"
+										class:selected={selected === r.line.id}
+										role="row"
+										onclick={() => open(r.line.id)}
+									>
+										<span class="name">
+											<span class="title">{r.line.description}</span>
+											{#if formula(r.line.estimate, snapshot.assumptions, format)}
+												<span class="formula"
+													>{formula(r.line.estimate, snapshot.assumptions, format)}</span
+												>
+											{/if}
+											{#if r.line.complete}<span class="done" title="Complete"
+													><Icon name="check" size={14} /></span
+												>{/if}
+										</span>
+										<span class="bar-space bar" aria-hidden="true">
+											<span
+												style:width="{r.used * 100}%"
+												style:background={r.over ? 'var(--color-attention)' : g.color}
+											></span>
+										</span>
+										<span class="num">{cell(r.figures.estimate)}</span>
+										<span class="num" class:over={r.over} class:muted={r.figures.actual === 0}
+											>{cell(r.figures.actual)}</span
+										>
+										<span class="num" class:muted={r.waiting}>{cell(r.figures.forecast)}</span>
+									</button>
+								{/each}
+								{#if g.unbudgeted !== 0}
+									<div class="row line unbudgeted" role="row">
+										<span class="name">Not budgeted</span>
+										<span class="bar-space"></span>
+										<span class="num"></span>
+										<span class="num">{cell(g.unbudgeted)}</span>
+										<span class="num">{cell(g.unbudgeted)}</span>
+									</div>
+								{/if}
+							{/each}
 						</div>
 					{/if}
 				{/each}
-				<div class="row totals" role="row">
-					<span class="name"></span>
-					<span class="num">{cell(section.total.estimate)}</span>
-					<span class="num">{cell(section.total.actual)}</span>
-					<span class="num">{cell(section.total.forecast)}</span>
-				</div>
-			</div>
-		{/each}
 
-		{#if centres.length}
-			<div class="rows" role="table" aria-label="Cost centres">
-				<div class="row head" role="row">
-					<span class="name">Cost centres</span>
-					<span class="num">Estimate</span>
-					<span class="num">Actual</span>
-					<span class="num">Forecast</span>
-				</div>
-				{#each centres as c (c.centre.id)}
-					<div class="row" role="row">
-						<span class="name">
-							<a href={centreLink(c.centre.id)}>{c.centre.name}</a>
-						</span>
-						<span class="num">{formatAmount(c.figures.estimate, format, 'always')}</span>
-						<span class="num">{formatAmount(c.figures.actual, format, 'always')}</span>
-						<span class="num">{formatAmount(c.figures.forecast, format, 'always')}</span>
+				<div class="section" role="rowgroup" aria-label="Result">
+					<div class="row heading" role="row">
+						<span class="name">Result</span>
+						<span class="bar-space"></span>
+						<span class="num">{signed(budget.result.estimate)}</span>
+						<span class="num">{signed(budget.result.actual)}</span>
+						<span class="num">{signed(budget.result.forecast)}</span>
 					</div>
-				{/each}
-			</div>
-		{/if}
+				</div>
+
+				{#if centres.length}
+					<div class="section" role="rowgroup" aria-label="Cost centres">
+						<div class="row heading" role="row">
+							<span class="name">Cost centres</span>
+						</div>
+						{#each centres as c (c.centre.id)}
+							<div class="row" role="row">
+								<span class="name">
+									<a href={centreLink(c.centre.id)}>{c.centre.name}</a>
+								</span>
+								<span class="bar-space"></span>
+								<span class="num">{signed(c.figures.estimate)}</span>
+								<span class="num">{signed(c.figures.actual)}</span>
+								<span class="num">{signed(c.figures.forecast)}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			{/if}
+		</div>
 	</section>
 
 	{#if adding !== false}
@@ -244,9 +386,10 @@
 	}
 
 	.main {
+		container-type: inline-size;
 		display: flex;
 		flex-direction: column;
-		gap: 28px;
+		gap: var(--spacing-8);
 		flex: 1;
 		min-width: 0;
 		padding: var(--spacing-10) var(--spacing-8) var(--spacing-10) var(--spacing-10);
@@ -260,6 +403,12 @@
 		min-height: 40px;
 	}
 
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-2);
+	}
+
 	h1 {
 		margin: 0;
 		font-size: var(--type-lg);
@@ -268,16 +417,14 @@
 
 	.hero {
 		display: flex;
-		padding-bottom: 28px;
-		border-bottom: 1px solid var(--color-rule);
+		flex: none;
 	}
 
 	.figure {
 		display: flex;
 		flex-direction: column;
-		justify-content: flex-end;
-		gap: 10px;
-		padding: 0 32px;
+		gap: var(--spacing-2);
+		padding: 0 var(--spacing-8);
 		border-left: 1px solid var(--color-rule);
 	}
 
@@ -287,27 +434,71 @@
 	}
 
 	.result {
-		font-size: 40px;
+		font-size: var(--type-xl);
 		font-weight: 600;
-		line-height: 1.1;
+		line-height: 1.2;
+		white-space: nowrap;
 	}
 
 	.total {
-		font-size: 22px;
+		font-size: var(--type-lg);
 		font-weight: 600;
-		line-height: 1.6;
+		line-height: 1.4;
+		white-space: nowrap;
 	}
 
-	.rows {
+	.note {
+		font-size: var(--type-xs);
+		color: var(--color-ink-muted);
+		white-space: nowrap;
+	}
+
+	.furthest {
+		flex: 1;
+		min-width: 0;
+		gap: 6px;
+		padding-right: 0;
+	}
+
+	.furthest button {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--spacing-3);
+		padding: 0;
+		border: none;
+		background: none;
+		text-align: left;
+		white-space: nowrap;
+		cursor: pointer;
+	}
+
+	.furthest button:hover .title {
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.table {
 		display: flex;
 		flex-direction: column;
+		flex: none;
+	}
+
+	.section {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.section + .section {
+		margin-top: var(--spacing-6);
+		border-top: 1px solid var(--color-ink);
 	}
 
 	.row {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-3);
-		height: 40px;
+		flex: none;
+		height: 36px;
 		padding: 0 8px;
 		border: none;
 		border-bottom: 1px solid var(--color-rule);
@@ -315,11 +506,27 @@
 		text-align: left;
 	}
 
-	.row.head {
+	/* Stays at the top of the page while it scrolls, above the padding the page scrolls in. */
+	.row.columns {
+		position: sticky;
+		top: calc(-1 * var(--spacing-10));
+		z-index: 1;
 		height: auto;
+		padding-top: 4px;
 		padding-bottom: 6px;
+		border-bottom-color: var(--color-ink);
+		background: var(--color-paper);
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.row.heading {
+		height: 44px;
+		font-weight: 600;
+	}
+
+	.row.heading .name {
+		font-size: var(--type-md);
 	}
 
 	.row.category {
@@ -334,7 +541,7 @@
 		cursor: pointer;
 	}
 
-	button.row:hover .name {
+	button.row:hover .title {
 		text-decoration: underline;
 		text-underline-offset: 3px;
 	}
@@ -345,16 +552,17 @@
 		font-weight: 600;
 	}
 
-	.row.unbudgeted {
-		color: var(--color-ink-muted);
+	.row.selected .num {
+		font-weight: 400;
+		color: var(--color-ink);
 	}
 
-	.row.totals {
-		height: auto;
-		padding-top: 10px;
-		padding-bottom: 10px;
-		border-bottom: none;
+	.row.selected .num.over {
 		font-weight: 600;
+	}
+
+	.row.unbudgeted {
+		color: var(--color-ink-muted);
 	}
 
 	.name {
@@ -365,15 +573,84 @@
 		min-width: 0;
 	}
 
-	.done {
+	.title {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.dot {
+		width: 8px;
+		height: 8px;
+		flex: none;
+		border-radius: 50%;
+	}
+
+	/* Shown while its row is hovered or it has the focus. */
+	.add {
 		display: inline-flex;
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--color-ink-muted);
+		opacity: 0;
+		cursor: pointer;
+	}
+
+	.row:hover .add,
+	.add:focus-visible {
+		opacity: 1;
+	}
+
+	.formula {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--type-xs);
+		font-weight: 400;
 		color: var(--color-ink-muted);
 	}
 
+	.done {
+		display: inline-flex;
+		flex: none;
+		color: var(--color-ink-muted);
+	}
+
+	.row.selected .done {
+		color: var(--color-ink);
+	}
+
+	.bar-space {
+		width: 96px;
+		flex: none;
+	}
+
+	.bar {
+		height: 4px;
+		overflow: hidden;
+		border-radius: 2px;
+		background: var(--color-rule);
+	}
+
+	.bar span {
+		display: block;
+		height: 100%;
+		border-radius: 2px;
+	}
+
 	.num {
-		width: 110px;
+		width: 96px;
 		flex: none;
 		text-align: right;
+		white-space: nowrap;
+	}
+
+	.muted {
+		color: var(--color-ink-muted);
 	}
 
 	.over {
@@ -386,5 +663,13 @@
 
 	.minus {
 		color: var(--color-minus);
+	}
+
+	/* Beside a panel: only the table's figures and the hero's main ones. */
+	@container (max-width: 800px) {
+		.wide,
+		.bar-space {
+			display: none;
+		}
 	}
 </style>

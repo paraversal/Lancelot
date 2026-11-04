@@ -42,7 +42,11 @@ describe('Opening a file from the start screen', () => {
 	});
 
 	it('opens the chosen file while the screen is already showing', async () => {
-		openEvent.mockResolvedValue({ path: '/e.lancelot', revision: 1 } as OpenEvent);
+		openEvent.mockResolvedValue({
+			path: '/e.lancelot',
+			revision: 1,
+			snapshot: { event: { currency: 'EUR' } }
+		} as OpenEvent);
 		render(Start);
 		await waitFor(() => expect(recentEvents).toHaveBeenCalled());
 

@@ -25,15 +25,30 @@ pub fn june(day: u8) -> Date {
     Date::from_calendar_date(2026, Month::June, day).unwrap()
 }
 
+/// The accounts of the example event.
+pub fn two_accounts() -> Vec<AccountDraft> {
+    vec![
+        AccountDraft {
+            name: "Bank account".into(),
+            asset_type: AssetType::Bank,
+        },
+        AccountDraft {
+            name: "Cash box".into(),
+            asset_type: AssetType::Cash,
+        },
+    ]
+}
+
 pub fn new_book() -> Book {
-    Book::new(EventDetails {
-        name: "Sommerfest 2026".into(),
+    let details = EventDetails {
+        currency: Default::default(),
+        name: "Summer Festival 2026".into(),
         starts_on: Some(june(12)),
         ends_on: Some(june(14)),
         location: None,
         notes: None,
-    })
-    .unwrap()
+    };
+    Book::new(details, &two_accounts()).unwrap()
 }
 
 pub fn draft(description: &str, entry: Entry) -> TxnDraft {

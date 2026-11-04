@@ -30,6 +30,11 @@ tickets: number,
  */
 unknown: Array<UnknownTier>, 
 /**
+ * The event's other imports have order IDs and this one has none, or the other way round.
+ * It blocks the import.
+ */
+orderIdsDiffer: boolean, 
+/**
  * Every tier that has tickets before or after, in tier order.
  */
 tiers: Array<TierChange>, 

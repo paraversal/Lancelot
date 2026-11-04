@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import AmountField from './AmountField.svelte';
 import DateField from './DateField.svelte';
 import IbanField from './IbanField.svelte';
+import TextField from './TextField.svelte';
 
 // The real parsers live in Rust; here they are replaced by fixed answers.
 vi.mock('../api', async () => {
@@ -53,6 +54,53 @@ async function type(input: HTMLElement, text: string) {
 	await fireEvent.input(input, { target: { value: text } });
 	await settle();
 }
+
+describe('TextField with suggestions', () => {
+	const suggestions = ['Hoffmann', 'Metro', 'Hofladen'];
+	const open = async (text: string) => {
+		const oncommit = vi.fn();
+		render(TextField, { label: 'Counterparty', value: null, suggestions, oncommit });
+		const input = screen.getByLabelText('Counterparty');
+		await fireEvent.focus(input);
+		await fireEvent.input(input, { target: { value: text } });
+		return { input, oncommit };
+	};
+	const options = () => screen.queryAllByRole('option').map((o) => o.textContent?.trim());
+
+	it('offers what matches what is typed', async () => {
+		await open('hof');
+		expect(options()).toEqual(['Hoffmann', 'Hofladen']);
+	});
+
+	it('picks one by arrow and Enter', async () => {
+		const { input, oncommit } = await open('hof');
+		await fireEvent.keyDown(input, { key: 'ArrowDown' });
+		await fireEvent.keyDown(input, { key: 'ArrowDown' });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+		expect(oncommit).toHaveBeenCalledWith('Hofladen');
+		expect(options()).toEqual([]);
+	});
+
+	it('picks one by clicking, without committing what was half typed', async () => {
+		const { oncommit } = await open('hof');
+		await fireEvent.mouseDown(screen.getByRole('option', { name: 'Hoffmann' }));
+		expect(oncommit.mock.calls).toEqual([['Hoffmann']]);
+	});
+
+	it('keeps a new name, and Esc only closes the list', async () => {
+		const { input, oncommit } = await open('Ho');
+		await fireEvent.keyDown(input, { key: 'Escape' });
+		expect(options()).toEqual([]);
+		expect((input as HTMLInputElement).value).toBe('Ho');
+		await fireEvent.blur(input);
+		expect(oncommit).toHaveBeenCalledWith('Ho');
+	});
+
+	it('has nothing to offer for an exact match', async () => {
+		await open('metro');
+		expect(options()).toEqual([]);
+	});
+});
 
 describe('AmountField', () => {
 	it('previews what was typed and commits it', async () => {
@@ -243,6 +291,34 @@ describe('error messages', () => {
 		expect(screen.getByRole('tooltip').textContent).toBe(
 			'Enter a date as 31.12.2026 or 2026-12-31'
 		);
+	});
+});
+
+describe('Esc in a field', () => {
+	it('undoes what was typed in a text field and goes no further', async () => {
+		const oncommit = vi.fn();
+		render(TextField, { label: 'Name', value: 'Clara', oncommit });
+		const input = screen.getByLabelText<HTMLInputElement>('Name');
+		await fireEvent.input(input, { target: { value: 'Clar' } });
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
+		expect(input.value).toBe('Clara');
+		expect(oncommit).not.toHaveBeenCalled();
+	});
+
+	it('reaches the panel from a text field with nothing to undo', async () => {
+		render(TextField, { label: 'Name', value: 'Clara', oncommit() {} });
+		expect(await fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Escape' })).toBe(true);
+	});
+
+	it('undoes what was typed in an IBAN field and goes no further', async () => {
+		const oncommit = vi.fn();
+		render(IbanField, { value: null, oncommit });
+		const input = screen.getByRole<HTMLInputElement>('textbox');
+		await type(input, 'DE89');
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
+		expect(input.value).toBe('');
+		await settle();
+		expect(oncommit).not.toHaveBeenCalled();
 	});
 });
 

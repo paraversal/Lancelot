@@ -3,12 +3,14 @@
 //! These are plain values. The rules that keep them consistent live in [`crate::entry`] and
 //! [`crate::book`]; everything derived from them lives in [`crate::ledger`].
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use time::{Date, OffsetDateTime};
 use ts_rs::TS;
 
 use crate::iban::Iban;
-use crate::money::Cents;
+use crate::money::{Cents, Currency};
 
 /// Identifies an account within one event. Becomes the SQLite row id in the event file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
@@ -63,6 +65,12 @@ pub struct ManualSaleId(#[ts(type = "number")] pub i64);
 #[serde(transparent)]
 pub struct CostCentreId(#[ts(type = "number")] pub i64);
 
+/// Identifies an assumption within one event (R-BUD-6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct AssumptionId(#[ts(type = "number")] pub i64);
+
 /// Identifies a plugin's record within one event (technical design §10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -80,7 +88,7 @@ pub struct ReconciliationId(#[ts(type = "number")] pub i64);
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 pub enum AccountKind {
-    /// Event money sitting somewhere: the Verein account, the cash box.
+    /// Event money sitting somewhere: the Bank account, the cash box.
     Asset,
     /// Someone who advanced or holds event money. Positive displayed balance: the event owes them.
     Person,
@@ -122,6 +130,16 @@ pub struct CostCentre {
     pub name: String,
 }
 
+/// A number the budget is planned on, such as the guests expected (R-BUD-6). A budget line's
+/// quantity can scale with it. Planning data only, like budget lines (R-BUD-5).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+pub struct Assumption {
+    pub id: AssumptionId,
+    pub name: String,
+    pub value: u32,
+}
+
 /// What an asset account holds. Cash accounts are counted at the start and the end (R-ISO-3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, TS, Deserialize)]
 #[ts(export)]
@@ -129,6 +147,15 @@ pub struct CostCentre {
 pub enum AssetType {
     Bank,
     Cash,
+}
+
+/// An asset account a new event starts with.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[ts(export)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountDraft {
+    pub name: String,
+    pub asset_type: AssetType,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
@@ -156,6 +183,9 @@ pub struct Person {
     pub holder: Option<String>,
     pub iban: Option<Iban>,
     pub bic: Option<String>,
+    /// How they are reimbursed when it isn't a bank transfer, such as a PayPal address or cash.
+    /// While set, it applies instead of the bank details, which stay for later.
+    pub other_method: Option<String>,
     pub contact: Option<String>,
     pub notes: Option<String>,
 }
@@ -261,6 +291,8 @@ impl Event {
 #[serde(rename_all = "camelCase")]
 pub struct EventDetails {
     pub name: String,
+    /// Chosen when the event is created. Changing the details never changes it.
+    pub currency: Currency,
     #[ts(type = "string | null")]
     pub starts_on: Option<Date>,
     #[ts(type = "string | null")]
@@ -386,29 +418,51 @@ pub struct BudgetLineDraft {
 }
 
 /// A budget line's estimate, always positive or zero, whether it is an income or an expense.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS, Deserialize)]
 #[ts(export)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Estimate {
     Amount {
         amount: Cents,
     },
-    /// Quantity × unit price, e.g. 40 crates at 12,50 €. Exact, so nothing is rounded.
+    /// Quantity × unit price, e.g. 40 crates at 12,50 €, or times assumptions: 2 × Guests ×
+    /// 4,50 € (R-BUD-6). Exact, so nothing is rounded.
     Quantity {
         quantity: u32,
         #[serde(rename = "unitPrice")]
         unit_price: Cents,
+        /// The assumptions the quantity is multiplied by, each at most once.
+        #[serde(default)]
+        per: Vec<AssumptionId>,
     },
 }
 
 impl Estimate {
-    pub fn total(self) -> Result<Cents, crate::money::MoneyError> {
+    /// The estimate in cents, with the assumptions' values as they are now. An assumption that
+    /// doesn't exist counts as an overflow: a checked line never names one.
+    pub fn total(
+        &self,
+        assumptions: &BTreeMap<AssumptionId, Assumption>,
+    ) -> Result<Cents, crate::money::MoneyError> {
         match self {
-            Estimate::Amount { amount } => Ok(amount),
+            Estimate::Amount { amount } => Ok(*amount),
             Estimate::Quantity {
                 quantity,
                 unit_price,
-            } => unit_price.checked_mul(i64::from(quantity)),
+                per,
+            } => {
+                let mut count = i64::from(*quantity);
+                for id in per {
+                    let value = assumptions
+                        .get(id)
+                        .ok_or(crate::money::MoneyError::Overflow)?
+                        .value;
+                    count = count
+                        .checked_mul(i64::from(value))
+                        .ok_or(crate::money::MoneyError::Overflow)?;
+                }
+                unit_price.checked_mul(count)
+            }
         }
     }
 }

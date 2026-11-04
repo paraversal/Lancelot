@@ -14,10 +14,10 @@ use crate::error::DomainError;
 use crate::iban::validate_bic;
 use crate::ledger::{Ledger, LedgerInput, TicketIncome};
 use crate::model::{
-    Account, AccountId, AccountKind, AssetType, Attachment, AttachmentId, BlockerOverride,
-    BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount, CostCentre, CostCentreId, Estimate,
-    Event, EventDetails, Line, OpenItem, Person, PluginRecordId, Reconciliation, ReconciliationId,
-    Role, Txn, TxnId, TxnKind,
+    Account, AccountDraft, AccountId, AccountKind, AssetType, Assumption, AssumptionId, Attachment,
+    AttachmentId, BlockerOverride, BudgetLine, BudgetLineDraft, BudgetLineId, ClosingCount,
+    CostCentre, CostCentreId, Estimate, Event, EventDetails, Line, OpenItem, Person,
+    PluginRecordId, Reconciliation, ReconciliationId, Role, Txn, TxnId, TxnKind,
 };
 use crate::model::{CancellationId, ImportId, ManualSaleId, Origin, TierId};
 use crate::money::Cents;
@@ -26,6 +26,7 @@ use crate::plugin::PluginRecord;
 use crate::sales::Profitability;
 use crate::tickets::{Cancellation, ManualSale, TicketImport, TicketSettings, Tickets, Tier};
 
+mod assumptions;
 mod cost_centres;
 mod plugins;
 mod template;
@@ -55,6 +56,7 @@ pub struct Book {
     closing_counts: BTreeMap<AccountId, ClosingCount>,
     reconciliations: BTreeMap<ReconciliationId, Reconciliation>,
     budget_lines: BTreeMap<BudgetLineId, BudgetLine>,
+    assumptions: BTreeMap<AssumptionId, Assumption>,
     tiers: BTreeMap<TierId, Tier>,
     imports: BTreeMap<ImportId, TicketImport>,
     manual_sales: BTreeMap<ManualSaleId, ManualSale>,
@@ -70,14 +72,15 @@ pub struct Book {
     profitability: Option<Profitability>,
 }
 
-/// The ids the next new account, transaction, attachment, budget line, tier, import, manual
-/// sale, cancellation, cost centre, plugin record and checkpoint get. Ids are never reused, so the change log stays unambiguous after deletions.
+/// The ids the next new account, transaction, attachment, budget line, assumption, tier, import,
+/// manual sale, cancellation, cost centre, plugin record and checkpoint get. Ids are never reused, so the change log stays unambiguous after deletions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NextIds {
     pub account: i64,
     pub txn: i64,
     pub attachment: i64,
     pub budget_line: i64,
+    pub assumption: i64,
     pub tier: i64,
     pub import: i64,
     pub manual_sale: i64,
@@ -99,6 +102,7 @@ pub struct BookParts {
     pub closing_counts: Vec<ClosingCount>,
     pub reconciliations: Vec<Reconciliation>,
     pub budget_lines: Vec<BudgetLine>,
+    pub assumptions: Vec<Assumption>,
     pub tiers: Vec<Tier>,
     pub imports: Vec<TicketImport>,
     pub manual_sales: Vec<ManualSale>,
@@ -126,8 +130,10 @@ pub enum Warning {
 }
 
 impl Book {
-    /// A new event with the default accounts and categories (R-EVT-1, R-ACC-1, R-ACC-2).
-    pub fn new(details: EventDetails) -> Result<Book, DomainError> {
+    /// A new event with the given accounts and the default categories (R-EVT-1, R-ACC-1, R-ACC-2).
+    /// Reimbursements and ticket money start out at the first bank account, or else the first
+    /// account (R-EVT-4), and a bank account starts out counting net movement only (R-ISO-2).
+    pub fn new(details: EventDetails, accounts: &[AccountDraft]) -> Result<Book, DomainError> {
         let details = clean_details(details)?;
         let mut book = Book {
             event: Event {
@@ -147,6 +153,7 @@ impl Book {
             closing_counts: BTreeMap::new(),
             reconciliations: BTreeMap::new(),
             budget_lines: BTreeMap::new(),
+            assumptions: BTreeMap::new(),
             tiers: BTreeMap::new(),
             imports: BTreeMap::new(),
             manual_sales: BTreeMap::new(),
@@ -158,6 +165,7 @@ impl Book {
                 txn: 1,
                 attachment: 1,
                 budget_line: 1,
+                assumption: 1,
                 tier: 1,
                 import: 1,
                 manual_sale: 1,
@@ -172,8 +180,21 @@ impl Book {
             payouts: Payouts::default(),
             profitability: None,
         };
-        let verein = book.insert_account(AccountKind::Asset, "Verein account", None);
-        let cash = book.insert_account(AccountKind::Asset, "Cash box", None);
+        for draft in accounts {
+            let name = book.unique_name(AccountKind::Asset, &draft.name, None)?;
+            let id = book.insert_account(AccountKind::Asset, &name, None);
+            if let Some(a) = book.accounts.get_mut(&id) {
+                a.asset_type = Some(draft.asset_type);
+                a.net_movement = draft.asset_type == AssetType::Bank;
+            }
+        }
+        let main = book
+            .accounts
+            .values()
+            .find(|a| a.asset_type == Some(AssetType::Bank))
+            .or_else(|| book.accounts.values().next())
+            .ok_or(DomainError::NoAccounts)?
+            .id;
         book.insert_account(AccountKind::Opening, "Opening balance", None);
         for name in DEFAULT_INCOME {
             let role = (*name == "Tickets").then_some(Role::Tickets);
@@ -182,14 +203,8 @@ impl Book {
         for name in DEFAULT_EXPENSE {
             book.insert_account(AccountKind::Expense, name, None);
         }
-        if let Some(a) = book.accounts.get_mut(&verein) {
-            a.net_movement = true;
-        }
-        if let Some(a) = book.accounts.get_mut(&cash) {
-            a.asset_type = Some(AssetType::Cash);
-        }
-        book.ticket_settings.account = Some(verein);
-        book.event.default_reimbursement_account = verein;
+        book.ticket_settings.account = Some(main);
+        book.event.default_reimbursement_account = main;
         book.recompute()?;
         Ok(book)
     }
@@ -263,10 +278,12 @@ impl Book {
             return Err(bad("person account without person details"));
         }
 
+        let assumptions = assumptions::check_assumptions(parts.assumptions, &parts.next)?;
         let mut budget_lines = BTreeMap::new();
         for b in parts.budget_lines {
             if b.id.0 >= parts.next.budget_line
-                || clean_budget_line(b.draft.clone(), &accounts, &cost_centres).as_ref()
+                || clean_budget_line(b.draft.clone(), &accounts, &cost_centres, &assumptions)
+                    .as_ref()
                     != Ok(&b.draft)
             {
                 return Err(bad("budget line with an invalid category or estimate"));
@@ -356,6 +373,7 @@ impl Book {
             closing_counts,
             reconciliations,
             budget_lines,
+            assumptions,
             tiers,
             imports,
             manual_sales,
@@ -979,7 +997,8 @@ impl Book {
     /// Adds a budget line (R-BUD-1).
     pub fn add_budget_line(&mut self, draft: BudgetLineDraft) -> Result<BudgetLineId, DomainError> {
         self.change(|book| {
-            let draft = clean_budget_line(draft, &book.accounts, &book.cost_centres)?;
+            let draft =
+                clean_budget_line(draft, &book.accounts, &book.cost_centres, &book.assumptions)?;
             let id = BudgetLineId(book.next.budget_line);
             book.next.budget_line += 1;
             book.budget_lines.insert(id, BudgetLine { id, draft });
@@ -995,7 +1014,8 @@ impl Book {
         draft: BudgetLineDraft,
     ) -> Result<(), DomainError> {
         self.change(|book| {
-            let draft = clean_budget_line(draft, &book.accounts, &book.cost_centres)?;
+            let draft =
+                clean_budget_line(draft, &book.accounts, &book.cost_centres, &book.assumptions)?;
             let line = book
                 .budget_lines
                 .get(&id)
@@ -1036,7 +1056,11 @@ impl Book {
 
     pub fn update_event(&mut self, details: EventDetails) -> Result<(), DomainError> {
         self.change(|book| {
-            book.event.details = clean_details(details)?;
+            let currency = book.event.details.currency;
+            book.event.details = EventDetails {
+                currency,
+                ..clean_details(details)?
+            };
             Ok(())
         })
     }
@@ -1099,22 +1123,32 @@ impl Book {
         Ok(())
     }
 
-    /// Records every reimbursement on the payout list that has an IBAN, from `account` on
-    /// `date` (R-PER-5). Returns how many were recorded.
+    /// Records the reimbursements of `people` on the payout list, from `account` on `date`
+    /// (R-PER-5). Someone with no reimbursement method can't be recorded, so they are skipped.
+    /// Returns how many were recorded.
     pub fn mark_payouts_paid(
         &mut self,
         account: AccountId,
         date: Date,
+        people: &[AccountId],
     ) -> Result<usize, DomainError> {
         let list = self.payouts.clone();
         self.change(|b| {
             let mut n = 0;
-            for p in list.payouts.iter().filter(|p| p.iban.is_some()) {
+            let chosen = list
+                .payouts
+                .iter()
+                .filter(|p| p.payable() && people.contains(&p.person));
+            for p in chosen {
                 let draft = TxnDraft {
                     date,
                     description: "Reimbursement".into(),
                     counterparty: None,
-                    notes: Some(p.reference.clone()),
+                    notes: Some(
+                        p.other_method
+                            .clone()
+                            .unwrap_or_else(|| p.reference.clone()),
+                    ),
                     entry: Entry::Settle {
                         person: p.person,
                         account,
@@ -1210,6 +1244,7 @@ impl Book {
         self.budget = Budget::compute(
             &self.accounts,
             &self.budget_lines,
+            &self.assumptions,
             &self.cost_centres,
             &self.txns,
             &self.ledger,
@@ -1344,6 +1379,7 @@ fn clean_budget_line(
     d: BudgetLineDraft,
     accounts: &BTreeMap<AccountId, Account>,
     cost_centres: &BTreeMap<CostCentreId, CostCentre>,
+    assumptions: &BTreeMap<AssumptionId, Assumption>,
 ) -> Result<BudgetLineDraft, DomainError> {
     if d.cost_centre
         .is_some_and(|c| !cost_centres.contains_key(&c))
@@ -1389,7 +1425,8 @@ fn clean_budget_line(
         }
         _ => {}
     }
-    d.estimate.total()?;
+    assumptions::check_per(&d.estimate, assumptions)?;
+    d.estimate.total(assumptions)?;
     Ok(BudgetLineDraft { description, ..d })
 }
 
@@ -1463,6 +1500,7 @@ fn clean_person(p: Person) -> Result<Person, DomainError> {
         holder: clean(p.holder),
         iban: p.iban,
         bic,
+        other_method: clean(p.other_method),
         contact: clean(p.contact),
         notes: clean(p.notes),
     })

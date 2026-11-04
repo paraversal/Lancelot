@@ -12,7 +12,7 @@
 	import { tierColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
 	import ChoiceField from '#lib/components/ChoiceField.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import TextField from '#lib/components/TextField.svelte';
@@ -61,6 +61,8 @@
 			sale?.date ?? last?.date ?? snapshot.event.startsOn ?? new Date().toISOString().slice(0, 10);
 		reference = sale?.reference ?? null;
 	});
+	const values = () => JSON.stringify([tier, count, destination, date, reference]);
+	const clean = values();
 	let confirming = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
 
@@ -99,6 +101,7 @@
 
 	async function save() {
 		error = null;
+		await datesRead();
 		const d = draft();
 		if (!d) return;
 		try {
@@ -135,7 +138,7 @@
 
 <svelte:window onkeydown={keydown} />
 
-<Panel title="Manual sale" {onclose}>
+<Panel title="Manual sale" {onclose} dirty={values() !== clean}>
 	<fieldset disabled={session.closed}>
 		<div class="pair">
 			<div class="form-field tier">
@@ -211,7 +214,12 @@
 				{#if fieldError('date')}<span class="form-error">{fieldError('date')}</span>{/if}
 			</div>
 			<div class="form-field reference">
-				<TextField label="Reference" value={reference} oncommit={(v) => (reference = v)} />
+				<TextField
+					label="Reference"
+					value={reference}
+					oninput={(t) => (reference = t.trim() || null)}
+					oncommit={(v) => (reference = v)}
+				/>
 			</div>
 		</div>
 	</fieldset>

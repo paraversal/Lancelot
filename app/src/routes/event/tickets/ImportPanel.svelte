@@ -11,7 +11,7 @@
 	import type { TierId } from '#lib/api/generated/TierId.ts';
 	import { tierColor } from '#lib/colors.ts';
 	import Button from '#lib/components/Button.svelte';
-	import DateField from '#lib/components/DateField.svelte';
+	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import Select from '#lib/components/Select.svelte';
@@ -94,8 +94,12 @@
 		await read();
 	}
 
+	/** Tier names to map, or tickets of the other kind than the event's imports. */
+	const blocked = (p: ImportPreview) => p.unknown.length > 0 || p.orderIdsDiffer;
+
 	async function doImport() {
-		if (!batch || !preview || preview.unknown.length || !date || ticketAccount === null) return;
+		await datesRead();
+		if (!batch || !preview || blocked(preview) || !date || ticketAccount === null) return;
 		error = null;
 		try {
 			await session.change(() => api.importTickets(batch, date!));
@@ -193,6 +197,19 @@
 		</fieldset>
 
 		{#if preview}
+			{#if preview.orderIdsDiffer}
+				<div class="problems" role="alert">
+					<strong
+						>{snapshot.tickets.orderIds
+							? 'These tickets have no order IDs'
+							: 'These tickets have order IDs'}</strong
+					>
+					<span
+						>The event's imports {snapshot.tickets.orderIds ? 'have them' : 'have none'}, and every
+						import has to be the same. Delete the imports to switch.</span
+					>
+				</div>
+			{/if}
 			{#each preview.unknown as u (u.name)}
 				<div class="unknown">
 					<div class="top">
@@ -243,7 +260,9 @@
 						{#if removed.length}
 							<div class="conflicts">
 								{#each removed as r (r.order)}
-									<span class="conflict">Order {r.order} · conflict</span>
+									<span class="conflict"
+										>{r.order === '' ? 'Conflict' : `Order ${r.order} · conflict`}</span
+									>
 								{/each}
 							</div>
 						{/if}
@@ -322,7 +341,7 @@
 			<Button
 				kind="primary"
 				shortcut="⌘↵"
-				disabled={!preview || !!preview.unknown.length || !date || ticketAccount === null}
+				disabled={!preview || blocked(preview) || !date || ticketAccount === null}
 				onclick={doImport}>Import</Button
 			>
 			{#if preview?.unknown.length}

@@ -15,7 +15,7 @@ fn new_event_has_default_accounts() {
             .map(|a| a.name.clone())
             .collect::<Vec<_>>()
     };
-    assert_eq!(names(AccountKind::Asset), ["Verein account", "Cash box"]);
+    assert_eq!(names(AccountKind::Asset), ["Bank account", "Cash box"]);
     assert_eq!(names(AccountKind::Income), ["Tickets", "General"]);
     assert_eq!(
         names(AccountKind::Expense),
@@ -24,20 +24,74 @@ fn new_event_has_default_accounts() {
     assert!(!book.event().is_closed());
     assert_eq!(
         book.event().default_reimbursement_account,
-        asset(&book, "Verein account")
+        asset(&book, "Bank account")
     );
 }
 
 #[test]
 fn event_needs_a_name() {
     let details = EventDetails {
+        currency: Default::default(),
         name: "  ".into(),
         starts_on: None,
         ends_on: None,
         location: None,
         notes: None,
     };
-    assert_eq!(Book::new(details).unwrap_err().code(), "empty_name");
+    assert_eq!(
+        Book::new(details, &two_accounts()).unwrap_err().code(),
+        "empty_name"
+    );
+}
+
+fn account(name: &str, asset_type: AssetType) -> AccountDraft {
+    AccountDraft {
+        name: name.into(),
+        asset_type,
+    }
+}
+
+fn start_with(accounts: &[AccountDraft]) -> Result<Book, DomainError> {
+    Book::new(new_book().event().details.clone(), accounts)
+}
+
+#[test]
+fn event_needs_an_account_with_a_free_name() {
+    let code = |accounts: &[AccountDraft]| start_with(accounts).unwrap_err().code();
+    assert_eq!(code(&[]), "no_accounts");
+    assert_eq!(code(&[account(" ", AssetType::Bank)]), "empty_name");
+    assert_eq!(
+        code(&[
+            account("Giro", AssetType::Bank),
+            account("GIRO ", AssetType::Cash)
+        ]),
+        "duplicate_name"
+    );
+}
+
+#[test]
+fn money_starts_out_at_the_first_bank_account() {
+    let book = start_with(&[
+        account("Till", AssetType::Cash),
+        account("Giro", AssetType::Bank),
+        account("Savings", AssetType::Bank),
+    ])
+    .unwrap();
+    let giro = asset(&book, "Giro");
+    assert_eq!(book.event().default_reimbursement_account, giro);
+    assert_eq!(book.ticket_settings().account, Some(giro));
+    assert!(book.account(giro).unwrap().net_movement);
+    let till = book.account(asset(&book, "Till")).unwrap();
+    assert_eq!(till.asset_type, Some(AssetType::Cash));
+    assert!(!till.net_movement);
+}
+
+#[test]
+fn a_cash_account_alone_is_enough() {
+    let book = start_with(&[account("Till", AssetType::Cash)]).unwrap();
+    let till = asset(&book, "Till");
+    assert_eq!(book.event().default_reimbursement_account, till);
+    assert_eq!(book.ticket_settings().account, Some(till));
 }
 
 #[test]
@@ -93,6 +147,7 @@ fn person_details_are_cleaned_and_checked() {
                 holder: Some(" Anna Example ".into()),
                 iban: Some(iban.clone()),
                 bic: Some("cobadeffxxx".into()),
+                other_method: Some(" ".into()),
                 contact: Some("".into()),
                 notes: None,
             },
@@ -102,6 +157,7 @@ fn person_details_are_cleaned_and_checked() {
     assert_eq!(p.holder.as_deref(), Some("Anna Example"));
     assert_eq!(p.bic.as_deref(), Some("COBADEFFXXX"));
     assert_eq!(p.contact, None);
+    assert_eq!(p.other_method, None);
     assert_eq!(p.iban, Some(iban));
 
     let bad = Person {
@@ -173,7 +229,7 @@ fn editing_replaces_and_deleting_removes() {
             "x",
             Entry::Transfer {
                 from: cash,
-                to: asset(&book, "Verein account"),
+                to: asset(&book, "Bank account"),
                 amount: eur("1"),
             },
         ),
@@ -185,7 +241,7 @@ fn editing_replaces_and_deleting_removes() {
 #[test]
 fn overpaying_a_settle_is_allowed_with_a_warning() {
     let mut book = new_book();
-    let (verein, food) = (asset(&book, "Verein account"), expense(&book, "Kitchen"));
+    let (bank, food) = (asset(&book, "Bank account"), expense(&book, "Kitchen"));
     let malte = person(&mut book, "Malte");
     save(
         &mut book,
@@ -201,7 +257,7 @@ fn overpaying_a_settle_is_allowed_with_a_warning() {
                 "Reimbursement",
                 Entry::Settle {
                     person: malte,
-                    account: verein,
+                    account: bank,
                     amount: eur("150"),
                     direction: SettleDirection::Reimburse,
                 },
@@ -335,9 +391,9 @@ fn a_closed_event_is_read_only_until_reopened() {
 #[test]
 fn closing_counts_show_the_difference() {
     let mut book = new_book();
-    let (cash, verein, donations) = (
+    let (cash, bank, donations) = (
         asset(&book, "Cash box"),
-        asset(&book, "Verein account"),
+        asset(&book, "Bank account"),
         income(&book, "General"),
     );
     save(
@@ -376,10 +432,9 @@ fn closing_counts_show_the_difference() {
 
     // Other asset accounts appear once they have a count; they never need one.
     assert_eq!(book.ledger().cash().len(), 1);
-    book.set_closing_count(verein, june(14), Cents::ZERO)
-        .unwrap();
+    book.set_closing_count(bank, june(14), Cents::ZERO).unwrap();
     assert_eq!(book.ledger().cash().len(), 2);
-    book.clear_closing_count(verein).unwrap();
+    book.clear_closing_count(bank).unwrap();
     assert_eq!(book.ledger().cash().len(), 1);
 
     assert_eq!(
@@ -389,21 +444,20 @@ fn closing_counts_show_the_difference() {
         "negative_cash_count"
     );
     // A bank account can end below zero: it holds only the event's net movement (R-ISO-2).
-    book.set_closing_count(verein, june(14), eur("-100"))
-        .unwrap();
-    let counted = book.ledger().cash().iter().find(|c| c.account == verein);
+    book.set_closing_count(bank, june(14), eur("-100")).unwrap();
+    let counted = book.ledger().cash().iter().find(|c| c.account == bank);
     assert_eq!(
         counted.unwrap().difference,
         Some(eur("-100")),
-        "nothing has moved on the Verein account yet"
+        "nothing has moved on the Bank account yet"
     );
     assert_eq!(
-        book.set_asset_type(verein, AssetType::Cash)
+        book.set_asset_type(bank, AssetType::Cash)
             .unwrap_err()
             .code(),
         "negative_cash_count"
     );
-    book.clear_closing_count(verein).unwrap();
+    book.clear_closing_count(bank).unwrap();
     let food = expense(&book, "Kitchen");
     assert_eq!(
         book.set_closing_count(food, june(14), eur("1"))
@@ -498,7 +552,7 @@ fn asset_accounts_are_bank_or_cash() {
     assert_eq!(
         types(&book),
         [
-            ("Verein account".into(), Some(AssetType::Bank)),
+            ("Bank account".into(), Some(AssetType::Bank)),
             ("Cash box".into(), Some(AssetType::Cash)),
         ]
     );
@@ -599,22 +653,21 @@ fn an_opening_count_is_one_opening_transaction() {
     assert_eq!(book.txns().count(), 0);
 
     // A bank account with an opening count shows up among the counts, but needs no closing count.
-    let verein = asset(&book, "Verein account");
-    book.set_opening_count(verein, june(12), eur("1000"))
-        .unwrap();
-    let bank = book
+    let bank = asset(&book, "Bank account");
+    book.set_opening_count(bank, june(12), eur("1000")).unwrap();
+    let count = book
         .ledger()
         .cash()
         .iter()
-        .find(|c| c.account == verein)
+        .find(|c| c.account == bank)
         .copied()
         .unwrap();
-    assert_eq!(bank.asset_type, AssetType::Bank);
+    assert_eq!(count.asset_type, AssetType::Bank);
     assert!(
         !book
             .ledger()
             .open_items()
-            .contains(&OpenItem::ClosingCountMissing { account: verein })
+            .contains(&OpenItem::ClosingCountMissing { account: bank })
     );
 }
 
@@ -625,8 +678,8 @@ fn marking_payouts_paid_settles_only_those_with_an_iban() {
         .account_by_name(AccountKind::Expense, "Kitchen")
         .unwrap()
         .id;
-    let verein = book
-        .account_by_name(AccountKind::Asset, "Verein account")
+    let bank = book
+        .account_by_name(AccountKind::Asset, "Bank account")
         .unwrap()
         .id;
     let with_iban = Person {
@@ -654,9 +707,12 @@ fn marking_payouts_paid_settles_only_those_with_an_iban() {
         };
         book.save_txn(&draft, None).unwrap();
     }
-    assert_eq!(book.mark_payouts_paid(verein, june(20)), Ok(1));
+    // Bob has no method, so asking for Bob too records only Anna.
+    assert_eq!(book.mark_payouts_paid(bank, june(20), &[anna, bob]), Ok(1));
     assert!(book.ledger().person(anna).unwrap().net.is_zero());
     assert_eq!(book.ledger().person(bob).unwrap().net, eur("20,00"));
+    assert!(!book.payouts().payouts[0].payable());
+    assert_eq!(book.payouts().payable_total, Cents::ZERO);
 }
 
 #[test]
@@ -743,4 +799,81 @@ fn reopening_keeps_the_notes_for_closing_again() {
     book.close(kept.clone(), OffsetDateTime::UNIX_EPOCH)
         .unwrap();
     assert_eq!(book.event().closing_overrides, kept);
+}
+
+#[test]
+fn another_method_applies_instead_of_the_bank_details_and_can_be_marked_paid() {
+    let mut book = new_book();
+    let kitchen = category(&book, AccountKind::Expense, "Kitchen");
+    let bank = book
+        .account_by_name(AccountKind::Asset, "Bank account")
+        .unwrap()
+        .id;
+    let paypal = Person {
+        iban: Some(validate_iban("DE89370400440532013000").unwrap()),
+        bic: Some("COBADEFFXXX".into()),
+        other_method: Some(" PayPal: anna@example.invalid ".into()),
+        ..Person::default()
+    };
+    let anna = book.add_person("Anna", paypal).unwrap();
+    let by_transfer = Person {
+        iban: Some(validate_iban("DE02120300000000202051").unwrap()),
+        ..Person::default()
+    };
+    let bob = book.add_person("Bob", by_transfer).unwrap();
+    for payer in [anna, bob] {
+        let draft = TxnDraft {
+            date: june(13),
+            description: "Metro".into(),
+            counterparty: None,
+            notes: None,
+            entry: Entry::Expense {
+                payer,
+                lines: vec![SplitLine {
+                    account: kitchen,
+                    amount: eur("20,00"),
+                    budget_line: None,
+                    cost_centre: None,
+                }],
+            },
+            total: None,
+        };
+        book.save_txn(&draft, None).unwrap();
+    }
+
+    let row = book.payouts().payouts[0].clone();
+    assert_eq!(row.iban, None);
+    assert_eq!(row.bic, None);
+    assert_eq!(
+        row.other_method.as_deref(),
+        Some("PayPal: anna@example.invalid")
+    );
+    assert_eq!(book.payouts().payable_total, eur("40,00"));
+    let csv = payouts_csv(book.payouts(), NumberFormat::De);
+    assert!(
+        csv.contains("Anna;Anna;;;PayPal: anna@example.invalid;20,00;\r\n"),
+        "{csv}"
+    );
+
+    // Only who was asked for, and the entry says how the money went.
+    assert_eq!(book.mark_payouts_paid(bank, june(20), &[anna]), Ok(1));
+    assert!(book.ledger().person(anna).unwrap().net.is_zero());
+    assert_eq!(book.ledger().person(bob).unwrap().net, eur("20,00"));
+    let settle = book.txns().last().unwrap();
+    assert_eq!(
+        settle.notes.as_deref(),
+        Some("PayPal: anna@example.invalid")
+    );
+}
+
+#[test]
+fn the_currency_is_set_at_creation_and_never_changes() {
+    let mut book = new_book();
+    let mut details = book.event().details.clone();
+    assert_eq!(details.currency, Currency::Eur);
+    details.currency = Currency::Usd;
+    details.location = Some("Elsewhere".into());
+    book.update_event(details).unwrap();
+    assert_eq!(book.event().details.currency, Currency::Eur);
+    assert_eq!(book.event().details.location.as_deref(), Some("Elsewhere"));
 }

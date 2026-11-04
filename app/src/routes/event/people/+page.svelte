@@ -25,10 +25,13 @@
 
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
 
-	// Opened from the overview's open items: `/event/people?person=7`.
+	// Opened from the overview's open items: `/event/people?person=7`, and from a payout without a
+	// method straight into editing: `/event/people?person=7&edit`.
 	onMount(() => {
 		const id = Number(page.url.searchParams.get('person'));
-		if (people.some((p) => p.account === id)) open(id);
+		if (!people.some((p) => p.account === id)) return;
+		open(id);
+		editing = page.url.searchParams.has('edit') && !session.closed;
 	});
 
 	function open(id: number) {
@@ -100,8 +103,8 @@
 					>
 						<span class="name">
 							{p.name}
-							{#if p.summary.net > 0 && !p.iban}
-								<span class="missing"><Icon name="warn" size={14} />IBAN</span>
+							{#if p.summary.net > 0 && !p.iban && !p.otherMethod}
+								<span class="missing"><Icon name="warn" size={14} />No method</span>
 							{/if}
 						</span>
 						<span class="num">{cell(p.summary.advanced)}</span>
@@ -234,8 +237,10 @@
 
 	.missing {
 		display: inline-flex;
+		flex: none;
 		align-items: center;
 		gap: 4px;
+		white-space: nowrap;
 		font-size: var(--type-xs);
 		font-weight: 600;
 		color: var(--color-attention);

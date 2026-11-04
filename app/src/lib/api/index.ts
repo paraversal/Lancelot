@@ -3,9 +3,11 @@
 import { convertFileSrc, invoke as tauriInvoke, isTauri } from '@tauri-apps/api/core';
 
 import type { AccountId } from './generated/AccountId';
+import type { AccountDraft } from './generated/AccountDraft';
 import type { AccountKind } from './generated/AccountKind';
 import type { Attachment } from './generated/Attachment';
 import type { AssetType } from './generated/AssetType';
+import type { AssumptionId } from './generated/AssumptionId';
 import type { AttachmentId } from './generated/AttachmentId';
 import type { Added } from './generated/Added';
 import type { ApiError as ApiErrorData } from './generated/ApiError';
@@ -113,9 +115,13 @@ export const api = {
 	recentEvents: () => call<RecentEvent[]>('recent_events'),
 	forgetRecent: (path: string) => call<RecentEvent[]>('recent_forget', { path }),
 
-	/** With a template, the new event starts with that event's setup (R-EVT-3). */
-	createEvent: (path: string, details: EventDetails, template: string | null = null) =>
-		call<OpenEvent>('event_create', { path, details, template }),
+	/** With a template, the new event starts with that event's setup instead (R-EVT-3). */
+	createEvent: (
+		path: string,
+		details: EventDetails,
+		accounts: AccountDraft[],
+		template: string | null = null
+	) => call<OpenEvent>('event_create', { path, details, accounts, template }),
 	templatePreview: (path: string) => call<TemplateSummary>('template_preview', { path }),
 	/** What copying everything from that event would add; changes nothing. */
 	copyPreview: (path: string) => call<CopySummary>('copy_preview', { path }),
@@ -184,6 +190,14 @@ export const api = {
 	/** The linked actuals stay and count as unbudgeted. */
 	deleteBudgetLine: (id: BudgetLineId) => call<OpenEvent>('budget_line_delete', { id }),
 
+	addAssumption: (name: string, value: number) =>
+		call<OpenEvent>('assumption_add', { name, value }),
+	/** Every budget line that scales with it follows. */
+	updateAssumption: (id: AssumptionId, name: string, value: number) =>
+		call<OpenEvent>('assumption_update', { id, name, value }),
+	/** Refused while a budget line scales with it. */
+	deleteAssumption: (id: AssumptionId) => call<OpenEvent>('assumption_delete', { id }),
+
 	addCostCentre: (name: string) => call<OpenEvent>('cost_centre_add', { name }),
 	renameCostCentre: (id: CostCentreId, name: string) =>
 		call<OpenEvent>('cost_centre_rename', { id, name }),
@@ -217,9 +231,9 @@ export const api = {
 	/** The token is never handed back; null removes it. */
 	setDataSourceToken: (id: string, token: string | null) =>
 		call<DataSources>('data_source_set_token', { id, token }),
-	/** Asks the provider for these fields; changes nothing. */
-	pullDataSource: (id: string, fields: string[]) =>
-		call<Pulled>('data_source_pull', { id, fields }),
+	/** Asks the provider for these fields, of which `optional` may be missing; changes nothing. */
+	pullDataSource: (id: string, fields: string[], optional: string[] = []) =>
+		call<Pulled>('data_source_pull', { id, fields, optional }),
 	/** Reads these columns of a file; changes nothing. */
 	readTable: (path: string, columns: string[]) => call<Table>('table_read', { path, columns }),
 	setImportDate: (id: ImportId, date: string) => call<OpenEvent>('import_set_date', { id, date }),
@@ -244,8 +258,8 @@ export const api = {
 	/** Closes the event (R-SET-7): every open item needs a note in `overrides`. */
 	closeEvent: (overrides: BlockerOverride[]) => call<OpenEvent>('event_close', { overrides }),
 	reopenEvent: () => call<OpenEvent>('event_reopen'),
-	markPayoutsPaid: (account: AccountId, date: string) =>
-		call<OpenEvent>('payouts_mark_paid', { account, date }),
+	markPayoutsPaid: (account: AccountId, date: string, people: AccountId[]) =>
+		call<OpenEvent>('payouts_mark_paid', { account, date, people }),
 	/** The print dialog, e.g. to save the payout list as PDF. */
 	print: async () => (isTauri() ? call<void>('print_window') : window.print())
 };

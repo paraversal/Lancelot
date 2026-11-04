@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use lancelot_core::{Book, DomainError, Person, TicketBatch};
+use lancelot_core::{AccountDraft, AccountId, Book, DomainError, Person, TicketBatch};
 use lancelot_service::Service;
 use lancelot_service::api::{ApiError, AppInfo};
 use serde::Serialize;
@@ -62,9 +62,10 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "event_create" => {
             let path: PathBuf = arg(a, "path")?;
             let details = arg(a, "details")?;
+            let accounts: Vec<AccountDraft> = arg(a, "accounts")?;
             json(match arg::<Option<PathBuf>>(a, "template")? {
                 Some(template) => s.create_event_from(&path, details, &template),
-                None => s.create_event(&path, details),
+                None => s.create_event(&path, details, &accounts),
             })
         }
         "template_preview" => json(s.template_preview(&arg::<PathBuf>(a, "path")?)),
@@ -169,6 +170,21 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
 
         "budget_line_delete" => one(s, a, "id", Book::delete_budget_line),
 
+        "assumption_add" => {
+            let name: String = arg(a, "name")?;
+            let value: u32 = arg(a, "value")?;
+            json(s.change(|b| b.add_assumption(&name, value)))
+        }
+
+        "assumption_update" => {
+            let id = arg(a, "id")?;
+            let name: String = arg(a, "name")?;
+            let value: u32 = arg(a, "value")?;
+            json(s.change(|b| b.update_assumption(id, &name, value)))
+        }
+
+        "assumption_delete" => one(s, a, "id", Book::delete_assumption),
+
         "cost_centre_add" => {
             let name: String = arg(a, "name")?;
             json(s.change(|b| b.add_cost_centre(&name)))
@@ -206,11 +222,10 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
             &arg::<String>(a, "id")?,
             arg::<Option<String>>(a, "token")?.as_deref(),
         )),
-        "data_source_pull" => json(s.pull_request(&arg::<String>(a, "id")?)?.run(&arg::<
-            Vec<String>,
-        >(
-            a, "fields"
-        )?)),
+        "data_source_pull" => json(s.pull_request(&arg::<String>(a, "id")?)?.run(
+            &arg::<Vec<String>>(a, "fields")?,
+            &arg::<Vec<String>>(a, "optional")?,
+        )),
         "table_read" => json(s.read_table(
             &arg::<PathBuf>(a, "path")?,
             &arg::<Vec<String>>(a, "columns")?,
@@ -256,7 +271,8 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "payouts_mark_paid" => {
             let account = arg(a, "account")?;
             let date = date(a)?;
-            json(s.change(|b| b.mark_payouts_paid(account, date)))
+            let people: Vec<AccountId> = arg(a, "people")?;
+            json(s.change(|b| b.mark_payouts_paid(account, date, &people)))
         }
 
         _ => Err(ApiError::new(

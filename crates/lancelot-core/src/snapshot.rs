@@ -13,8 +13,8 @@ use crate::ledger::{
     CashStatus, MoneyLocation, PersonEntry, PersonSummary, PersonTotals, ReconciliationStatus,
 };
 use crate::model::{
-    Account, AccountId, Attachment, BudgetLine, ClosingCount, CostCentre, Event, Flow, OpenItem,
-    Person, Txn,
+    Account, AccountId, Assumption, Attachment, BudgetLine, ClosingCount, CostCentre, Event, Flow,
+    OpenItem, Person, Txn,
 };
 use crate::money::Cents;
 use crate::payout::Payouts;
@@ -46,6 +46,8 @@ pub struct EventSnapshot {
     pub payouts: Payouts,
     /// In creation order.
     pub budget_lines: Vec<BudgetLine>,
+    /// In creation order (R-BUD-6).
+    pub assumptions: Vec<Assumption>,
     /// Plan vs actual and the forecast (R-BUD-3, R-BUD-4).
     pub budget: Budget,
     /// Tiers, imports and manual sales with their figures (R-TKT-1…7).
@@ -160,6 +162,7 @@ impl EventSnapshot {
             open_items: book.open_items(),
             payouts: book.payouts().clone(),
             budget_lines: book.budget_lines().cloned().collect(),
+            assumptions: book.assumptions().cloned().collect(),
             budget: book.budget().clone(),
             tickets: book.tickets().clone(),
             profitability: book.profitability(),
