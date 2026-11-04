@@ -154,7 +154,8 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
 
         "person_add" => {
             let name: String = arg(a, "name")?;
-            json(s.add(|b| b.add_person(&name, Person::default())))
+            let person: Option<Person> = arg(a, "person")?;
+            json(s.add(|b| b.add_person(&name, person.unwrap_or_default())))
         }
 
         "person_update" => {

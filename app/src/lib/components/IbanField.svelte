@@ -63,21 +63,28 @@
 			: null
 	);
 
-	async function commit() {
+	async function commit(): Promise<boolean> {
 		focused = false;
 		await check();
-		if (error) return;
+		if (error) return false;
 		const next = checked?.iban ?? null;
 		if (checked) text = checked.formatted;
 		if (next !== value) oncommit(next);
+		return true;
+	}
+
+	/** Checks and saves what is typed; false while it cannot be read. A panel that saves on Esc
+	 * awaits this before it takes the rest of the form. */
+	export async function flush(): Promise<boolean> {
+		return commit();
 	}
 
 	function keydown(e: KeyboardEvent & { currentTarget: HTMLInputElement }) {
 		if (e.key === 'Enter') e.currentTarget.blur();
-		if (e.key === 'Escape' && text.replace(/\s/g, '') !== (value ?? '')) {
-			// Undoing what was typed is all this Esc does; the next one reaches the panel.
+		if (e.key === 'Escape' && text.replace(/\s/g, '') !== (value ?? '') && !error) {
+			// Keep the panel open until the typed IBAN is checked and saved; the next Esc goes on.
+			// Once it is known to be invalid, the panel may take the Esc and warn about the text.
 			e.preventDefault();
-			text = value ? group(value) : '';
 			e.currentTarget.blur();
 		}
 	}

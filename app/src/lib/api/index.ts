@@ -179,7 +179,8 @@ export const api = {
 	updateReconciliation: (id: ReconciliationId, date: string, amount: Cents) =>
 		call<OpenEvent>('reconciliation_update', { id, date, amount }),
 	deleteReconciliation: (id: ReconciliationId) => call<OpenEvent>('reconciliation_delete', { id }),
-	addPerson: (name: string) => call<Added>('person_add', { name }),
+	addPerson: (name: string, person: Person | null = null) =>
+		call<Added>('person_add', { name, person }),
 	updatePerson: (id: AccountId, name: string, person: Person) =>
 		call<OpenEvent>('person_update', { id, name, person }),
 	checkIban: (input: string) => call<CheckedIban>('iban_check', { input }),

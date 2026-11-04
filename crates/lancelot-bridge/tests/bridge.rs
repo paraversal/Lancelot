@@ -74,6 +74,56 @@ fn the_example_scenario_is_the_example_event_in_a_real_file() {
 }
 
 #[test]
+fn a_person_is_added_with_the_details_it_was_given() {
+    let (_dir, mut bridge) = bridge();
+    reset(&mut bridge, "example");
+    let (status, added) = invoke(
+        &mut bridge,
+        "person_add",
+        json!({
+            "name": "Nora",
+            "person": {
+                "holder": "Nora Beispiel",
+                "iban": "DE89370400440532013000",
+                "bic": null,
+                "otherMethod": null,
+                "contact": "nora@example.org",
+                "notes": null
+            }
+        }),
+    );
+    assert_eq!(status, 200);
+    let id = added["id"].as_u64().expect("the new person's id");
+    let (_, open) = invoke(&mut bridge, "event_current", json!({}));
+    let persons = open["snapshot"]["persons"].as_array().unwrap();
+    let nora = persons
+        .iter()
+        .find(|p| p["account"] == id)
+        .expect("the new person is in the snapshot");
+    assert_eq!(nora["name"], "Nora");
+    assert_eq!(nora["holder"], "Nora Beispiel");
+    assert_eq!(nora["contact"], "nora@example.org");
+    assert_eq!(nora["iban"], "DE89370400440532013000");
+}
+
+#[test]
+fn a_person_can_still_be_added_with_only_a_name() {
+    let (_dir, mut bridge) = bridge();
+    reset(&mut bridge, "example");
+    // The entry form and ticket sale add a person from just a typed name.
+    let (status, added) = invoke(&mut bridge, "person_add", json!({ "name": "Piet" }));
+    assert_eq!(status, 200);
+    let (_, open) = invoke(&mut bridge, "event_current", json!({}));
+    let persons = open["snapshot"]["persons"].as_array().unwrap();
+    let piet = persons
+        .iter()
+        .find(|p| p["account"] == added["id"])
+        .expect("the new person is in the snapshot");
+    assert_eq!(piet["name"], "Piet");
+    assert_eq!(piet["holder"], Value::Null);
+}
+
+#[test]
 fn every_scenario_loads() {
     let (_dir, mut bridge) = bridge();
     for scenario in scenarios::ALL {

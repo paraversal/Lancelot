@@ -1,11 +1,12 @@
 <script lang="ts">
-	// A text input that commits on blur or Enter, the way every edit in Lancelot is saved. With
-	// suggestions, what matches the text opens under it; arrows and Enter or a click pick one.
-	import type { Snippet } from 'svelte';
+	// A text input that commits on blur, Enter or Esc, the way every edit in Lancelot is saved.
+	// With suggestions, what matches the text opens under it; arrows and Enter or a click pick one.
+	import { onMount, type Snippet } from 'svelte';
 	import Field from './Field.svelte';
 
 	let {
 		label,
+		placeholder,
 		value,
 		multiline = false,
 		required = false,
@@ -16,6 +17,8 @@
 		oncommit
 	}: {
 		label: string;
+		/** Shown in an empty field. Without a label, it also names the field. */
+		placeholder?: string;
 		value: string | null;
 		multiline?: boolean;
 		/** An empty required field goes back to its value instead of committing. */
@@ -31,6 +34,11 @@
 
 	const id = $props.id();
 	let text = $state('');
+	let inputEl = $state<HTMLInputElement | HTMLTextAreaElement | null>(null);
+	// The autofocus attribute is not always honoured when a panel is inserted; focus once here.
+	onMount(() => {
+		if (autofocus) inputEl?.focus();
+	});
 	// Props passed as expressions re-run effects whenever the parent's snapshot changes, so reset
 	// the text only when the value itself changed; otherwise typing would be wiped by saves
 	// elsewhere.
@@ -43,6 +51,9 @@
 
 	let open = $state(false);
 	let active = $state(-1);
+	// Esc commits what was typed before the panel sees it; the blur that follows must not commit
+	// the same text again.
+	let escaped = false;
 	const matches = $derived.by(() => {
 		const typed = text.trim().toLowerCase();
 		const found = suggestions.filter((s) => s.toLowerCase().includes(typed));
@@ -91,9 +102,12 @@
 			(e.currentTarget as HTMLElement).blur();
 		}
 		if (e.key === 'Escape') {
-			// Undoing what was typed is all this Esc does; the next one reaches the panel.
-			if (text.trim() !== (value ?? '').trim()) e.preventDefault();
-			text = value ?? '';
+			// Save what was typed, as leaving the field would. The panel then sees the same Esc and
+			// decides what it means there.
+			if (text.trim() !== (value ?? '').trim()) {
+				escaped = true;
+				commit();
+			}
 			(e.currentTarget as HTMLElement).blur();
 		}
 	}
@@ -103,16 +117,29 @@
 	{#if multiline}
 		<textarea
 			{id}
+			bind:this={inputEl}
 			bind:value={text}
+			{placeholder}
+			aria-label={label ? undefined : placeholder}
 			oninput={() => oninput?.(text)}
-			onblur={commit}
+			onfocus={() => (escaped = false)}
+			onblur={() => {
+				if (escaped) {
+					escaped = false;
+					return;
+				}
+				commit();
+			}}
 			onkeydown={keydown}></textarea>
 	{:else}
 		<!-- svelte-ignore a11y_autofocus -->
 		<input
 			{id}
 			type="text"
+			bind:this={inputEl}
 			bind:value={text}
+			{placeholder}
+			aria-label={label ? undefined : placeholder}
 			role={suggestions.length ? 'combobox' : undefined}
 			aria-expanded={suggestions.length ? showing : undefined}
 			aria-controls={suggestions.length ? `${id}-suggestions` : undefined}
@@ -123,10 +150,17 @@
 				active = -1;
 				oninput?.(text);
 			}}
-			onfocus={() => (open = true)}
+			onfocus={() => {
+				open = true;
+				escaped = false;
+			}}
 			onblur={() => {
 				open = false;
 				active = -1;
+				if (escaped) {
+					escaped = false;
+					return;
+				}
 				commit();
 			}}
 			onkeydown={keydown}

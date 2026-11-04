@@ -4,13 +4,13 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api } from '#lib/api/index.ts';
 	import BalanceCell from '#lib/components/BalanceCell.svelte';
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import EntryPanel from '#lib/entry/EntryPanel.svelte';
 	import { formatAmount } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
+	import NewPersonPanel from './NewPersonPanel.svelte';
 	import PersonPanel from './PersonPanel.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
@@ -21,6 +21,8 @@
 	let selected = $state<number | null>(null);
 	let editing = $state(false);
 	let settling = $state(false);
+	// A person is written only once their name is saved; until then this is a blank panel.
+	let creating = $state(false);
 	const person = $derived(people.find((p) => p.account === selected) ?? null);
 
 	const cell = (c: number) => (c === 0 ? '–' : formatAmount(c, format));
@@ -38,21 +40,25 @@
 		selected = id;
 		editing = false;
 		settling = false;
+		creating = false;
 	}
 
-	async function add() {
-		const base = 'New person';
-		let name = base;
-		for (let n = 2; snapshot.persons.some((p) => p.name.toLowerCase() === name.toLowerCase()); n++)
-			name = `${base} ${n}`;
-		const added = await session.change(() => api.addPerson(name));
-		open(added.id);
-		editing = true;
+	function add() {
+		selected = null;
+		editing = false;
+		settling = false;
+		creating = true;
 	}
 
 	function keydown(e: KeyboardEvent) {
 		const target = e.target instanceof Element ? e.target : null;
-		if (target?.closest('input, textarea, select') || e.metaKey || e.ctrlKey || !people.length)
+		if (
+			creating ||
+			target?.closest('input, textarea, select') ||
+			e.metaKey ||
+			e.ctrlKey ||
+			!people.length
+		)
 			return;
 		if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
 		e.preventDefault();
@@ -102,7 +108,7 @@
 						onclick={() => open(p.account)}
 					>
 						<span class="name">
-							{p.name}
+							<span class="person">{p.name}</span>
 							{#if p.summary.net > 0 && !p.iban && !p.otherMethod}
 								<span class="missing"><Icon name="warn" size={14} />No method</span>
 							{/if}
@@ -128,7 +134,9 @@
 		{/if}
 	</section>
 
-	{#if person && settling}
+	{#if creating}
+		<NewPersonPanel onclose={() => (creating = false)} oncreated={() => (creating = false)} />
+	{:else if person && settling}
 		{#key person.account}
 			<EntryPanel
 				txn={null}
@@ -229,10 +237,23 @@
 
 	.name {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: var(--spacing-2);
+		align-content: center;
+		column-gap: var(--spacing-2);
+		row-gap: 2px;
 		flex: 1;
+		/* Wide enough for the warning, so it wraps under the name rather than into the amounts. */
+		min-width: 80px;
+		overflow: hidden;
+		line-height: 1.2;
+	}
+
+	.person {
 		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.missing {

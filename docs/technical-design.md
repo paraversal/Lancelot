@@ -184,7 +184,7 @@ Unit tests for every module, property tests with `proptest` for the money invari
 
 **Menu and keyboard.** New Event (⇧⌘N), Open (⌘O), Close (⌘W) and Settings (⌘,) are native menu items (`app/src-tauri/src/lib.rs`); they send a `menu` event that `app/src/lib/shortcuts.ts` turns into the action. ⌘1–9 go through the sidebar's pages and cost centres, and Esc closes the right-hand panel.
 
-**Saving edits.** Fields save when they are left (blur or Enter). Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
+**Saving edits.** Fields save when they are left (blur or Enter), and a text field saves what was typed when Esc is pressed; the same Esc then reaches the panel, which closes or warns about what else would be lost. Event commands go through `session.change`, which runs them one after another and builds each from the latest state, so two quick edits can never overwrite each other.
 
 **Shared styles.** `lib/styles/forms.css` holds what the panels' forms share, as `form-*` classes. Layout stays in each component.
 

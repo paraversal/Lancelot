@@ -328,9 +328,13 @@ pub async fn account_rename(
 }
 
 #[tauri::command]
-pub async fn person_add(state: State<'_, AppState>, name: String) -> Result<Added> {
+pub async fn person_add(
+    state: State<'_, AppState>,
+    name: String,
+    person: Option<Person>,
+) -> Result<Added> {
     with(&state, |s| {
-        s.add(|b| b.add_person(&name, Person::default()))
+        s.add(|b| b.add_person(&name, person.unwrap_or_default()))
     })
 }
 

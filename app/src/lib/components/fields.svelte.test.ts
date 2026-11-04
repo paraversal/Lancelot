@@ -295,30 +295,44 @@ describe('error messages', () => {
 });
 
 describe('Esc in a field', () => {
-	it('undoes what was typed in a text field and goes no further', async () => {
+	it('saves what was typed in a text field and lets the panel see the same Esc', async () => {
 		const oncommit = vi.fn();
 		render(TextField, { label: 'Name', value: 'Clara', oncommit });
 		const input = screen.getByLabelText<HTMLInputElement>('Name');
 		await fireEvent.input(input, { target: { value: 'Clar' } });
-		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
-		expect(input.value).toBe('Clara');
-		expect(oncommit).not.toHaveBeenCalled();
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(true);
+		expect(input.value).toBe('Clar');
+		expect(oncommit.mock.calls).toEqual([['Clar']]);
 	});
 
-	it('reaches the panel from a text field with nothing to undo', async () => {
+	it('reaches the panel from a text field with nothing to save', async () => {
 		render(TextField, { label: 'Name', value: 'Clara', oncommit() {} });
 		expect(await fireEvent.keyDown(screen.getByLabelText('Name'), { key: 'Escape' })).toBe(true);
 	});
 
-	it('undoes what was typed in an IBAN field and goes no further', async () => {
+	it('keeps an invalid IBAN in the field and lets the panel take the Esc', async () => {
 		const oncommit = vi.fn();
 		render(IbanField, { value: null, oncommit });
 		const input = screen.getByRole<HTMLInputElement>('textbox');
+		input.focus();
 		await type(input, 'DE89');
-		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
-		expect(input.value).toBe('');
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(true);
+		expect(input.value).toBe('DE89');
 		await settle();
 		expect(oncommit).not.toHaveBeenCalled();
+	});
+
+	it('saves a valid IBAN on Esc before the panel can close', async () => {
+		const oncommit = vi.fn();
+		render(IbanField, { value: null, oncommit });
+		const input = screen.getByRole<HTMLInputElement>('textbox');
+		input.focus();
+		await type(input, 'de89370400440532013000');
+		expect(await fireEvent.keyDown(input, { key: 'Escape' })).toBe(false);
+		await settle();
+		await settle();
+		expect(oncommit).toHaveBeenCalledWith('DE89370400440532013000');
+		expect(input.value).toBe('DE89 3704 0044 0532 0130 00');
 	});
 });
 
@@ -327,7 +341,7 @@ describe('IbanField', () => {
 		const oncommit = vi.fn();
 		render(IbanField, { value: null, oncommit });
 		const input = screen.getByLabelText('IBAN') as HTMLInputElement;
-		await fireEvent.focus(input);
+		input.focus();
 		await type(input, 'de89370400440532013000');
 		expect(screen.getByText('= DE89 3704 0044 0532 0130 00')).toBeTruthy();
 		await fireEvent.blur(input);
