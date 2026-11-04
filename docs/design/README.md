@@ -2,6 +2,8 @@
 
 Source of truth: `UI.fig` (OpenPencil, local only and gitignored). Tokens: [`tokens.css`](tokens.css), generated from the file's variables. In the app, the components are on the `/design` page of a development build (`pnpm dev`, then open `/design`).
 
+**Install Familjen Grotesk before opening `UI.fig`:** `brew install --cask font-familjen-grotesk`. Without it, OpenPencil downloads Google Fonts subsets that hold only the characters it needs, with their glyphs renumbered, and text comes out garbled ("Budget" as "Bt dgeß"). Saved outlines can carry that into the file. If it happens: quit OpenPencil, run `scripts/openpencil-purge-font.py "Familjen Grotesk"` to drop the cached subsets, then `node scripts/openpencil-reshape-text.mjs UI.fig` to have every text layer shaped again, open the file and save it once.
+
 ## Character
 
 The app should feel like a well-kept paper ledger at a community event. It is calm and warm, with a few hand-made touches: a highlighter for selection, tally marks, and a type face with a single-storey _a_. It is functional without feeling corporate.
