@@ -19,7 +19,7 @@ Each idea comes in two strengths, and the big moments in three:
 1. **Motion answers something.** A press, a change, an arrival. Nothing loops while someone is reading numbers.
 2. **Never in the way.** The state changes first; the animation only shows it. Nothing waits for an animation before it accepts the next click or key.
 3. **Fast things are small, big things are rare.** A press answers within 100 ms, a panel takes about 200 ms. Only the big moments take longer, and they never block anything.
-4. **Only cheap properties move.** `transform` and `opacity` (and `clip-path`), so the browser never lays out the page again mid-animation. Rows that open or collapse are the exception, and they are short.
+4. **Only cheap properties move.** `transform` and `opacity` (and `clip-path`), so the browser never lays out the page again mid-animation. Rows that open or collapse, and the room a panel takes, are the exception: both are short, and both have to move what is beside them.
 5. **Springs, not ease-in-out.** Things that move overshoot a little and settle. The curves are tokens, written once.
 6. **Reduced motion.** The app follows macOS's "reduce motion". Settings → Display → **Reduced motion** is a toggle that overrides it either way. There is no "off": the choice is full or reduced. Reduced uses the Regular strength of every idea, so nothing travels far, overshoots, shakes, stamps or throws confetti.
 7. **The design rules still hold.** No gradients for glow, no captions that explain a joke, one font.
@@ -56,7 +56,7 @@ All of it is in [`app/src/lib/motion/`](../../app/src/lib/motion/):
 | Id | Idea | Regular | Playful | Full motion |
 |---|---|---|---|---|
 | A1 | Switching pages | The page fades in and rises 6 px; the sidebar highlight slides to the new item | Rises with a spring; the highlight stretches as it travels | Regular |
-| A2 | Panels | Slide in from the right and settle; closing is faster | Slide further with a small overshoot | Regular |
+| A2 | Panels | The page gives way as the panel's room opens, and the panel rides in with it; closing is immediate | The room opens with a small overshoot | Regular |
 | A3 | Pressing buttons | The button sinks a little | It squashes and springs back | Regular |
 | A4 | Segmented controls | The yellow pill slides to the new option | The pill stretches on the way and settles | Playful |
 | A5 | Changing amounts | The new figure slides in from the direction it moved | The digits that changed roll, like an odometer | Playful |

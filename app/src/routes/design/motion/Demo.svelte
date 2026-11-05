@@ -191,10 +191,12 @@
 				<Button size="sm" onclick={() => (panel = !panel)}>{panel ? 'Close' : 'Open'} panel</Button>
 			</div>
 			{#if panel}
-				<aside in:fx.panelIn={{ level }} out:fx.panelOut={{ level }}>
-					<strong>Groceries</strong>
-					<span class="line"></span><span class="line short"></span>
-				</aside>
+				<div class="slot" in:fx.panelSpace={{ level }}>
+					<aside>
+						<strong>Groceries</strong>
+						<span class="line"></span><span class="line short"></span>
+					</aside>
+				</div>
 			{/if}
 		</div>
 	{:else if id === 'A3'}
@@ -554,11 +556,20 @@
 		padding: 12px;
 	}
 
+	/* The panel keeps its width and its room opens (A2), as in the app. */
+	.slot {
+		display: flex;
+		flex: none;
+		width: 150px;
+		overflow: clip;
+	}
+
 	aside {
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
-		width: 45%;
+		width: 150px;
+		flex: none;
 		padding: 12px;
 		border-left: 1px solid var(--color-rule);
 		background: var(--color-paper);

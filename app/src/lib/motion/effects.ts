@@ -47,23 +47,21 @@ export function markerTravel(marker: HTMLElement, from: DOMRect, to: DOMRect, le
 	});
 }
 
-/** A2: a panel sliding in from the right. */
-export function panelIn(_node: Element, { level }: { level: Level }): TransitionConfig {
-	if (level === 'off') return NONE;
+/**
+ * A2: the room a panel takes beside the page. The panel keeps its width and rides in with its edge,
+ * so what is beside it gives way instead of jumping. Measured, so a wider panel still fits.
+ */
+export function panelSpace(
+	node: Element,
+	{ level, opening = true }: { level: Level; opening?: boolean }
+): TransitionConfig {
+	if (!opening || level === 'off') return NONE;
+	const width = node.getBoundingClientRect().width;
 	const playful = isPlayful(level);
-	const from = playful ? 28 : 16;
 	return {
 		duration: playful ? 340 : 200,
 		easing: playful ? (t) => springFn(t, 1.06) : cubicOut,
-		css: (t, u) => `opacity: ${Math.min(1, t * 2)}; transform: translateX(${u * from}px)`
-	};
-}
-
-export function panelOut(_node: Element, { level }: { level: Level }): TransitionConfig {
-	if (level === 'off') return NONE;
-	return {
-		duration: 120,
-		css: (t, u) => `opacity: ${t}; transform: translateX(${u * 10}px)`
+		css: (t) => `width: ${t * width}px`
 	};
 }
 
