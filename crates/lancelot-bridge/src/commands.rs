@@ -218,7 +218,11 @@ pub fn run(s: &mut Service, command: &str, a: &Value) -> Result<Value> {
         "ticket_account_set" => one(s, a, "account", Book::set_ticket_account),
 
         "data_sources_get" => json(Ok(s.data_sources())),
-        "data_source_set" => json(s.set_data_source(&arg::<String>(a, "id")?, arg(a, "source")?)),
+        "data_source_set" => json(s.set_data_source(
+            &arg::<String>(a, "id")?,
+            arg(a, "source")?,
+            arg::<Option<bool>>(a, "inEvent")?.unwrap_or(false),
+        )),
         "data_source_set_token" => json(s.set_data_source_token(
             &arg::<String>(a, "id")?,
             arg::<Option<String>>(a, "token")?.as_deref(),

@@ -371,8 +371,8 @@ describe('A cost centre’s own source', () => {
 			});
 		});
 		dataSources.set({
-			'drinks:drinks': { source, hasToken: true },
-			'drinks:merch': { source: { ...source, label: 'Merch app' }, hasToken: true }
+			'drinks:drinks': { source, hasToken: true, inEvent: false },
+			'drinks:merch': { source: { ...source, label: 'Merch app' }, hasToken: true, inEvent: false }
 		});
 		const pull = vi.spyOn(api, 'pullDataSource').mockResolvedValue(read);
 		render(Centre, { centre: drinksCentre() });
@@ -383,7 +383,7 @@ describe('A cost centre’s own source', () => {
 
 	it('offers no pull on a cost centre whose source is not set up', () => {
 		open();
-		dataSources.set({ 'drinks:merch': { source, hasToken: true } });
+		dataSources.set({ 'drinks:merch': { source, hasToken: true, inEvent: false } });
 		render(Centre, { centre: drinksCentre() });
 		expect(screen.queryByText('Pull logged')).toBeNull();
 	});

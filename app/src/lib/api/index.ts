@@ -224,12 +224,15 @@ export const api = {
 		call<ImportPreview>('tickets_preview', { batch, date }),
 	importTickets: (batch: TicketBatch, date: string) =>
 		call<OpenEvent>('tickets_import', { batch, date }),
-	/** The data sources saved on this computer, by plugin. */
+	/** The data sources the open event can pull from, by plugin: its own and this computer's. */
 	dataSources: () => call<DataSources>('data_sources_get'),
-	/** Saves a plugin's data source; null removes it and its token. */
-	setDataSource: (id: string, source: DataSource | null) =>
-		call<DataSources>('data_source_set', { id, source }),
-	/** The token is never handed back; null removes it. */
+	/**
+	 * Saves a plugin's data source on this computer, or in the event file with `inEvent`; null
+	 * removes it, and its token once nothing uses it. The token is never in the event file.
+	 */
+	setDataSource: (id: string, source: DataSource | null, inEvent = false) =>
+		call<DataSources>('data_source_set', { id, source, inEvent }),
+	/** The token of the source's provider. It is never handed back; null removes it. */
 	setDataSourceToken: (id: string, token: string | null) =>
 		call<DataSources>('data_source_set_token', { id, token }),
 	/** Asks the provider for these fields, of which `optional` may be missing; changes nothing. */

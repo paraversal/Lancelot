@@ -227,7 +227,7 @@ describe('The cost centres', () => {
 describe('The plugin cards', () => {
 	it('gives each plugin a card that says how it is set up', () => {
 		open();
-		dataSources.set({ 'ticket-api': { source: shop, hasToken: true } });
+		dataSources.set({ 'ticket-api': { source: shop, hasToken: true, inEvent: false } });
 		render(Page);
 		expect(screen.getAllByTestId('plugin-card')).toHaveLength(5);
 		expect(within(card('Ticket API')).getByText('Pulls from Shop')).toBeTruthy();
@@ -265,10 +265,11 @@ describe('The plugin cards', () => {
 	it('sets up a data source for each cost centre the plugin is shown on', async () => {
 		openTwoCentres();
 		dataSources.set({
-			'drinks:drinks': { source: bar, hasToken: true },
+			'drinks:drinks': { source: bar, hasToken: true, inEvent: false },
 			'drinks:merch': {
 				source: { ...bar, label: 'Merch app', url: 'https://merch.example' },
-				hasToken: true
+				hasToken: true,
+				inEvent: false
 			}
 		});
 		render(Page);
@@ -336,8 +337,8 @@ describe('The plugin cards', () => {
 	it('says which cost centres pull, since each has a source of its own', () => {
 		openTwoCentres();
 		dataSources.set({
-			'drinks:drinks': { source: bar, hasToken: true },
-			'drinks:merch': { source: { ...bar, label: 'Merch app' }, hasToken: true }
+			'drinks:drinks': { source: bar, hasToken: true, inEvent: false },
+			'drinks:merch': { source: { ...bar, label: 'Merch app' }, hasToken: true, inEvent: false }
 		});
 		render(Page);
 		expect(within(card('Stock and sales')).getByText('Pulls for Drinks and Merch')).toBeTruthy();

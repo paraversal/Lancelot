@@ -1,5 +1,6 @@
-// The data sources saved on this computer. They aren't in the event, so the snapshot doesn't have
-// them: the app reads them once and the form updates them.
+// The data sources the open event can pull from: those saved on this computer and those saved in
+// the event, which win. The tokens aren't in the snapshot, so the app reads these again whenever the
+// event changes, and the form updates them.
 import { api, type DataSources } from '../api/index';
 import type { DataSourceSpec } from './api';
 
@@ -9,8 +10,9 @@ export const optionalFields = (spec: DataSourceSpec | undefined) =>
 
 /**
  * The id a source is saved under: the plugin's, and the tab's when the plugin has one source per
- * tab, like Stock and sales one per cost centre. The details are in the app's data folder and the
- * token is in the keychain, both by this id.
+ * tab, like Stock and sales one per cost centre. The details are in the app's data folder by this
+ * id, or in the event's plugin record `data-source` (or `data-source:<tab>`); the token is in the
+ * keychain by the provider's address and header.
  */
 export const sourceId = (plugin: string, tab?: string | null) =>
 	tab ? `${plugin}:${tab}` : plugin;

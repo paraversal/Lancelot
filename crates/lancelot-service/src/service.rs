@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use lancelot_core::{
     AccountDraft, AccountId, AttachmentId, BackupPolicy, BlockerOverride, Book, Cents,
     ChangeLogEntry, CopyChoice, CopySummary, DomainError, EventDetails, EventSnapshot,
-    ImportDeletion, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, Report, Store,
-    StoreError, StoreOptions, Table, TemplateSummary, TicketBatch, TicketShare, TxnDraft, TxnId,
-    backup_time, event_uuid_of, format_date, list_backups, parse_amount, parse_date, parse_sum,
-    read_book, ticket_share,
+    ImportDeletion, ImportId, ImportPreview, MAX_ATTACHMENT_SIZE, Parsed, ParsedSum, PluginChange,
+    PluginScope, Report, Store, StoreError, StoreOptions, Table, TemplateSummary, TicketBatch,
+    TicketShare, TxnDraft, TxnId, backup_time, event_uuid_of, format_date, list_backups,
+    parse_amount, parse_date, parse_sum, read_book, ticket_share,
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -420,67 +420,181 @@ impl Service {
         })
     }
 
-    /// The data sources saved on this computer, by the plugin that uses them.
-    pub fn data_sources(&self) -> BTreeMap<String, DataSourceView> {
-        self.sources
-            .iter()
-            .map(|(id, source)| {
-                let has_token = matches!(self.tokens.get(id), Ok(Some(_)));
-                let view = DataSourceView {
-                    source: source.clone(),
-                    has_token,
-                };
-                (id.clone(), view)
+    /// The sources saved in the open event, by id.
+    fn event_sources(&self) -> BTreeMap<String, DataSource> {
+        let Some(open) = &self.open else {
+            return BTreeMap::new();
+        };
+        open.store
+            .book()
+            .plugin_records()
+            .filter_map(|r| {
+                let id = sources::id_of_record(&r.plugin, &r.key)?;
+                let source = serde_json::from_value(r.value.clone()).ok()?;
+                Some((id, source))
             })
             .collect()
     }
 
-    /// Saves a plugin's data source, or removes it along with its token.
+    /// A source by id, and whether it is the event's. The event's wins over this computer's.
+    fn source(&self, id: &str) -> Option<(DataSource, bool)> {
+        match self.event_sources().remove(id) {
+            Some(source) => Some((source, true)),
+            None => self.sources.get(id).map(|s| (s.clone(), false)),
+        }
+    }
+
+    /// A source's token: by its provider, or under its id, where tokens were kept before.
+    fn token(&self, id: &str, source: &DataSource) -> std::result::Result<Option<String>, String> {
+        match self.tokens.get(&sources::token_key(source))? {
+            Some(token) => Ok(Some(token)),
+            None => self.tokens.get(id),
+        }
+    }
+
+    /// Moves a token kept under a source's id to its provider, where it is looked up now.
+    fn move_old_token(&mut self, id: &str, source: &DataSource) -> Result<()> {
+        if let Some(token) = self.tokens.get(id).map_err(token_error)? {
+            let key = sources::token_key(source);
+            if self.tokens.get(&key).map_err(token_error)?.is_none() {
+                self.tokens.set(&key, &token).map_err(token_error)?;
+            }
+            self.tokens.delete(id).map_err(token_error)?;
+        }
+        Ok(())
+    }
+
+    /// Deletes a provider's token once no source known here goes to it. Sources in other event
+    /// files can't be known, so they find it gone and ask for it again.
+    fn forget_unused_token(&mut self, key: &str) -> Result<()> {
+        let used = (self.sources.values())
+            .chain(self.event_sources().values())
+            .any(|s| sources::token_key(s) == key);
+        if !used {
+            self.tokens.delete(key).map_err(token_error)?;
+        }
+        Ok(())
+    }
+
+    /// Puts a source in the open event's plugin records, or takes it out with `None`.
+    fn set_event_source(&mut self, id: &str, source: Option<&DataSource>) -> Result<()> {
+        let (plugin, key) = sources::record_of(id);
+        let value = match source {
+            Some(source) => serde_json::to_value(source)
+                .map_err(|e| ApiError::new("internal", e.to_string()))?,
+            None => serde_json::Value::Null,
+        };
+        let change = PluginChange {
+            key,
+            scope: PluginScope::Setup,
+            value,
+        };
+        let plugin = plugin.to_owned();
+        self.change(|b| b.apply_plugin_changes(plugin, vec![change]))?;
+        Ok(())
+    }
+
+    /// The data sources this event can pull from, by the plugin that uses them: its own and
+    /// those saved on this computer.
+    pub fn data_sources(&self) -> BTreeMap<String, DataSourceView> {
+        let event = self.event_sources();
+        let mut all: BTreeMap<String, (DataSource, bool)> = (self.sources.iter())
+            .map(|(id, s)| (id.clone(), (s.clone(), false)))
+            .collect();
+        all.extend(event.into_iter().map(|(id, s)| (id, (s, true))));
+        all.into_iter()
+            .map(|(id, (source, in_event))| {
+                let has_token = matches!(self.token(&id, &source), Ok(Some(_)));
+                let view = DataSourceView {
+                    source,
+                    has_token,
+                    in_event,
+                };
+                (id, view)
+            })
+            .collect()
+    }
+
+    /// Saves a plugin's data source on this computer, or in the open event with `in_event`; or
+    /// removes it, from the event if it is there, along with a token nothing else uses. Saving it
+    /// on this computer takes it out of the event, and saving it in the event leaves the one on
+    /// this computer for other events.
     pub fn set_data_source(
         &mut self,
         id: &str,
         source: Option<DataSource>,
+        in_event: bool,
     ) -> Result<BTreeMap<String, DataSourceView>> {
-        let mut next = self.sources.clone();
+        let before = self.source(id);
         match source {
             Some(source) => {
-                next.insert(id.to_owned(), sources::clean(source)?);
+                let source = sources::clean(source)?;
+                if in_event {
+                    sources::check_shareable(&source)?;
+                    self.set_event_source(id, Some(&source))?;
+                } else {
+                    let mut next = self.sources.clone();
+                    next.insert(id.to_owned(), source.clone());
+                    sources::save(&self.data_dir.join("data-sources.json"), &next)?;
+                    self.sources = next;
+                    if before
+                        .as_ref()
+                        .is_some_and(|(_, was_in_event)| *was_in_event)
+                    {
+                        self.set_event_source(id, None)?;
+                    }
+                }
+                self.move_old_token(id, &source)?;
             }
-            None => {
-                next.remove(id);
+            None => match &before {
+                Some((_, true)) => self.set_event_source(id, None)?,
+                _ => {
+                    let mut next = self.sources.clone();
+                    next.remove(id);
+                    sources::save(&self.data_dir.join("data-sources.json"), &next)?;
+                    self.sources = next;
+                    self.tokens.delete(id).map_err(token_error)?;
+                }
+            },
+        }
+        // A token stays with its provider: one the source no longer goes to may be unused now.
+        if let Some((old, _)) = before {
+            let key = sources::token_key(&old);
+            if self
+                .source(id)
+                .is_none_or(|(s, _)| sources::token_key(&s) != key)
+            {
+                self.forget_unused_token(&key)?;
             }
         }
-        sources::save(&self.data_dir.join("data-sources.json"), &next)?;
-        if !next.contains_key(id) {
-            self.tokens.delete(id).map_err(token_error)?;
-        }
-        self.sources = next;
         Ok(self.data_sources())
     }
 
-    /// Sets or removes a data source's token. It is never handed back.
+    /// Sets or removes the token of a source's provider. It is never handed back.
     pub fn set_data_source_token(
         &mut self,
         id: &str,
         token: Option<&str>,
     ) -> Result<BTreeMap<String, DataSourceView>> {
+        let (source, _) = self
+            .source(id)
+            .ok_or_else(|| ApiError::new("no_data_source", "this data source is not set up"))?;
+        let key = sources::token_key(&source);
         match token.map(str::trim).filter(|t| !t.is_empty()) {
-            Some(token) => self.tokens.set(id, token).map_err(token_error)?,
-            None => self.tokens.delete(id).map_err(token_error)?,
+            Some(token) => self.tokens.set(&key, token).map_err(token_error)?,
+            None => self.tokens.delete(&key).map_err(token_error)?,
         }
+        self.tokens.delete(id).map_err(token_error)?;
         Ok(self.data_sources())
     }
 
     /// What pulling from a plugin's data source takes. Run it outside any lock on the service.
     pub fn pull_request(&self, id: &str) -> Result<PullRequest> {
-        let source = self
-            .sources
-            .get(id)
+        let (source, _) = self
+            .source(id)
             .ok_or_else(|| ApiError::new("no_data_source", "this data source is not set up"))?;
-        Ok(PullRequest {
-            source: source.clone(),
-            token: self.tokens.get(id).map_err(token_error)?,
-        })
+        let token = self.token(id, &source).map_err(token_error)?;
+        Ok(PullRequest { source, token })
     }
 
     /// Reads these columns of a file, for a plugin. Changes nothing: the file isn't kept
@@ -1539,5 +1653,172 @@ mod tests {
         let reopened = s.change(|b| b.reopen()).unwrap();
         assert!(reopened.snapshot.event.closed_at.is_none());
         s.add(|b| b.add_person("Kim", Person::default())).unwrap();
+    }
+
+    fn data_source(url: &str) -> DataSource {
+        DataSource {
+            label: "Drinks app".into(),
+            url: url.into(),
+            auth_header: "X-Api-Key".into(),
+            list: "drinks".into(),
+            fields: BTreeMap::from([("name".into(), "name".into())]),
+        }
+    }
+
+    #[test]
+    fn a_data_source_saved_in_the_event_travels_without_its_token() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let path = dir.path().join("summer.lancelot");
+        s.create_event(&path, details("Summer"), &accounts())
+            .unwrap();
+        let url = "https://api.x.example/drinks?event=12";
+        let sources = s
+            .set_data_source("drinks:Drinks", Some(data_source(url)), true)
+            .unwrap();
+        assert!(sources["drinks:Drinks"].in_event);
+        s.set_data_source_token("drinks:Drinks", Some("secret"))
+            .unwrap();
+        let record = &s.current().unwrap().snapshot.plugin_records[0];
+        assert_eq!(
+            (record.plugin.as_str(), record.key.as_str()),
+            ("drinks", "data-source:Drinks")
+        );
+        assert_eq!(record.scope, PluginScope::Setup);
+        assert!(!record.value.to_string().contains("secret"));
+        // Not on this computer's list: only in the file.
+        assert!(sources::load(&dir.path().join("data/data-sources.json")).is_empty());
+        s.close_file();
+
+        // Another computer opens the file: the source is there, the token isn't.
+        let mut other = Service::new(dir.path().join("other"));
+        other.open_event(&path).unwrap();
+        let view = &other.data_sources()["drinks:Drinks"];
+        assert_eq!((view.in_event, view.has_token), (true, false));
+        assert_eq!(view.source.url, url);
+        assert_eq!(other.pull_request("drinks:Drinks").unwrap().token, None);
+        other
+            .set_data_source_token("drinks:Drinks", Some("theirs"))
+            .unwrap();
+        let request = other.pull_request("drinks:Drinks").unwrap();
+        assert_eq!(request.token.as_deref(), Some("theirs"));
+        // Another source of the same provider finds the same token.
+        other
+            .set_data_source(
+                "ticket-api",
+                Some(data_source("https://api.x.example/t")),
+                false,
+            )
+            .unwrap();
+        assert!(other.data_sources()["ticket-api"].has_token);
+    }
+
+    #[test]
+    fn the_event_source_wins_and_saving_it_here_takes_it_out() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        s.create_event(&dir.path().join("a.lancelot"), details("A"), &accounts())
+            .unwrap();
+        s.set_data_source(
+            "ticket-api",
+            Some(data_source("https://here.example/")),
+            false,
+        )
+        .unwrap();
+        s.set_data_source(
+            "ticket-api",
+            Some(data_source("https://file.example/")),
+            true,
+        )
+        .unwrap();
+        let view = &s.data_sources()["ticket-api"];
+        assert_eq!(
+            (view.in_event, view.source.url.as_str()),
+            (true, "https://file.example/")
+        );
+        // This computer's source stays for other events.
+        assert_eq!(s.sources["ticket-api"].url, "https://here.example/");
+
+        s.set_data_source(
+            "ticket-api",
+            Some(data_source("https://file.example/")),
+            false,
+        )
+        .unwrap();
+        let view = &s.data_sources()["ticket-api"];
+        assert_eq!(
+            (view.in_event, view.source.url.as_str()),
+            (false, "https://file.example/")
+        );
+        assert!(s.current().unwrap().snapshot.plugin_records.is_empty());
+    }
+
+    #[test]
+    fn an_address_with_a_secret_stays_out_of_the_event() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        s.create_event(&dir.path().join("a.lancelot"), details("A"), &accounts())
+            .unwrap();
+        let url = "https://x.example/drinks?api_key=abc";
+        let error = s
+            .set_data_source("drinks", Some(data_source(url)), true)
+            .unwrap_err();
+        assert_eq!(error.field.as_deref(), Some("url"));
+        assert!(s.current().unwrap().snapshot.plugin_records.is_empty());
+        // On this computer only, it is the user's to decide.
+        s.set_data_source("drinks", Some(data_source(url)), false)
+            .unwrap();
+    }
+
+    #[test]
+    fn a_token_moves_to_its_provider_and_goes_once_nothing_uses_it() {
+        let dir = TempDir::new().unwrap();
+        let mut tokens = MemoryTokens::default();
+        tokens.set("drinks", "old").unwrap();
+        let mut s = Service::with_tokens(dir.path().join("data"), Box::new(tokens));
+        let source = data_source("https://x.example/a");
+        let key = sources::token_key(&source);
+        s.sources.insert("drinks".into(), source.clone());
+        // Kept under the id before: still found, and moved when the source is saved.
+        assert!(s.data_sources()["drinks"].has_token);
+        s.set_data_source("drinks", Some(source.clone()), false)
+            .unwrap();
+        assert_eq!(s.tokens.get("drinks").unwrap(), None);
+        assert_eq!(s.tokens.get(&key).unwrap().as_deref(), Some("old"));
+
+        s.set_data_source(
+            "ticket-api",
+            Some(data_source("https://x.example/b")),
+            false,
+        )
+        .unwrap();
+        s.set_data_source("drinks", None, false).unwrap();
+        assert!(
+            s.tokens.get(&key).unwrap().is_some(),
+            "Ticket API still uses it"
+        );
+        // Moving to another address doesn't take the token along.
+        s.set_data_source(
+            "ticket-api",
+            Some(data_source("https://y.example/b")),
+            false,
+        )
+        .unwrap();
+        assert_eq!(s.tokens.get(&key).unwrap(), None);
+        assert!(!s.data_sources()["ticket-api"].has_token);
+    }
+
+    #[test]
+    fn a_template_brings_the_event_source_along() {
+        let dir = TempDir::new().unwrap();
+        let mut s = service(&dir);
+        let old = dir.path().join("old.lancelot");
+        s.create_event(&old, details("Old"), &accounts()).unwrap();
+        s.set_data_source("ticket-api", Some(data_source("https://x.example/")), true)
+            .unwrap();
+        s.close_file();
+        s.create_event_from(&dir.path().join("new.lancelot"), details("New"), &old)
+            .unwrap();
+        assert!(s.data_sources()["ticket-api"].in_event);
     }
 }

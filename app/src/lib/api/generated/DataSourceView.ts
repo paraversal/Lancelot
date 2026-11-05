@@ -4,4 +4,9 @@ import type { DataSource } from "./DataSource";
 /**
  * A source as the form shows it: the token only as whether there is one.
  */
-export type DataSourceView = { source: DataSource, hasToken: boolean, };
+export type DataSourceView = { source: DataSource, hasToken: boolean, 
+/**
+ * Saved in the event file rather than on this computer. It then wins over one on this
+ * computer with the same id, which other events may still use.
+ */
+inEvent: boolean, };

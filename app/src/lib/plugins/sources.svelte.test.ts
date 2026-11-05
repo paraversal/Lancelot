@@ -6,6 +6,8 @@ import type { Pulled } from '../api/generated/Pulled';
 import { ticketApi } from './ticket-api/index';
 import type { PluginContext } from './api';
 import DataSourceForm from './DataSourceForm.svelte';
+import { session } from '../state/session.svelte';
+import type { OpenEvent } from '../api/generated/OpenEvent';
 import { dataSources } from './sources.svelte';
 import TicketApiSection from './ticket-api/Section.svelte';
 
@@ -36,7 +38,7 @@ afterEach(() => {
 
 describe('The data source form', () => {
 	it('fills in the usual names and saves the token apart, then tries the source', async () => {
-		const views = { 'ticket-api': { source, hasToken: true } };
+		const views = { 'ticket-api': { source, hasToken: true, inEvent: false } };
 		const save = vi.spyOn(api, 'setDataSource').mockResolvedValue(views);
 		const saveToken = vi.spyOn(api, 'setDataSourceToken').mockResolvedValue(views);
 		const pull = vi
@@ -74,7 +76,7 @@ describe('The data source form', () => {
 	});
 
 	it('takes an optional field left blank, but not a required one', async () => {
-		const views = { 'ticket-api': { source, hasToken: true } };
+		const views = { 'ticket-api': { source, hasToken: true, inEvent: false } };
 		const save = vi.spyOn(api, 'setDataSource').mockResolvedValue(views);
 		vi.spyOn(api, 'pullDataSource').mockResolvedValue(pulled([{ tier: 'Regular' }]));
 		render(DataSourceForm, { id: 'ticket-api', spec });
@@ -113,15 +115,48 @@ describe('The data source form', () => {
 	});
 
 	it('shows a saved token only as saved', async () => {
-		dataSources.set({ 'ticket-api': { source, hasToken: true } });
+		dataSources.set({ 'ticket-api': { source, hasToken: true, inEvent: false } });
 		render(DataSourceForm, { id: 'ticket-api', spec });
 		await fireEvent.click(button(/Edit/));
 		expect(screen.queryByLabelText('Token')).toBeNull();
 		expect(button(/Replace/)).toBeTruthy();
 	});
 
+	it('saves in the event file when ticked, and says who can read it', async () => {
+		const views = { 'ticket-api': { source, hasToken: true, inEvent: true } };
+		const save = vi.spyOn(api, 'setDataSource').mockResolvedValue(views);
+		vi.spyOn(api, 'setDataSourceToken').mockResolvedValue(views);
+		vi.spyOn(api, 'pullDataSource').mockResolvedValue(pulled([]));
+		const event = { path: '/a.lancelot', revision: 9 } as unknown as OpenEvent;
+		const current = vi.spyOn(api, 'currentEvent').mockResolvedValue(event);
+		const update = vi.spyOn(session, 'update').mockImplementation(() => {});
+		render(DataSourceForm, { id: 'ticket-api', spec });
+		await fireEvent.click(button(/Set up/));
+		expect(screen.getByText(/Saved on this computer, for all events/)).toBeTruthy();
+
+		await fireEvent.click(screen.getByLabelText('Save in the event file'));
+		expect(screen.getByText(/Anyone with the file can read the address/)).toBeTruthy();
+		await fireEvent.input(screen.getByLabelText('Token'), { target: { value: 'Bearer x' } });
+		await fireEvent.click(button(/Save and test/));
+		await settled();
+		expect(save.mock.calls[0]![2]).toBe(true);
+		expect(JSON.stringify(save.mock.calls[0])).not.toContain('Bearer');
+		// The event file changed, so the event is read again.
+		expect(current).toHaveBeenCalled();
+		expect(update).toHaveBeenCalledWith(event);
+	});
+
+	it('starts ticked for a source in the event, and says when this computer lacks its token', async () => {
+		dataSources.set({ 'ticket-api': { source, hasToken: false, inEvent: true } });
+		render(DataSourceForm, { id: 'ticket-api', spec });
+		expect(screen.getByText(/saved in the event. Add the token on this computer/)).toBeTruthy();
+		await fireEvent.click(button(/Edit/));
+		const tick = screen.getByLabelText('Save in the event file') as HTMLInputElement;
+		expect(tick.checked).toBe(true);
+	});
+
 	it('shows what the source said when the test fails', async () => {
-		const views = { 'ticket-api': { source, hasToken: false } };
+		const views = { 'ticket-api': { source, hasToken: false, inEvent: false } };
 		vi.spyOn(api, 'setDataSource').mockResolvedValue(views);
 		vi.spyOn(api, 'pullDataSource').mockRejectedValue(
 			new ApiError({

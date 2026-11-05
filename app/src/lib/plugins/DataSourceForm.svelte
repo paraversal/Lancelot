@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The form behind a plugin's data source (technical design §10). A plugin only says which fields
-	// it wants. The details are saved on this computer and not in the event, and the token goes to
-	// the keychain and never comes back here, so it can only be replaced. Saving also tries the
+	// it wants. The details are saved on this computer for all events, or in the event file when it
+	// is ticked, so they travel with it. The token goes to the keychain, by provider, and never comes
+	// back here, so it can only be replaced; it is never in the event file. Saving also tries the
 	// source, since that is the only way to know the names are right.
 	import { untrack } from 'svelte';
 	import { api, ApiError, errorMessage } from '../api/index';
@@ -10,6 +11,7 @@
 	import TextField from '../components/TextField.svelte';
 	import type { DataSourceSpec } from './api';
 	import { sourceShape } from './shape';
+	import { session } from '../state/session.svelte';
 	import { dataSources, optionalFields } from './sources.svelte';
 
 	let {
@@ -34,6 +36,7 @@
 	let list = $state('');
 	let fields = $state<Record<string, string>>({});
 	let token = $state('');
+	let inEvent = $state(false);
 	let replacing = $state(false);
 	let busy = $state(false);
 	let error = $state<{ field: string | null; message: string } | null>(null);
@@ -55,6 +58,7 @@
 	const dirty = $derived(
 		editing &&
 			(token.trim() !== '' ||
+				inEvent !== (view?.inEvent ?? false) ||
 				label !== (saved?.label ?? '') ||
 				url !== (saved?.url ?? '') ||
 				authHeader !== (saved?.authHeader ?? 'Authorization') ||
@@ -81,10 +85,18 @@
 			);
 		});
 		token = '';
+		inEvent = view?.inEvent ?? false;
 		replacing = !view?.hasToken;
 		error = null;
 		result = null;
 		editing = true;
+	}
+
+	/** Saving or removing a source in the event changes the file, which History then shows. */
+	async function refreshEvent(touched: boolean) {
+		if (!touched) return;
+		const current = await api.currentEvent();
+		if (current) session.update(current);
 	}
 
 	async function saveAndTest() {
@@ -96,10 +108,19 @@
 			return;
 		}
 		busy = true;
+		const touched = inEvent || !!view?.inEvent;
 		try {
-			dataSources.set(
-				await api.setDataSource(id, { label, url, authHeader, list, fields: { ...fields } })
-			);
+			try {
+				dataSources.set(
+					await api.setDataSource(
+						id,
+						{ label, url, authHeader, list, fields: { ...fields } },
+						inEvent
+					)
+				);
+			} finally {
+				await refreshEvent(touched);
+			}
 			if (token.trim()) {
 				dataSources.set(await api.setDataSourceToken(id, token));
 				token = '';
@@ -129,7 +150,9 @@
 
 	async function remove() {
 		try {
+			const touched = !!view?.inEvent;
 			dataSources.set(await api.setDataSource(id, null));
+			await refreshEvent(touched);
 			editing = false;
 		} catch (e) {
 			error = { field: null, message: errorMessage(e) };
@@ -160,12 +183,18 @@
 	{#if !editing}
 		<div class="summary">
 			<span class="note">
-				{view ? `Pulls from ${view.source.label}` : 'Can pull from a data source.'}
+				{#if !view}
+					Can pull from a data source.
+				{:else}
+					Pulls from {view.source.label}{view.inEvent ? ', saved in the event' : ''}{view.inEvent &&
+					!view.hasToken
+						? '. Add the token on this computer to pull.'
+						: ''}
+				{/if}
 			</span>
 			<Button size="sm" onclick={edit}>{view ? 'Edit' : 'Set up'}</Button>
 		</div>
 	{:else}
-		<p class="note">Saved on this computer, for all events. The token goes in the keychain.</p>
 		{@render field('Name', 'label', label, (v) => (label = v))}
 		{@render field('URL', 'url', url, (v) => (url = v))}
 		<div class="pair">
@@ -232,6 +261,18 @@
 				{/if}
 			</div>
 		{/if}
+
+		<div class="where">
+			<label class="toggle">
+				<input type="checkbox" bind:checked={inEvent} disabled={session.closed} />
+				Save in the event file
+			</label>
+			<span class="hint">
+				{inEvent
+					? 'Anyone with the file can read the address and names. The token stays in the keychain of each computer.'
+					: 'Saved on this computer, for all events. The token goes in the keychain.'}
+			</span>
+		</div>
 
 		<div class="actions">
 			<Button size="sm" kind="primary" disabled={busy} onclick={saveAndTest}>Save and test</Button>
@@ -356,6 +397,25 @@
 
 	.attention {
 		color: var(--color-attention);
+	}
+
+	.where {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-2);
+		align-self: flex-start;
+		font-size: 13px;
+		cursor: pointer;
+	}
+
+	.toggle input {
+		accent-color: var(--color-ink);
 	}
 
 	.actions {

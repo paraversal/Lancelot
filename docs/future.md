@@ -68,10 +68,6 @@ Plugins are built in today (technical design §10). When another group wants its
 
 **When:** once a second plugin really shares a provider. Until then the per-plugin source is simpler to set up and to explain.
 
-## Data sources in the event file
-
-A data source is set up per computer: its details are in `data-sources.json` in the app's data folder and its token in the keychain, so a shared event file can't pull until the source is set up again. Storing the details in the `.lancelot` file would let them travel with the event, but anyone given the file could read the provider's URL and field names. The token stays in the keychain either way.
-
 ## Motion trial
 
 `lib/motion/choices.ts`, every strength of about 25 effects and the `/design/motion` trial page stay for now, so animations can still be tried out. Once the choices feel settled, keep the chosen effects and a full-or-reduced switch, and remove the rest (about 1,100 lines). Git keeps them. This changes nothing visible.

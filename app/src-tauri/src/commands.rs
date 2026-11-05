@@ -481,8 +481,11 @@ pub async fn data_source_set(
     state: State<'_, AppState>,
     id: String,
     source: Option<DataSource>,
+    in_event: Option<bool>,
 ) -> Result<BTreeMap<String, DataSourceView>> {
-    with(&state, |s| s.set_data_source(&id, source))
+    with(&state, |s| {
+        s.set_data_source(&id, source, in_event.unwrap_or(false))
+    })
 }
 
 #[tauri::command]

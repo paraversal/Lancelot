@@ -1,8 +1,9 @@
 //! Data sources: where a plugin can pull figures from over the network (technical design §10). The
 //! provider shapes its data, so a source is only a URL and some names: a top-level list, and which
 //! field of an item holds what. Nothing here knows about any provider, and the details stay out of
-//! the repository and out of event files: they are in `data-sources.json` in the app's data folder,
-//! and the token is in a [`TokenStore`].
+//! the repository. They are in `data-sources.json` in the app's data folder, or, when a source is
+//! saved in the event, in a plugin record of the event file. The token is never in either: it is in
+//! a [`TokenStore`], by the provider it goes to.
 //!
 //! Only the fields asked for leave this module, so anything else in a response is never kept
 //! (R-TKT-17). The app works without any of this (R-NF-3): a failed pull changes nothing.
@@ -47,6 +48,82 @@ pub struct DataSource {
 pub struct DataSourceView {
     pub source: DataSource,
     pub has_token: bool,
+    /// Saved in the event file rather than on this computer. It then wins over one on this
+    /// computer with the same id, which other events may still use.
+    pub in_event: bool,
+}
+
+/// What a plugin record holding a source is called: one per plugin, or one per tab.
+pub(crate) const RECORD_KEY: &str = "data-source";
+
+/// The plugin record of a source's id: `drinks:Drinks` is the record `data-source:Drinks` of the
+/// plugin `drinks`.
+pub(crate) fn record_of(id: &str) -> (&str, String) {
+    match id.split_once(':') {
+        Some((plugin, tab)) => (plugin, format!("{RECORD_KEY}:{tab}")),
+        None => (id, RECORD_KEY.to_owned()),
+    }
+}
+
+/// The source id of a plugin record, if it holds a source.
+pub(crate) fn id_of_record(plugin: &str, key: &str) -> Option<String> {
+    if key == RECORD_KEY {
+        return Some(plugin.to_owned());
+    }
+    let tab = key.strip_prefix(RECORD_KEY)?.strip_prefix(':')?;
+    Some(format!("{plugin}:{tab}"))
+}
+
+/// Where a source's token is kept: by the provider it goes to and the header it goes in, so a
+/// source from someone else's event file finds a token already saved for that provider, and a
+/// token never follows a source to another address.
+pub(crate) fn token_key(source: &DataSource) -> String {
+    let origin = source
+        .url
+        .parse::<Uri>()
+        .ok()
+        .and_then(|uri| {
+            let scheme = uri.scheme_str()?.to_ascii_lowercase();
+            let authority = uri.authority()?.as_str().to_ascii_lowercase();
+            Some(format!("{scheme}://{authority}"))
+        })
+        .unwrap_or_else(|| source.url.clone());
+    format!("{origin} {}", source.auth_header.to_ascii_lowercase())
+}
+
+/// Words that mark a secret in an address. An event file gets shared, so a source saved in it
+/// must keep its key in the header.
+const SECRET_WORDS: [&str; 7] = [
+    "key",
+    "token",
+    "secret",
+    "auth",
+    "pass",
+    "sig",
+    "credential",
+];
+
+/// Refuses an address that holds what looks like a secret, before it goes in the event file.
+pub(crate) fn check_shareable(source: &DataSource) -> Result<(), ApiError> {
+    let uri: Uri = source
+        .url
+        .parse()
+        .map_err(|_| invalid("url", "enter a full address"))?;
+    let message =
+        "anyone with the event file can read this address: send the key in the auth header instead";
+    if uri.authority().is_some_and(|a| a.as_str().contains('@')) {
+        return Err(invalid("url", message));
+    }
+    let secret = uri.query().is_some_and(|query| {
+        query.split('&').any(|pair| {
+            let name = pair.split('=').next().unwrap_or("").to_ascii_lowercase();
+            SECRET_WORDS.iter().any(|word| name.contains(word))
+        })
+    });
+    if secret {
+        return Err(invalid("url", message));
+    }
+    Ok(())
 }
 
 /// What a pull read: the fields asked for of every item that has all the required ones. An
@@ -403,6 +480,51 @@ mod tests {
         // A required one can't be left blank.
         let error = read_rows(body, &without, &wanted(), &[]).unwrap_err();
         assert!(error.message.contains("`quantity`"));
+    }
+
+    #[test]
+    fn a_token_is_kept_by_provider_and_header() {
+        let mut a = source("https://API.x.example/drinks?day=1");
+        let mut b = source("https://api.x.example/tickets");
+        assert_eq!(token_key(&a), "https://api.x.example x-api-key");
+        assert_eq!(token_key(&a), token_key(&b));
+        b.url = "https://api.x.example:8443/tickets".into();
+        assert_ne!(token_key(&a), token_key(&b));
+        a.auth_header = "Authorization".into();
+        assert_eq!(token_key(&a), "https://api.x.example authorization");
+    }
+
+    #[test]
+    fn a_source_in_the_event_keeps_no_secret_in_its_address() {
+        let shareable = |u: &str| check_shareable(&source(u)).is_ok();
+        assert!(shareable("https://x.example/drinks?event=12&day=1"));
+        assert!(shareable("https://x.example/drinks"));
+        assert!(!shareable("https://x.example/drinks?api_key=abc"));
+        assert!(!shareable("https://x.example/drinks?day=1&Token=abc"));
+        assert!(!shareable("https://x.example/drinks?sig=abc"));
+        assert!(!shareable("https://kim:pw@x.example/drinks"));
+    }
+
+    #[test]
+    fn a_source_id_is_a_plugin_record_and_back() {
+        assert_eq!(
+            record_of("ticket-api"),
+            ("ticket-api", "data-source".to_owned())
+        );
+        assert_eq!(
+            record_of("drinks:Merch"),
+            ("drinks", "data-source:Merch".to_owned())
+        );
+        assert_eq!(
+            id_of_record("drinks", "data-source:Merch").as_deref(),
+            Some("drinks:Merch")
+        );
+        assert_eq!(
+            id_of_record("ticket-api", "data-source").as_deref(),
+            Some("ticket-api")
+        );
+        assert_eq!(id_of_record("drinks", "data-sources"), None);
+        assert_eq!(id_of_record("drinks", "prices"), None);
     }
 
     #[test]

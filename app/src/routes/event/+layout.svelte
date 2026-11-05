@@ -14,8 +14,15 @@
 
 	let { children }: LayoutProps = $props();
 
-	onMount(async () => {
+	// Sources can be saved in the event, so another event, an undo or a copy changes them.
+	$effect(() => {
+		const event = session.event;
+		if (!event) return;
+		void [event.path, event.revision];
 		dataSources.load();
+	});
+
+	onMount(async () => {
 		if (session.event) return;
 		// After a reload the backend may still have the event open.
 		const current = await api.currentEvent();

@@ -329,7 +329,7 @@ class Describer {
 				const v = value as PluginRecord;
 				return {
 					noun: this.plugins[v.plugin] ?? v.plugin,
-					name: v.key,
+					name: recordName(v.key),
 					fields: rawFields(v.value)
 				};
 			}
@@ -352,6 +352,13 @@ class Describer {
 			fields: changedFields(before?.fields ?? null, after?.fields ?? null, name)
 		};
 	}
+}
+
+/** A plugin record's key, or what a data source saved in the event is called (`data-source:Drinks`). */
+function recordName(key: string): string {
+	if (key === 'data-source') return 'Data source';
+	const tab = key.startsWith('data-source:') ? key.slice('data-source:'.length) : null;
+	return tab ? `Data source · ${tab}` : key;
 }
 
 /**
