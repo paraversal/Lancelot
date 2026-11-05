@@ -12,7 +12,7 @@
 	import Segmented from '#lib/components/Segmented.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount, formatDate, formatPlain } from '#lib/format.ts';
-	import { stampIn } from '#lib/motion/effects.ts';
+	import { boxOpen, stampIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
 	import { session } from '#lib/state/session.svelte.ts';
@@ -119,21 +119,25 @@
 			/>
 		</div>
 		{#if method === 'other'}
-			<TextField
-				label="Method"
-				value={person.otherMethod}
-				oncommit={(v) => save(person.name, { otherMethod: v })}
-			>
-				{#snippet hint()}Such as a PayPal address, or cash.{/snippet}
-			</TextField>
+			<div class="method" transition:boxOpen={{ level: level('A7') }}>
+				<TextField
+					label="Method"
+					value={person.otherMethod}
+					oncommit={(v) => save(person.name, { otherMethod: v })}
+				>
+					{#snippet hint()}Such as a PayPal address, or cash.{/snippet}
+				</TextField>
+			</div>
 		{:else}
-			<TextField
-				label="Account holder"
-				value={person.holder}
-				oncommit={(v) => save(person.name, { holder: v })}
-			/>
-			<IbanField value={person.iban} oncommit={(v) => save(person.name, { iban: v })} />
-			<TextField label="BIC" value={person.bic} oncommit={(v) => save(person.name, { bic: v })} />
+			<div class="method" transition:boxOpen={{ level: level('A7') }}>
+				<TextField
+					label="Account holder"
+					value={person.holder}
+					oncommit={(v) => save(person.name, { holder: v })}
+				/>
+				<IbanField value={person.iban} oncommit={(v) => save(person.name, { iban: v })} />
+				<TextField label="BIC" value={person.bic} oncommit={(v) => save(person.name, { bic: v })} />
+			</div>
 		{/if}
 		<TextField
 			label="Contact"
@@ -222,6 +226,13 @@
 </Panel>
 
 <style>
+	/* The method's fields, spaced as the panel spaces its own; the box opens around them (A7). */
+	.method {
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
+	}
+
 	.head {
 		display: flex;
 		flex-direction: column;

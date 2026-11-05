@@ -198,7 +198,8 @@ describe('A budget line that scales', () => {
 		render(BudgetLinePanel, { line: ticketSales(), category: null, onclose: () => {} });
 		// The one assumption it had is unpicked, so there is no total to show.
 		await fireEvent.click(screen.getByRole('button', { name: /Guests/ }));
-		expect(screen.queryByTestId('budget-line-total')).toBeNull();
+		// The sum closes rather than vanishing (A7), so it takes a moment to leave the page.
+		await vi.waitFor(() => expect(screen.queryByTestId('budget-line-total')).toBeNull());
 
 		await fireEvent.click(screen.getByRole('button', { name: /Save/ }));
 		expect(update).not.toHaveBeenCalled();

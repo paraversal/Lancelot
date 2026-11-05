@@ -7,7 +7,7 @@
 	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import { formatAmount } from '#lib/format.ts';
-	import { popIn } from '#lib/motion/effects.ts';
+	import { boxOpen, popIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import Check from '#lib/motion/Check.svelte';
 	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
@@ -166,16 +166,19 @@
 	<div class="sums">
 		<div class="line"><span>In the books</span><span>{formatAmount(computed, format)}</span></div>
 		{#if closing !== null}
-			<div class="line"><span>Counted</span><span>{formatAmount(closing, format)}</span></div>
-			<div class="line total">
-				{#if !difference}
-					<span class="match" in:popIn={{ level: level('D4') }}
-						><Check level={level('D4')} size={16} delay={120} />Matches the books</span
-					>
-				{:else}
-					<strong>{difference < 0 ? 'Less than recorded' : 'More than recorded'}</strong>
-					<strong class="minus">{formatAmount(difference, format, 'magnitude')}</strong>
-				{/if}
+			<!-- What the count says about the books, as one block that opens (A7). -->
+			<div class="counted" transition:boxOpen={{ level: level('A7') }}>
+				<div class="line"><span>Counted</span><span>{formatAmount(closing, format)}</span></div>
+				<div class="line total">
+					{#if !difference}
+						<span class="match" in:popIn={{ level: level('D4') }}
+							><Check level={level('D4')} size={16} delay={120} />Matches the books</span
+						>
+					{:else}
+						<strong>{difference < 0 ? 'Less than recorded' : 'More than recorded'}</strong>
+						<strong class="minus">{formatAmount(difference, format, 'magnitude')}</strong>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	</div>

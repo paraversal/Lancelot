@@ -16,6 +16,8 @@
 	import Panel from '#lib/components/Panel.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { boxOpen } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -43,6 +45,9 @@
 	let date = $state<string | null>(today);
 	let preview = $state<ImportPreview | null>(null);
 	let error = $state<string | null>(null);
+	// How many reviews this panel has shown. The first one comes with the panel opening, so the
+	// boxes it brings in arrive with the panel, not after it; later reviews grow their boxes in.
+	let previews = $state(0);
 	let reads = 0;
 	untrack(() => read());
 
@@ -53,7 +58,10 @@
 		error = null;
 		try {
 			const read = await api.previewTickets(batch, date ?? today);
-			if (mine === reads) preview = read;
+			if (mine === reads) {
+				preview = read;
+				previews += 1;
+			}
 		} catch (e) {
 			if (!(e instanceof ApiError)) throw e;
 			if (mine !== reads) return;
@@ -198,7 +206,11 @@
 
 		{#if preview}
 			{#if preview.orderIdsDiffer}
-				<div class="problems" role="alert">
+				<div
+					class="problems"
+					role="alert"
+					transition:boxOpen|global={{ level: previews > 1 ? level('A7') : 'off' }}
+				>
 					<strong
 						>{snapshot.tickets.orderIds
 							? 'These tickets have no order IDs'
@@ -211,7 +223,10 @@
 				</div>
 			{/if}
 			{#each preview.unknown as u (u.name)}
-				<div class="unknown">
+				<div
+					class="unknown"
+					transition:boxOpen|global={{ level: previews > 1 ? level('A7') : 'off' }}
+				>
 					<div class="top">
 						<span class="name"><Icon name="warn" size={14} />„{u.name}“</span>
 						<span class="meta">{u.rows} {u.rows === 1 ? 'ticket' : 'tickets'}</span>
@@ -271,7 +286,10 @@
 			</div>
 
 			{#if preview.receiptsLost.length}
-				<div class="problems">
+				<div
+					class="problems"
+					transition:boxOpen|global={{ level: previews > 1 ? level('A7') : 'off' }}
+				>
 					<strong
 						>{preview.receiptsLost.length}
 						{preview.receiptsLost.length === 1 ? 'receipt' : 'receipts'} would be deleted</strong
@@ -313,7 +331,7 @@
 					{/if}
 				</div>
 				{#if deleting?.id === i.id}
-					<div class="problems deleting">
+					<div class="problems deleting" transition:boxOpen|global={{ level: level('A7') }}>
 						<strong>Delete this import?</strong>
 						<span>
 							Sold: {deleting.effect.soldBefore} → {deleting.effect.soldAfter} · Net:

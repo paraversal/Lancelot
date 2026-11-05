@@ -1,15 +1,15 @@
-<script lang="ts" module>
-	// A panel is often replaced by another while it stays open (the next entry, another plugin), and
-	// the room it takes must not be given away and taken again then. Each panel counts itself in on
-	// creation and out a moment later, so one that replaces another sees the room already taken.
+<script module lang="ts">
+	// One panel gives way at a time: a panel that replaces another while open (the next entry,
+	// another plugin's setup) finds the room already taken and does not open it again.
 	let open = 0;
 </script>
 
 <script lang="ts">
 	// The right-hand panel where editing happens (no modals for routine work). Esc closes it,
 	// unless that would lose changes: then it warns once, and the next Esc goes through.
-	import { onDestroy, type Snippet } from 'svelte';
-	import { panelSpace, shake, warnIn } from '../motion/effects';
+	import { onDestroy } from 'svelte';
+	import type { Snippet } from 'svelte';
+	import { panelIn, panelSpace, shake, warnIn } from '../motion/effects';
 	import { level } from '../motion/mode.svelte';
 	import Icon from './Icon.svelte';
 
@@ -34,13 +34,12 @@
 		children: Snippet;
 	} = $props();
 
-	let panel: HTMLElement;
-	let warned = $state(false);
-
-	// The page gives way only when the panel opens, not when what it shows changes.
 	const opening = open === 0;
 	open++;
 	onDestroy(() => setTimeout(() => open--));
+
+	let panel: HTMLElement;
+	let warned = $state(false);
 </script>
 
 <svelte:window
@@ -65,10 +64,10 @@
 	}}
 />
 
-<!-- A panel takes its room beside the page (A2), so the page gives way; closing is immediate, so
-     nothing waits on it. -->
+<!-- The panel slides in (A2) while its room opens, so the page gives way rather than jumping.
+     Closing is immediate, so nothing waits on it. -->
 <div class="slot" in:panelSpace|global={{ level: level('A2'), opening }}>
-	<aside class="panel" class:warned bind:this={panel}>
+	<aside class="panel" class:warned bind:this={panel} in:panelIn|global={{ level: level('A2') }}>
 		{#if warned}
 			<div class="warning">
 				<p role="status" in:warnIn={{ level: level('A6') }}>Press Esc again to discard changes</p>
@@ -86,13 +85,10 @@
 </div>
 
 <style>
-	/* The room the panel takes. Its width opens, not the panel's own, so nothing inside the panel
-	   reflows on the way in. `clip` rather than `hidden`: it is not a scroll container. */
 	.slot {
 		display: flex;
 		flex: none;
 		width: 380px;
-		/* Pages that wrap the panel in a plain box still get a panel as tall as the page. */
 		height: 100%;
 		overflow: clip;
 	}

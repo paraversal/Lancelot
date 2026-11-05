@@ -15,6 +15,8 @@
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
 	import { formatAmount } from '#lib/format.ts';
+	import { boxOpen } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import { feeInput, formatFee, parseCount, parseFee } from '#lib/tickets.ts';
 	import { ticketShare } from '#lib/tickets.svelte.ts';
@@ -109,15 +111,17 @@
 
 	{#if !session.closed}
 		{#if mode === 'match'}
-			{#each removed.matches as m (m.cancellation)}
-				<div class="match">
-					<span>matches manual cancellation · {formatFee(m.refundBp, format)}</span>
-					<Button size="sm" kind="primary" onclick={() => confirm(m)}>Confirm</Button>
-				</div>
-			{/each}
-			<button type="button" class="other" onclick={() => (mode = 'refund')}
-				>Resolve another way</button
-			>
+			<div class="matches" transition:boxOpen={{ level: level('A7') }}>
+				{#each removed.matches as m (m.cancellation)}
+					<div class="match">
+						<span>matches manual cancellation · {formatFee(m.refundBp, format)}</span>
+						<Button size="sm" kind="primary" onclick={() => confirm(m)}>Confirm</Button>
+					</div>
+				{/each}
+				<button type="button" class="other" onclick={() => (mode = 'refund')}
+					>Resolve another way</button
+				>
+			</div>
 		{:else}
 			<Segmented {options} bind:value={mode} label="How to resolve" />
 			<div class="fields">
@@ -132,7 +136,7 @@
 					</div>
 				{/if}
 				{#if mode === 'refund'}
-					<div class="field percent">
+					<div class="field percent" transition:boxOpen={{ level: level('A7') }}>
 						<TextField
 							label="Refund %"
 							value={percent}
@@ -140,7 +144,7 @@
 							oncommit={(v) => (percent = v ?? '')}
 						/>
 					</div>
-					<div class="field date">
+					<div class="field date" transition:boxOpen={{ level: level('A7') }}>
 						<DateField
 							label="Date"
 							value={date}
@@ -150,7 +154,7 @@
 							oncommit={(v) => (date = v ?? date)}
 						/>
 					</div>
-					<div class="field payer">
+					<div class="field payer" transition:boxOpen={{ level: level('A7') }}>
 						<Select
 							label="From"
 							value={payer ?? 0}
@@ -195,6 +199,13 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--spacing-3);
+	}
+
+	/* The matches and the way out keep the card's own spacing while they open (A7). */
+	.matches {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
 	}
 
 	.meta {

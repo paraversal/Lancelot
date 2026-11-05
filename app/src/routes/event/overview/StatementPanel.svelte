@@ -10,6 +10,8 @@
 	import DateField, { datesRead } from '#lib/components/DateField.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import { differenceText, formatAmount, formatDate } from '#lib/format.ts';
+	import { boxOpen } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let { account, onclose }: { account: number; onclose: () => void } = $props();
@@ -119,9 +121,9 @@
 	{#if error}<p class="form-error">{error}</p>{/if}
 
 	{#if checkpoints.length}
-		<ul>
+		<ul transition:boxOpen={{ level: level('A7') }}>
 			{#each checkpoints as r (r.id)}
-				<li class:selected={editing === r.id}>
+				<li class:selected={editing === r.id} in:boxOpen={{ level: level('A7') }}>
 					<button type="button" onclick={() => edit(r)}>
 						<span class="line">
 							<strong>{formatDate(r.date, format)}</strong>

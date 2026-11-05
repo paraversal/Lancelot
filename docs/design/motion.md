@@ -56,11 +56,12 @@ All of it is in [`app/src/lib/motion/`](../../app/src/lib/motion/):
 | Id | Idea | Regular | Playful | Full motion |
 |---|---|---|---|---|
 | A1 | Switching pages | The page fades in and rises 6 px; the sidebar highlight slides to the new item | Rises with a spring; the highlight stretches as it travels | Regular |
-| A2 | Panels | The page gives way as the panel's room opens, and the panel rides in with it; closing is immediate | The room opens with a small overshoot | Regular |
+| A2 | Panels | The page gives way as the panel slides in from the right; closing is immediate | The room opens with a small overshoot too | Regular |
 | A3 | Pressing buttons | The button sinks a little | It squashes and springs back | Regular |
 | A4 | Segmented controls | The yellow pill slides to the new option | The pill stretches on the way and settles | Playful |
 | A5 | Changing amounts | The new figure slides in from the direction it moved | The digits that changed roll, like an odometer | Playful |
 | A6 | Errors in fields | The warning icon grows in | It pops in, and the field gives a short shake | Playful |
+| A7 | A box that opens | The box grows to the room its content needs, clipping what is inside | The same, with a small overshoot as it lands | Regular |
 
 ### B · Ledger
 

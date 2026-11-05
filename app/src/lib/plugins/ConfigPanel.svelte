@@ -2,9 +2,11 @@
 	// A plugin's settings, in the panel beside Settings, so its card can stay a summary. A plugin
 	// with a source per tab, like Stock and sales one per cost centre, gets a tab each. The panel
 	// warns before Esc closes it while a data source form has changes to lose.
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import Panel from '../components/Panel.svelte';
 	import Segmented from '../components/Segmented.svelte';
+	import { boxGrow } from '../motion/effects';
+	import { level } from '../motion/mode.svelte';
 	import type { Plugin, SourceTab } from './api';
 	import DataSourceForm from './DataSourceForm.svelte';
 	import { pluginContext } from './host';
@@ -35,6 +37,15 @@
 	// Only a change matters, so the state is written in place and the panel isn't redrawn for it.
 	let dirty = $state<Record<string, boolean>>({});
 	const anyDirty = $derived(tabs.some((t) => dirty[t.key]));
+
+	// The tabbed box: it grows around the form of the tab that is chosen (A7).
+	let box = $state<HTMLDivElement>();
+	async function chooseTab(next: string) {
+		const from = box?.getBoundingClientRect().height ?? 0;
+		selected = next;
+		await tick();
+		if (box) boxGrow(box, from, level('A7'));
+	}
 </script>
 
 {#snippet head()}
@@ -53,7 +64,7 @@
 			<h3>
 				Data source{plugin.sourceTabs && tabs.length === 1 ? ` for ${tabs[0].title}` : ''}
 			</h3>
-			<div class="tabs" class:boxed={tabbed}>
+			<div class="tabs" class:boxed={tabbed} bind:this={box}>
 				{#if tabbed}
 					<div class="tab-strip">
 						<Segmented
@@ -61,6 +72,7 @@
 							variant="tabs"
 							bind:value={selected}
 							options={tabs.map((t) => ({ value: t.key, label: t.title }))}
+							onchange={chooseTab}
 						/>
 					</div>
 				{/if}

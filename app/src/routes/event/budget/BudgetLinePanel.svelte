@@ -3,7 +3,7 @@
 	// unit price, or as a price per assumption such as the guests expected (R-BUD-6), and whether
 	// it is complete. Below, the receipt lines linked to it
 	// (R-BUD-2), each opening its transaction in the ledger.
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
 	import type { AccountId } from '#lib/api/generated/AccountId.ts';
@@ -22,6 +22,8 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { isOver } from '#lib/budget.ts';
 	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { boxGrow, boxOpen } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -132,13 +134,19 @@
 
 	// The mode before the latest switch: Segmented sets the new one before it calls back.
 	let last = untrack(() => mode);
-	function changeMode(to: 'amount' | 'quantity' | 'per') {
+	// The tabs' fields: the box grows around whichever set the choice shows.
+	let controls: HTMLDivElement;
+	async function changeMode(to: 'amount' | 'quantity' | 'per') {
 		error = null;
+		// Measured before the new fields are in, so the box can ease into the room they take.
+		const from = controls?.getBoundingClientRect().height ?? 0;
 		// A count stops scaling, and a price per assumption has no count of its own.
 		if (to === 'quantity' && last === 'per') per = [];
 		last = to;
 		if (to === 'per' && !per.length && snapshot.assumptions.length === 1)
 			per = [snapshot.assumptions[0].id];
+		await tick();
+		if (controls) boxGrow(controls, from, level('A7'));
 	}
 
 	function toggle(id: AssumptionId) {
@@ -298,7 +306,7 @@
 					/>
 				</div>
 				<div class="method-body">
-					<div class="controls">
+					<div class="controls" bind:this={controls}>
 						{#if mode === 'amount'}
 							<AmountField
 								value={amount}
@@ -366,15 +374,15 @@
 					</div>
 					<!-- Only as tall as its line: an empty estimate stays compact and the sum opens
 					     when there is something to add up. -->
-					<div class="sum" class:shown={mode !== 'amount' && total !== null}>
-						{#if mode !== 'amount' && total !== null}
+					{#if mode !== 'amount' && total !== null}
+						<div class="sum" transition:boxOpen={{ level: level('A7') }}>
 							<div class="sum-line" class:centred={mode === 'per'} data-testid="budget-line-total">
 								<span class="formula">{formula}</span>
 								<span class="equals">=</span>
 								<strong>{formatAmount(total, format)}</strong>
 							</div>
-						{/if}
-					</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 			{#if fieldError('estimate')}<span class="form-error">{fieldError('estimate')}</span>{/if}
@@ -447,8 +455,8 @@
 	}
 
 	/* The estimate: one box, its tabs along the top, so what they change is visibly inside them.
-	   The body keeps its height between the three ways of making the estimate up, so the fields
-	   below the box stay put while the tabs are tried. */
+	   The fields the tabs show grow into place (A7), so the fields below the box give way smoothly
+	   while the tabs are tried. */
 	.estimate {
 		display: flex;
 		flex-direction: column;
@@ -470,6 +478,7 @@
 	.method-body {
 		display: flex;
 		flex-direction: column;
+		gap: 10px;
 		padding: 12px;
 	}
 
@@ -530,25 +539,6 @@
 	.times {
 		flex: none;
 		color: var(--color-ink-muted);
-	}
-
-	/* A row that is not there yet takes no room: it opens when the estimate has a sum, and closes
-	   again when the fields no longer add up to one. */
-	.sum {
-		height: 0;
-		margin-top: 0;
-		overflow: hidden;
-		opacity: 0;
-		transition:
-			height var(--motion-quick) var(--ease-out),
-			margin-top var(--motion-quick) var(--ease-out),
-			opacity var(--motion-quick) var(--ease-out);
-	}
-
-	.sum.shown {
-		height: 20px;
-		margin-top: 10px;
-		opacity: 1;
 	}
 
 	.sum-line {

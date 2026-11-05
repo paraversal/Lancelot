@@ -48,8 +48,9 @@ export function markerTravel(marker: HTMLElement, from: DOMRect, to: DOMRect, le
 }
 
 /**
- * A2: the room a panel takes beside the page. The panel keeps its width and rides in with its edge,
- * so what is beside it gives way instead of jumping. Measured, so a wider panel still fits.
+ * A2: the room a panel takes beside the page. The room opens over the animation while the panel
+ * keeps its width, so the table beside it slides over instead of jumping. Measured, so a wider
+ * panel still fits.
  */
 export function panelSpace(
 	node: Element,
@@ -62,6 +63,26 @@ export function panelSpace(
 		duration: playful ? 340 : 200,
 		easing: playful ? (t) => springFn(t, 1.06) : cubicOut,
 		css: (t) => `width: ${t * width}px`
+	};
+}
+
+/** A2: a panel sliding in from the right. */
+export function panelIn(_node: Element, { level }: { level: Level }): TransitionConfig {
+	if (level === 'off') return NONE;
+	const playful = isPlayful(level);
+	const from = playful ? 28 : 16;
+	return {
+		duration: playful ? 340 : 200,
+		easing: playful ? (t) => springFn(t, 1.06) : cubicOut,
+		css: (t, u) => `opacity: ${Math.min(1, t * 2)}; transform: translateX(${u * from}px)`
+	};
+}
+
+export function panelOut(_node: Element, { level }: { level: Level }): TransitionConfig {
+	if (level === 'off') return NONE;
+	return {
+		duration: 120,
+		css: (t, u) => `opacity: ${t}; transform: translateX(${u * 10}px)`
 	};
 }
 
@@ -139,6 +160,82 @@ export function shake(node: Element, level: Level) {
 		],
 		{ duration: 280, easing: 'ease-out' }
 	);
+}
+
+/** The room an element takes from its neighbours, in pixels. */
+const px = (value: string) => parseFloat(value) || 0;
+
+/**
+ * The gap a column gives the box before it has any height of its own. It is not a margin, so
+ * `boxOpen` pays it back out of the margin while the box is short; the content below then
+ * moves once, with the box, rather than jumping first.
+ */
+function gapAround(node: HTMLElement): number {
+	const parent = node.parentElement;
+	if (!parent || parent.children.length < 2) return 0;
+	const style = getComputedStyle(parent);
+	if (!style.display.includes('flex') || style.flexDirection !== 'column') return 0;
+	return px(style.rowGap);
+}
+
+/**
+ * A7: a box opens to the room what appeared inside it needs. The room is measured from the box
+ * itself, so a line of text, a field and a card all open the same way; the box clips what is in
+ * it while it moves instead of squeezing it, and gives the room back when it is done.
+ */
+export function boxOpen(node: HTMLElement, { level }: { level: Level }): TransitionConfig {
+	if (level === 'off') return NONE;
+	const style = getComputedStyle(node);
+	const height = node.offsetHeight;
+	const paddingTop = px(style.paddingTop);
+	const paddingBottom = px(style.paddingBottom);
+	const marginTop = px(style.marginTop);
+	const marginBottom = px(style.marginBottom);
+	const gap = gapAround(node);
+	const playful = isPlayful(level);
+	return {
+		duration: playful ? 240 : 160,
+		easing: playful ? (t) => springFn(t, 1.04) : cubicOut,
+		css: (t) => {
+			// A spring may go past its target; a box never takes less than no room.
+			const shown = Math.max(0, t);
+			return `height: ${shown * height}px; padding-top: ${shown * paddingTop}px; padding-bottom: ${shown * paddingBottom}px; margin-top: ${shown * marginTop - (1 - shown) * gap}px; margin-bottom: ${shown * marginBottom}px; overflow: hidden; opacity: ${Math.min(1, shown)}`;
+		}
+	};
+}
+
+/** The box growing, so that a second change while it moves starts from where it is. */
+const growing = new WeakMap<HTMLElement, Animation>();
+
+/**
+ * A7: a box whose contents change in place, such as a tab or a choice with other fields, eases
+ * from the height it had to the one the new contents need. Measure before the change and call
+ * this once the new contents are in; what is inside is not drawn twice, only clipped while the
+ * box moves.
+ */
+export function boxGrow(node: HTMLElement, from: number, level: Level) {
+	if (level === 'off') return;
+	// Measure at rest: a box caught mid-move still knows the room its contents need.
+	growing.get(node)?.cancel();
+	const to = node.getBoundingClientRect().height;
+	if (Math.abs(to - from) < 1) return;
+	const playful = isPlayful(level);
+	const animation = node.animate(
+		[
+			{ height: `${from}px`, overflow: 'hidden' },
+			{ height: `${to}px`, overflow: 'hidden' }
+		],
+		{
+			duration: playful ? 240 : 160,
+			easing: playful ? easing('spring-soft') : easing('ease-out')
+		}
+	);
+	growing.set(node, animation);
+	animation.finished
+		.catch(() => {})
+		.then(() => {
+			if (growing.get(node) === animation) growing.delete(node);
+		});
 }
 
 // --- B · Ledger --------------------------------------------------------------------------

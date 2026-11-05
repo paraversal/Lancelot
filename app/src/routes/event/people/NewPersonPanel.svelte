@@ -10,6 +10,8 @@
 	import Panel from '#lib/components/Panel.svelte';
 	import Segmented from '#lib/components/Segmented.svelte';
 	import TextField from '#lib/components/TextField.svelte';
+	import { boxOpen } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -140,44 +142,48 @@
 		/>
 	</div>
 	{#if method === 'other'}
-		<TextField
-			label="Method"
-			value={otherMethod}
-			oninput={(v) => {
-				otherMethod = v;
-				changed();
-			}}
-			oncommit={(v) => (otherMethod = v ?? '')}
-		>
-			{#snippet hint()}Such as a PayPal address, or cash.{/snippet}
-		</TextField>
+		<div class="method" transition:boxOpen={{ level: level('A7') }}>
+			<TextField
+				label="Method"
+				value={otherMethod}
+				oninput={(v) => {
+					otherMethod = v;
+					changed();
+				}}
+				oncommit={(v) => (otherMethod = v ?? '')}
+			>
+				{#snippet hint()}Such as a PayPal address, or cash.{/snippet}
+			</TextField>
+		</div>
 	{:else}
-		<TextField
-			label="Account holder"
-			value={holder}
-			oninput={(v) => {
-				holder = v;
-				changed();
-			}}
-			oncommit={(v) => (holder = v ?? '')}
-		/>
-		<IbanField
-			bind:this={ibanField}
-			value={iban}
-			oncommit={(v) => {
-				iban = v;
-				changed();
-			}}
-		/>
-		<TextField
-			label="BIC"
-			value={bic}
-			oninput={(v) => {
-				bic = v;
-				changed();
-			}}
-			oncommit={(v) => (bic = v ?? '')}
-		/>
+		<div class="method" transition:boxOpen={{ level: level('A7') }}>
+			<TextField
+				label="Account holder"
+				value={holder}
+				oninput={(v) => {
+					holder = v;
+					changed();
+				}}
+				oncommit={(v) => (holder = v ?? '')}
+			/>
+			<IbanField
+				bind:this={ibanField}
+				value={iban}
+				oncommit={(v) => {
+					iban = v;
+					changed();
+				}}
+			/>
+			<TextField
+				label="BIC"
+				value={bic}
+				oninput={(v) => {
+					bic = v;
+					changed();
+				}}
+				oncommit={(v) => (bic = v ?? '')}
+			/>
+		</div>
 	{/if}
 	<TextField
 		label="Contact"
@@ -206,6 +212,13 @@
 </Panel>
 
 <style>
+	/* The method's fields, spaced as the panel spaces its own; the box opens around them (A7). */
+	.method {
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
+	}
+
 	.labelled {
 		display: flex;
 		flex-direction: column;

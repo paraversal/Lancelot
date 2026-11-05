@@ -326,6 +326,9 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px;
+		/* The button is 34 tall and the chips are 32; without this the list lifts two pixels when
+		the panel takes the button away. */
+		min-height: 34px;
 	}
 
 	.search {

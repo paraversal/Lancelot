@@ -271,7 +271,8 @@ describe('The Count panel', () => {
 		expect(screen.getByText('Use pieces')).toBeTruthy();
 		await fireEvent.click(screen.getByText('Use pieces'));
 		expect(amounts()[1].value).toBe('50,00');
-		expect(screen.queryByText('Use pieces')).toBeNull();
+		// The row closes rather than vanishing (A7), so it takes a moment to leave the page.
+		await waitFor(() => expect(screen.queryByText('Use pieces')).toBeNull());
 	});
 
 	it('clears the amount when the last piece goes', async () => {

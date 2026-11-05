@@ -55,6 +55,13 @@
 		});
 	}
 
+	// A7 · a box that opens around what a tab adds
+	let method = $state(0);
+	function chooseMethod(i: number) {
+		if (i === method) return;
+		method = i;
+	}
+
 	// B1, B2, B3 · rows
 	let next = 4;
 	let rows = $state([
@@ -145,6 +152,7 @@
 			A4: () => (kind = 'income'),
 			A5: () => (amount += 1250),
 			A6: commitInvalid,
+			A7: () => chooseMethod(1),
 			B1: addRow,
 			B2: () => removeRow(2),
 			B3: () => (filter = 'expense'),
@@ -192,7 +200,7 @@
 			</div>
 			{#if panel}
 				<div class="slot" in:fx.panelSpace={{ level }}>
-					<aside>
+					<aside in:fx.panelIn={{ level }} out:fx.panelOut={{ level }}>
 						<strong>Groceries</strong>
 						<span class="line"></span><span class="line short"></span>
 					</aside>
@@ -228,6 +236,23 @@
 			{/if}
 		</div>
 		<Button size="sm" onclick={commitInvalid}>Commit</Button>
+	{:else if id === 'A7'}
+		<div class="box">
+			<div class="box-tabs">
+				<button type="button" class:on={method === 0} onclick={() => chooseMethod(0)}>Amount</button
+				>
+				<button type="button" class:on={method === 1} onclick={() => chooseMethod(1)}
+					>Per guest</button
+				>
+			</div>
+			<div class="box-body">
+				<span class="input">120,00</span>
+				{#if method === 1}
+					<span class="line" in:fx.boxOpen={{ level }}></span>
+					<span class="line short" in:fx.boxOpen={{ level }}></span>
+				{/if}
+			</div>
+		</div>
 	{:else if id === 'B1' || id === 'B2' || id === 'B3'}
 		{#if id === 'B3'}
 			<div class="row-of">
@@ -503,6 +528,42 @@
 		width: 60%;
 	}
 
+	/* A7 · a tabbed box whose body grows round what the new tab holds */
+	.box {
+		width: 100%;
+		overflow: hidden;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-md);
+	}
+
+	.box-tabs {
+		display: flex;
+		border-bottom: 1px solid var(--color-rule);
+	}
+
+	.box-tabs button {
+		flex: 1;
+		height: 28px;
+		border: none;
+		background: none;
+		font-size: 12px;
+		color: var(--color-ink-muted);
+		cursor: pointer;
+	}
+
+	.box-tabs button.on {
+		background: var(--color-marker);
+		color: var(--color-ink);
+		font-weight: 600;
+	}
+
+	.box-body {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 10px;
+	}
+
 	.mini-app {
 		position: relative;
 		display: flex;
@@ -556,7 +617,7 @@
 		padding: 12px;
 	}
 
-	/* The panel keeps its width and its room opens (A2), as in the app. */
+	/* The panel's room opens (A2) so the page beside it slides over, and the panel rides in. */
 	.slot {
 		display: flex;
 		flex: none;

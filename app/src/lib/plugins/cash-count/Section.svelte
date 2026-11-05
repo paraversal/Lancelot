@@ -5,6 +5,8 @@
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
 	import { formatAmount } from '../../format';
+	import { boxOpen } from '../../motion/effects';
+	import { level } from '../../motion/mode.svelte';
 	import type { CountSectionProps } from '../api';
 	import {
 		customKey,
@@ -124,14 +126,19 @@
 </div>
 
 {#if differs}
-	<div class="differs">
+	<div class="differs" transition:boxOpen={{ level: level('A7') }}>
 		<span>Amount is {amount === null ? 'empty' : formatAmount(amount, format)}</span>
 		<Button size="sm" onclick={() => setAmount(total)}>Use pieces</Button>
 	</div>
 {/if}
 
 {#if open}
-	<div class="groups" role="group" aria-label="Denominations">
+	<div
+		class="groups"
+		role="group"
+		aria-label="Denominations"
+		transition:boxOpen={{ level: level('A7') }}
+	>
 		{@render group('Notes', 'banknote', notes, 'cash-notes')}
 		{@render group('Coins', 'coins', coins, 'cash-coins')}
 		{#if custom.length}{@render customGroup()}{/if}

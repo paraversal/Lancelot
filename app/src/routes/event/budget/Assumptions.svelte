@@ -10,6 +10,8 @@
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { usersOf } from '#lib/budget.ts';
+	import { boxGrow } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
 	let {
@@ -26,6 +28,18 @@
 	let value = $state('');
 	let error = $state<string | null>(null);
 	let nameInput = $state<HTMLInputElement>();
+
+	// A chip opens into its editor in the row's place, so the row grows around it (A7) rather than
+	// wrapping to a new height all at once.
+	let items: HTMLDivElement;
+	let shown = 0;
+	$effect(() => {
+		void editing;
+		if (!items) return;
+		const height = items.getBoundingClientRect().height;
+		if (shown && Math.abs(height - shown) > 1) boxGrow(items, shown, level('A7'));
+		shown = height;
+	});
 
 	const MAX = 4294967295;
 	const parsed = $derived(/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
@@ -124,7 +138,7 @@
 
 <div class="assumptions" role="group" aria-label="Assumptions">
 	<span class="form-label">Assumptions</span>
-	<div class="items">
+	<div class="items" bind:this={items}>
 		{#each assumptions as a (a.id)}
 			{#if editing === a.id}
 				{@render editor(a.id)}

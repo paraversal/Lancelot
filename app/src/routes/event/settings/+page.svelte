@@ -20,7 +20,7 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { currencyLabel } from '#lib/currencies.ts';
 	import { formatAmount, formatDate, formatSize, formatTimestamp } from '#lib/format.ts';
-	import { lingerOut, spin } from '#lib/motion/effects.ts';
+	import { boxOpen, lingerOut, spin } from '#lib/motion/effects.ts';
 	import Check from '#lib/motion/Check.svelte';
 	import Lock from '#lib/motion/Lock.svelte';
 	import { level, reduced } from '#lib/motion/mode.svelte.ts';
@@ -550,55 +550,59 @@
 					<section id="copy">
 						<h2>Copy from another event</h2>
 						{#if source}
-							<div class="line">
-								<span class="muted"><Icon name="file" /></span>
-								<span class="path">{fileName(source.path)}</span>
-								<Button size="sm" onclick={() => (source = null)}>Cancel</Button>
-							</div>
-							<label class="toggle">
-								<input type="checkbox" bind:checked={copyPersons} />
-								People
-								<span class="counts"
-									>{source.preview.personsAdded} new · {source.preview.personsSkipped} already here</span
-								>
-							</label>
-							{#if source.preview.sourceCurrency !== event.currency}
-								<p class="counts" data-testid="copy-other-currency">
-									The budget can't be copied: that event is in {source.preview.sourceCurrency}, and
-									this one is in {event.currency}.
-								</p>
-							{:else}
+							<div class="copy" transition:boxOpen={{ level: level('A7') }}>
+								<div class="line">
+									<span class="muted"><Icon name="file" /></span>
+									<span class="path">{fileName(source.path)}</span>
+									<Button size="sm" onclick={() => (source = null)}>Cancel</Button>
+								</div>
 								<label class="toggle">
-									<input type="checkbox" bind:checked={copyBudget} />
-									Budget lines
+									<input type="checkbox" bind:checked={copyPersons} />
+									People
 									<span class="counts"
-										>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped} already
-										here{#if source.preview.categoriesAdded}
-											· {counted(
-												source.preview.categoriesAdded,
-												'new category',
-												'new categories'
-											)}{/if}{#if source.preview.costCentresAdded}
-											· {counted(
-												source.preview.costCentresAdded,
-												'new cost centre',
-												'new cost centres'
-											)}{/if}</span
+										>{source.preview.personsAdded} new · {source.preview.personsSkipped} already here</span
 									>
 								</label>
-							{/if}
-							<div>
-								<Button
-									size="sm"
-									kind="primary"
-									disabled={!copyPersons && !copyBudget}
-									onclick={copyFrom}>Copy</Button
-								>
+								{#if source.preview.sourceCurrency !== event.currency}
+									<p class="counts" data-testid="copy-other-currency">
+										The budget can't be copied: that event is in {source.preview.sourceCurrency},
+										and this one is in {event.currency}.
+									</p>
+								{:else}
+									<label class="toggle">
+										<input type="checkbox" bind:checked={copyBudget} />
+										Budget lines
+										<span class="counts"
+											>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped}
+											already here{#if source.preview.categoriesAdded}
+												· {counted(
+													source.preview.categoriesAdded,
+													'new category',
+													'new categories'
+												)}{/if}{#if source.preview.costCentresAdded}
+												· {counted(
+													source.preview.costCentresAdded,
+													'new cost centre',
+													'new cost centres'
+												)}{/if}</span
+										>
+									</label>
+								{/if}
+								<div>
+									<Button
+										size="sm"
+										kind="primary"
+										disabled={!copyPersons && !copyBudget}
+										onclick={copyFrom}>Copy</Button
+									>
+								</div>
 							</div>
 						{:else}
-							<div class="line">
-								<Button size="sm" onclick={chooseSource}>Choose event</Button>
-								{#if copied}<span class="muted">{copied}</span>{/if}
+							<div class="copy" transition:boxOpen={{ level: level('A7') }}>
+								<div class="line">
+									<Button size="sm" onclick={chooseSource}>Choose event</Button>
+									{#if copied}<span class="muted">{copied}</span>{/if}
+								</div>
 							</div>
 						{/if}
 					</section>
@@ -805,6 +809,13 @@
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 6px;
+	}
+
+	/* The copy options keep the section's own spacing while the box around them opens (A7). */
+	.copy {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-4);
 	}
 
 	.toggle {

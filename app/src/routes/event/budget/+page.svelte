@@ -14,7 +14,7 @@
 	import Button from '#lib/components/Button.svelte';
 	import Icon from '#lib/components/Icon.svelte';
 	import { formatAmount } from '#lib/format.ts';
-	import { riseIn } from '#lib/motion/effects.ts';
+	import { boxOpen, riseIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import MovingAmount from '#lib/motion/MovingAmount.svelte';
 	import { pluginContext, pluginEnabled } from '#lib/plugins/host.ts';
@@ -25,6 +25,9 @@
 	import BudgetLinePanel from './BudgetLinePanel.svelte';
 
 	const snapshot = $derived(session.event!.snapshot);
+	// A plugin's box that first appears once the event has its first budget line grows in rather
+	// than popping; the first render of the page itself stays still.
+	let mounted = $state(false);
 	const format = $derived(session.format);
 	const budget = $derived(snapshot.budget);
 	const a5 = $derived(level('A5'));
@@ -113,6 +116,7 @@
 
 	// Opened from elsewhere: `/event/budget?line=3`.
 	onMount(() => {
+		mounted = true;
 		const id = Number(page.url.searchParams.get('line'));
 		if (snapshot.budgetLines.some((b) => b.id === id)) open(id);
 	});
@@ -240,9 +244,14 @@
 		{#if !session.closed}
 			{#each pluginSections as { plugin, ctx, Section } (plugin.id)}
 				{#if pluginEnabled(plugin.id) && (plugin.onBudget?.(ctx) ?? true)}
-					<PluginFrame name={plugin.name}>
-						<Section {ctx} />
-					</PluginFrame>
+					<div
+						class="plugin-slot"
+						transition:boxOpen|global={{ level: mounted ? level('A7') : 'off' }}
+					>
+						<PluginFrame name={plugin.name}>
+							<Section {ctx} />
+						</PluginFrame>
+					</div>
 				{/if}
 			{/each}
 		{/if}

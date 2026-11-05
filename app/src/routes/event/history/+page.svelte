@@ -11,6 +11,8 @@
 		matchingRows,
 		type HistoryRow
 	} from '#lib/history.ts';
+	import { boxOpen } from '#lib/motion/effects.ts';
+	import { level } from '#lib/motion/mode.svelte.ts';
 	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -24,6 +26,13 @@
 	let error = $state<string | null>(null);
 	let query = $state('');
 	let expanded = $state<Record<string, boolean>>({});
+	// The rows a button just revealed open (A7); what a search turns up simply appears.
+	let growing = $state<string | null>(null);
+	function showMore(at: string) {
+		growing = at;
+		expanded[at] = true;
+		setTimeout(() => (growing = null), 300);
+	}
 
 	$effect(() => {
 		void open.revision;
@@ -89,7 +98,7 @@
 					<ul>
 						{#each change.rows as row (row.id)}
 							{@const href = ledgerLink(row)}
-							<li>
+							<li in:boxOpen={{ level: growing === change.at ? level('A7') : 'off' }}>
 								<div class="what">
 									<span class="muted">{row.verb} {row.noun.toLowerCase()}</span>
 									{#if href}<a {href}>{row.name}</a>{:else if row.name}<strong>{row.name}</strong
@@ -119,7 +128,7 @@
 						{/each}
 						{#if change.more}
 							<li>
-								<button type="button" onclick={() => (expanded[change.at] = true)}>
+								<button type="button" onclick={() => showMore(change.at)}>
 									{change.more} more
 								</button>
 							</li>

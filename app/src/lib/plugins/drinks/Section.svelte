@@ -5,6 +5,8 @@
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
 	import { formatAmount } from '../../format';
+	import { boxOpen } from '../../motion/effects';
+	import { level } from '../../motion/mode.svelte';
 	import type { CentreSectionProps, Pulled } from '../api';
 	import { computeFigures, EXPLAINERS } from './figures';
 	import ProductPanel from './ProductPanel.svelte';
@@ -208,7 +210,11 @@
 	{/if}
 
 	{#if shortfall !== null}
-		<div class="note-row" data-testid="plugin-drinks-collected">
+		<div
+			class="note-row"
+			data-testid="plugin-drinks-collected"
+			transition:boxOpen={{ level: level('A7') }}
+		>
 			<span class="muted">
 				Expected {formatAmount(figures.expected ?? 0, format)} · collected
 				{formatAmount(collected, format)}
@@ -228,7 +234,11 @@
 
 	{#if figures.invoice}
 		{@const check = figures.invoice}
-		<div class="note-row" data-testid="plugin-drinks-invoice">
+		<div
+			class="note-row"
+			data-testid="plugin-drinks-invoice"
+			transition:boxOpen={{ level: level('A7') }}
+		>
 			<span class="muted">
 				{check.deposit ? `Invoice incl. deposit ${formatAmount(check.deposit, format)}` : 'Invoice'}
 			</span>

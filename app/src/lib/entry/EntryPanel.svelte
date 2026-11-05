@@ -33,7 +33,7 @@
 	import Receipts from './Receipts.svelte';
 	import { formatAmount, todayISO } from '#lib/format.ts';
 	import { counterparties } from '#lib/ledger.ts';
-	import { formIn, formOut } from '#lib/motion/effects.ts';
+	import { boxOpen, formIn, formOut } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -481,29 +481,32 @@
 						</p>
 					{/if}
 					{#if kind === 'settle'}
-						<ChoiceField
-							label="Person"
-							value={party}
-							options={personOptions}
-							addLabel="New person…"
-							error={fieldError('party')}
-							onchange={pickPerson}
-							onadd={addPerson}
-						>
-							{#snippet hint()}
-								{#if party !== null}<BalanceCell {net} {format} />{/if}
-							{/snippet}
-						</ChoiceField>
-						<div class="labelled">
-							<span class="form-label">Direction</span>
-							<Segmented
-								label="Direction"
-								bind:value={direction}
-								options={[
-									{ value: 'reimburse', label: 'Reimburse' },
-									{ value: 'repay', label: 'Repay' }
-								]}
-							/>
+						<!-- Who and which way: two fields of one choice, so they open together (A7). -->
+						<div class="group" transition:boxOpen={{ level: level('A7') }}>
+							<ChoiceField
+								label="Person"
+								value={party}
+								options={personOptions}
+								addLabel="New person…"
+								error={fieldError('party')}
+								onchange={pickPerson}
+								onadd={addPerson}
+							>
+								{#snippet hint()}
+									{#if party !== null}<BalanceCell {net} {format} />{/if}
+								{/snippet}
+							</ChoiceField>
+							<div class="labelled">
+								<span class="form-label">Direction</span>
+								<Segmented
+									label="Direction"
+									bind:value={direction}
+									options={[
+										{ value: 'reimburse', label: 'Reimburse' },
+										{ value: 'repay', label: 'Repay' }
+									]}
+								/>
+							</div>
 						</div>
 					{/if}
 
@@ -540,64 +543,70 @@
 					/>
 
 					{#if kind !== 'settle'}
-						<ChoiceField
-							label={partyLabel}
-							value={party}
-							options={kind === 'transfer' ? everywhere : sources}
-							addLabel="New person…"
-							error={fieldError('party')}
-							onchange={(v) => {
-								party = v;
-								clearError('party');
-							}}
-							onadd={addPerson}
-						>
-							{#snippet hint()}{balanceHint(party) ?? ''}{/snippet}
-						</ChoiceField>
+						<div transition:boxOpen={{ level: level('A7') }}>
+							<ChoiceField
+								label={partyLabel}
+								value={party}
+								options={kind === 'transfer' ? everywhere : sources}
+								addLabel="New person…"
+								error={fieldError('party')}
+								onchange={(v) => {
+									party = v;
+									clearError('party');
+								}}
+								onadd={addPerson}
+							>
+								{#snippet hint()}{balanceHint(party) ?? ''}{/snippet}
+							</ChoiceField>
+						</div>
 					{/if}
 
 					{#if kind === 'transfer'}
-						<ChoiceField
-							label="To"
-							value={other}
-							options={everywhere}
-							addLabel="New person…"
-							error={fieldError('other')}
-							onchange={(v) => {
-								other = v;
-								clearError('other');
-							}}
-							onadd={addPerson}
-						>
-							{#snippet hint()}{balanceHint(other) ?? ''}{/snippet}
-						</ChoiceField>
+						<div transition:boxOpen={{ level: level('A7') }}>
+							<ChoiceField
+								label="To"
+								value={other}
+								options={everywhere}
+								addLabel="New person…"
+								error={fieldError('other')}
+								onchange={(v) => {
+									other = v;
+									clearError('other');
+								}}
+								onadd={addPerson}
+							>
+								{#snippet hint()}{balanceHint(other) ?? ''}{/snippet}
+							</ChoiceField>
+						</div>
 					{:else if kind === 'settle'}
-						<ChoiceField
-							label={direction === 'reimburse' ? 'From' : 'To'}
-							value={other}
-							options={assetOptions}
-							addLabel="New account…"
-							error={fieldError('other')}
-							onchange={(v) => {
-								other = v;
-								clearError('other');
-							}}
-							onadd={async (name) => {
-								try {
-									return (await session.change(() => api.addAccount('asset', name))).id;
-								} catch (e) {
-									error = {
-										field: 'other',
-										message: errorMessage(e)
-									};
-									return null;
-								}
-							}}
-						/>
+						<div transition:boxOpen={{ level: level('A7') }}>
+							<ChoiceField
+								label={direction === 'reimburse' ? 'From' : 'To'}
+								value={other}
+								options={assetOptions}
+								addLabel="New account…"
+								error={fieldError('other')}
+								onchange={(v) => {
+									other = v;
+									clearError('other');
+								}}
+								onadd={async (name) => {
+									try {
+										return (await session.change(() => api.addAccount('asset', name))).id;
+									} catch (e) {
+										error = {
+											field: 'other',
+											message: errorMessage(e)
+										};
+										return null;
+									}
+								}}
+							/>
+						</div>
 					{/if}
 
 					{#if kind === 'expense' || kind === 'income'}
-						<div class="split">
+						<div class="split" transition:boxOpen={{ level: level('A7') }}>
 							<div class="split-head">
 								<span class="form-label">{split ? 'Split' : 'Category'}</span>
 								{#if left !== null}
@@ -823,6 +832,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: 6px;
+	}
+
+	/* The settle choice's two fields, spaced as the panel spaces its own (they open as one, A7). */
+	.group {
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
 	}
 
 	.split-head {
