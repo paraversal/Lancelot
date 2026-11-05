@@ -1,5 +1,6 @@
 # Local design reference (OpenPencil), not versioned
 UI.fig
+*.bak.fig
 
 # OS / editor
 .DS_Store
