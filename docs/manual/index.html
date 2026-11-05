@@ -319,14 +319,14 @@ pnpm tauri build --bundles app</code></pre></li>
   <tr><td><strong>Reimburse from</strong></td><td>The account that settles normally come from. It starts as the first bank account.</td></tr>
   <tr><td><strong>Sells tickets</strong></td><td>Switch it off if the event has no tickets. This hides the Tickets page, and only works while the event has no tiers.</td></tr>
   <tr><td><strong>Net movement</strong></td><td>On for an account whose real total doesn't matter, such as a shared bank account that holds other money too. Lancelot then only tracks what this event changed. Bank accounts start with it on.</td></tr>
-  <tr><td><strong>Cost centres</strong></td><td>Add one for each part of the event that needs its own result. A new event has none.</td></tr>
-  <tr><td><strong>Categories</strong></td><td>Set which cost centre a category's new lines start in. New categories are added from the entry and budget forms.</td></tr>
+  <tr><td><strong>Cost centres</strong></td><td>Add one for each part of the event that needs its own result. A new event has none. Under each, <strong>+ Category</strong> picks the categories whose new lines start in it, such as Drinks and Deposit for a Drinks cost centre. A category starts in one cost centre at most, so picking it for another moves it there. Each line can still be given another cost centre.</td></tr>
+  <tr><td><strong>Categories</strong></td><td>Delete a category nothing uses. New categories are added from the entry and budget forms.</td></tr>
   <tr><td><strong>Plugins</strong></td><td>Switch off what you don't use. Their data stays in the file. <strong>Configure</strong> opens a plugin's own settings in a panel beside the page.</td></tr>
   <tr><td><strong>Copy from another event</strong></td><td>Bring people and budget lines into this event. It never overwrites, and the other file is only read. A budget can only come from an event in the same currency.</td></tr>
 </table></div>
 <p>The default categories are Tickets and General for income, and Kitchen, Mobility, Venue, Tech and General for expenses.</p>
 <figure>
-  <a href="images/settings-plugins.png"><img src="images/settings-plugins.png" width="1280" height="900" loading="lazy" alt="The lower part of Settings: a category list with a cost centre beside each, and a card per plugin with its switch and how it is set up."></a>
+  <a href="images/settings-plugins.png"><img src="images/settings-plugins.png" width="1280" height="900" loading="lazy" alt="The lower part of Settings: the categories by kind, and a card per plugin with its switch and how it is set up."></a>
   <figcaption>Further down Settings: the categories and the plugins. All plugins start switched on.</figcaption>
 </figure>
 

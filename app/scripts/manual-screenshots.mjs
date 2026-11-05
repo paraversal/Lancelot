@@ -12,7 +12,8 @@ import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
-const BASE = 'http://localhost:5173';
+// BASE=http://localhost:5183 points it at a second UI, such as the one from `ui-alt`.
+const BASE = process.env.BASE ?? 'http://localhost:5173';
 const OUT = fileURLToPath(new URL('../../docs/manual/images/', import.meta.url));
 mkdirSync(OUT, { recursive: true });
 

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { api } from '#lib/api/index.ts';
+import { api, ApiError } from '#lib/api/index.ts';
 import example from '#lib/api/fixtures/example-event.json';
 import type { EventSnapshot } from '#lib/api/generated/EventSnapshot.ts';
 import { dataSources } from '#lib/plugins/sources.svelte.ts';
@@ -74,15 +74,6 @@ afterEach(() => {
 });
 
 describe('The settings page', () => {
-	it('keeps categories apart from the cost centres', () => {
-		open();
-		render(Page);
-		expect(
-			within(block('Cost centres')).queryByLabelText('Kitchen (expense) starts in')
-		).toBeNull();
-		expect(within(block('Categories')).getByLabelText('Kitchen (expense) starts in')).toBeTruthy();
-	});
-
 	it('groups categories by kind', () => {
 		open();
 		render(Page);
@@ -91,12 +82,145 @@ describe('The settings page', () => {
 		expect(within(categories).getByText('Income')).toBeTruthy();
 	});
 
-	it('asks for no cost centre while the event has none', () => {
-		open({ costCentres: [] });
+	it('lists the categories without a cost centre beside each', () => {
+		open();
 		render(Page);
 		const categories = block('Categories');
 		expect(within(categories).getByText('Kitchen')).toBeTruthy();
-		expect(within(categories).queryByLabelText('Kitchen (expense) starts in')).toBeNull();
+		expect(within(categories).queryByRole('combobox')).toBeNull();
+	});
+});
+
+describe('Adding a cost centre', () => {
+	const name = () => screen.getByLabelText('New cost centre name') as HTMLInputElement;
+	const start = async () => {
+		await fireEvent.click(
+			within(block('Cost centres')).getByRole('button', { name: 'Cost centre' })
+		);
+		return name();
+	};
+
+	it('starts empty, with a placeholder, the focus and nothing written', async () => {
+		open();
+		const add = vi.spyOn(api, 'addCostCentre');
+		render(Page);
+		const input = await start();
+		expect(input.value).toBe('');
+		expect(input.placeholder).toBe('Name');
+		expect(document.activeElement).toBe(input);
+		expect(add).not.toHaveBeenCalled();
+		expect(within(block('Cost centres')).queryByRole('button', { name: 'Cost centre' })).toBeNull();
+	});
+
+	it('discards an empty draft on Esc', async () => {
+		open();
+		const add = vi.spyOn(api, 'addCostCentre');
+		render(Page);
+		await fireEvent.keyDown(await start(), { key: 'Escape' });
+		expect(screen.queryByLabelText('New cost centre name')).toBeNull();
+		expect(add).not.toHaveBeenCalled();
+	});
+
+	it('saves the typed name on Esc, and closes the draft', async () => {
+		open();
+		const add = vi.spyOn(api, 'addCostCentre').mockResolvedValue(session.event!);
+		render(Page);
+		const input = await start();
+		await fireEvent.input(input, { target: { value: '  Merch ' } });
+		await fireEvent.keyDown(input, { key: 'Escape' });
+		await settled();
+		expect(add).toHaveBeenCalledExactlyOnceWith('Merch');
+		expect(screen.queryByLabelText('New cost centre name')).toBeNull();
+	});
+
+	it('saves the typed name on Enter', async () => {
+		open();
+		const add = vi.spyOn(api, 'addCostCentre').mockResolvedValue(session.event!);
+		render(Page);
+		const input = await start();
+		await fireEvent.input(input, { target: { value: 'Merch' } });
+		await fireEvent.keyDown(input, { key: 'Enter' });
+		await settled();
+		expect(add).toHaveBeenCalledExactlyOnceWith('Merch');
+	});
+
+	it('keeps a name the core refuses with its reason, and the next Esc discards it', async () => {
+		open();
+		const add = vi.spyOn(api, 'addCostCentre').mockRejectedValue(
+			new ApiError({
+				code: 'cost_centre_name',
+				message: 'There is already a cost centre called Drinks',
+				field: 'name',
+				report: null
+			})
+		);
+		render(Page);
+		const input = await start();
+		await fireEvent.input(input, { target: { value: 'Drinks' } });
+		await fireEvent.keyDown(input, { key: 'Escape' });
+		await settled();
+		expect(screen.getByRole('alert').textContent).toContain('already a cost centre');
+		expect(name().value).toBe('Drinks');
+		await fireEvent.keyDown(name(), { key: 'Escape' });
+		expect(screen.queryByLabelText('New cost centre name')).toBeNull();
+		expect(add).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('The cost centres', () => {
+	const covers = (centre: string) => screen.getByRole('group', { name: `Categories of ${centre}` });
+
+	it('lists the categories whose new lines start in each', () => {
+		open();
+		render(Page);
+		const drinks = covers('Drinks');
+		expect(within(drinks).getByText('Drink donations')).toBeTruthy();
+		expect(within(drinks).getByText('Deposit')).toBeTruthy();
+		expect(within(drinks).queryByText('Kitchen', { selector: '.tag' })).toBeNull();
+	});
+
+	it('adds a category to a cost centre', async () => {
+		open();
+		const tag = vi.spyOn(api, 'setCategoryCostCentre').mockResolvedValue(session.event!);
+		render(Page);
+		const pick = screen.getByLabelText('Add a category to Drinks') as HTMLSelectElement;
+		await fireEvent.change(pick, { target: { value: '6' } });
+		expect(tag).toHaveBeenCalledWith(6, 1);
+	});
+
+	it('moves a category from another cost centre, and says so first', async () => {
+		openTwoCentres();
+		const tag = vi.spyOn(api, 'setCategoryCostCentre').mockResolvedValue(session.event!);
+		render(Page);
+		const pick = screen.getByLabelText('Add a category to Merch') as HTMLSelectElement;
+		const deposit = [...pick.options].find((o) => o.value === '13')!;
+		expect(deposit.text).toBe('Deposit · now in Drinks');
+		await fireEvent.change(pick, { target: { value: '13' } });
+		expect(tag).toHaveBeenCalledWith(13, 2);
+	});
+
+	it('removes a category from its cost centre', async () => {
+		open();
+		const tag = vi.spyOn(api, 'setCategoryCostCentre').mockResolvedValue(session.event!);
+		render(Page);
+		await fireEvent.click(screen.getByRole('button', { name: 'Remove Deposit from Drinks' }));
+		expect(tag).toHaveBeenCalledWith(13, null);
+	});
+
+	it('names the kind when an income and an expense share a name', () => {
+		open({
+			accounts: snapshot.accounts.map((a) => (a.id === 10 ? { ...a, costCentre: 1 } : a))
+		});
+		render(Page);
+		expect(within(covers('Drinks')).getByText('General (expense)')).toBeTruthy();
+	});
+
+	it('cannot change while the event is closed', () => {
+		open({ event: { ...snapshot.event, closedAt: '2026-07-01T12:00:00Z' } });
+		render(Page);
+		expect(within(covers('Drinks')).getByText('Deposit')).toBeTruthy();
+		expect(screen.queryByLabelText('Add a category to Drinks')).toBeNull();
+		expect(screen.queryByRole('button', { name: 'Remove Deposit from Drinks' })).toBeNull();
 	});
 });
 

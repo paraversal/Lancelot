@@ -2,8 +2,9 @@
 	// Settings: the event's details, its accounts, the display format, the file and its
 	// integrity, backups. Every field saves when it is left; there is no Save button.
 	import { tick } from 'svelte';
+	import { flip } from 'svelte/animate';
 	import { goto } from '$app/navigation';
-	import { api, errorMessage } from '#lib/api/index.ts';
+	import { api, ApiError, errorMessage } from '#lib/api/index.ts';
 	import { chooseEventFile, chooseNewEventFile, revealFile } from '#lib/api/dialogs.ts';
 	import type { CopySummary } from '#lib/api/generated/CopySummary.ts';
 	import type { Appearance } from '#lib/api/generated/Appearance.ts';
@@ -20,7 +21,7 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import { currencyLabel } from '#lib/currencies.ts';
 	import { formatAmount, formatDate, formatSize, formatTimestamp } from '#lib/format.ts';
-	import { boxOpen, lingerOut, spin } from '#lib/motion/effects.ts';
+	import { boxGrow, boxOpen, flipOptions, lingerOut, popIn, spin } from '#lib/motion/effects.ts';
 	import Check from '#lib/motion/Check.svelte';
 	import Lock from '#lib/motion/Lock.svelte';
 	import { level, reduced } from '#lib/motion/mode.svelte.ts';
@@ -174,15 +175,54 @@
 	// Cost centres (R-CC-1): names save when left, like the accounts. Deleting one leaves what was
 	// tagged without a tag, so it asks first.
 	const centres = $derived(open.snapshot.costCentres);
-	const centreOptions = $derived([
-		{ value: 0, label: 'None' },
-		...centres.map((c) => ({ value: c.id, label: c.name }))
-	]);
 	const categories = $derived(
 		open.snapshot.accounts.filter((a) => a.kind === 'income' || a.kind === 'expense')
 	);
 	const expenses = $derived(categories.filter((a) => a.kind === 'expense'));
 	const income = $derived(categories.filter((a) => a.kind === 'income'));
+
+	// Each cost centre lists the categories whose new lines start in it (R-ACC-2). A category
+	// starts in one cost centre at most, so picking it for another moves it there.
+	const kindName = (kind: string) => (kind === 'income' ? 'income' : 'expense');
+	/** A category's name, with its kind when an income and an expense share the name. */
+	const categoryLabel = (a: (typeof categories)[number]) =>
+		categories.some((b) => b.id !== a.id && b.name.toLowerCase() === a.name.toLowerCase())
+			? `${a.name} (${kindName(a.kind)})`
+			: a.name;
+	const centreName = (id: number | null) => centres.find((c) => c.id === id)?.name ?? null;
+	const covered = (centre: number) => categories.filter((a) => a.costCentre === centre);
+	const addable = (centre: number) => [
+		{ value: 0, label: '+ Category' },
+		...categories
+			.filter((a) => a.costCentre !== centre)
+			.map((a) => {
+				const other = centreName(a.costCentre);
+				return {
+					value: a.id,
+					label: other ? `${a.name} · now in ${other}` : a.name,
+					group: a.kind === 'income' ? 'Income' : 'Expenses'
+				};
+			})
+	];
+	/** Each cost centre's row of categories, which grows or shrinks as they wrap (A7). */
+	const covers: Record<number, HTMLElement> = {};
+	/** What a cost centre's row shows: its categories, then the picker, which moves along. */
+	const coverItems = (centre: number) => [
+		...covered(centre).map((a) => ({ key: a.id, category: a })),
+		...(!closed && addable(centre).length > 1 ? [{ key: 'pick', category: null }] : [])
+	];
+
+	async function startIn(category: number, centre: number | null) {
+		// A move changes two rows: the one it leaves and the one it joins.
+		const from = categories.find((a) => a.id === category)?.costCentre ?? null;
+		const boxes = [...new Set([from, centre])]
+			.map((id) => (id === null ? undefined : covers[id]))
+			.filter((b): b is HTMLElement => !!b);
+		const heights = boxes.map((b) => b.getBoundingClientRect().height);
+		await run(() => session.change(() => api.setCategoryCostCentre(category, centre)));
+		await tick();
+		boxes.forEach((b, i) => boxGrow(b, heights[i], level('A7')));
+	}
 	let deletingCentre = $state<number | null>(null);
 
 	function renameCentre(id: number, input: HTMLInputElement) {
@@ -202,18 +242,61 @@
 		});
 	}
 
-	const addCentre = () =>
-		run(async () => {
-			let name = 'New cost centre';
-			for (let n = 2; centres.some((c) => c.name.toLowerCase() === name.toLowerCase()); n++)
-				name = `New cost centre ${n}`;
+	// A new cost centre is a draft until it has a name, as a new person is: nothing is written
+	// before that. Esc, Enter or leaving the field saves a typed name; an empty draft goes away.
+	// A name the core refuses stays with its reason, and the next Esc discards it.
+	let draft = $state<{ name: string; refused: string | null } | null>(null);
+	let draftInput = $state<HTMLInputElement | null>(null);
+	let centreList = $state<HTMLElement | null>(null);
+	let savingDraft = false;
+	/** The saved cost centre takes the draft's place, so it does not open again (A7). */
+	let quiet = $state(false);
+
+	async function startDraft() {
+		draft = { name: '', refused: null };
+		await tick();
+		draftInput?.focus();
+	}
+
+	async function saveDraft() {
+		if (!draft || savingDraft) return;
+		const name = draft.name.trim();
+		if (!name) {
+			draft = null;
+			return;
+		}
+		savingDraft = true;
+		quiet = true;
+		// The saved row grows from the draft's height to its own, with its categories (A7).
+		const from = draftInput?.closest('li')?.getBoundingClientRect().height ?? 0;
+		try {
 			await session.change(() => api.addCostCentre(name));
+			draft = null;
 			await tick();
-			const inputs = document.querySelectorAll<HTMLInputElement>('.centres input');
-			const input = inputs[inputs.length - 1];
-			input?.focus();
-			input?.select();
-		});
+			const row = centreList?.querySelector<HTMLElement>(':scope > li:last-child');
+			if (row) boxGrow(row, from, level('A7'));
+		} catch (e) {
+			if (!(e instanceof ApiError)) throw e;
+			if (draft) draft.refused = e.message;
+		} finally {
+			savingDraft = false;
+			await tick();
+			quiet = false;
+		}
+	}
+
+	function draftKey(e: KeyboardEvent) {
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			void saveDraft();
+		}
+		if (e.key === 'Escape') {
+			// Not the panel's Esc, if one is open beside the page.
+			e.preventDefault();
+			if (draft?.refused) draft = null;
+			else void saveDraft();
+		}
+	}
 
 	// Copying from another event (R-ISO-4): what it would add, then what was chosen.
 	let source = $state<{ path: string; preview: CopySummary } | null>(null);
@@ -275,7 +358,7 @@
 	{/if}
 {/snippet}
 
-{#snippet categoryGroup(title: string, kind: string, list: typeof categories)}
+{#snippet categoryGroup(title: string, list: typeof categories)}
 	{#if list.length}
 		<span class="form-label group">{title}</span>
 		<ul class="accounts">
@@ -285,17 +368,6 @@
 					<span class="delete" class:deleting={deletingAccount === a.id}>
 						{@render deleteAccount(a)}
 					</span>
-					{#if centres.length}
-						<Select
-							name="{a.name} ({kind}) starts in"
-							value={a.costCentre ?? 0}
-							options={centreOptions}
-							onchange={(v) =>
-								run(() =>
-									session.change(() => api.setCategoryCostCentre(a.id, v === 0 ? null : v))
-								)}
-						/>
-					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -424,9 +496,14 @@
 
 					<section>
 						<h2>Cost centres</h2>
-						<ul class="accounts centres">
+						{#if centres.length || draft}
+							<p class="about" transition:boxOpen={{ level: level('A7') }}>
+								New lines in a cost centre's categories start in it.
+							</p>
+						{/if}
+						<ul class="accounts centres" bind:this={centreList}>
 							{#each centres as c (c.id)}
-								<li>
+								<li transition:boxOpen={{ level: quiet ? 'off' : level('A7') }}>
 									<input
 										class="name"
 										type="text"
@@ -456,11 +533,74 @@
 											<Button size="sm" onclick={() => (deletingCentre = c.id)}>Delete</Button>
 										{/if}
 									{/if}
+									<div
+										class="covers"
+										role="group"
+										aria-label="Categories of {c.name}"
+										bind:this={covers[c.id]}
+									>
+										{#if !covered(c.id).length}
+											<span class="none">No categories</span>
+										{/if}
+										<!-- The others slide aside (B3) as a category arrives or leaves. -->
+										{#each coverItems(c.id) as item (item.key)}
+											<span class="item" animate:flip={flipOptions(level('B3'))}>
+												{#if item.category}
+													{@const a = item.category}
+													<span class="tag" in:popIn={{ level: level('A7') }}>
+														{categoryLabel(a)}
+														{#if !closed}
+															<button
+																type="button"
+																aria-label="Remove {categoryLabel(a)} from {c.name}"
+																onclick={() => startIn(a.id, null)}
+																><Icon name="x" size={12} /></button
+															>
+														{/if}
+													</span>
+												{:else}
+													<span class="pick">
+														<Select
+															name="Add a category to {c.name}"
+															value={0}
+															options={addable(c.id)}
+															onchange={(v) => v !== 0 && startIn(v, c.id)}
+														/>
+													</span>
+												{/if}
+											</span>
+										{/each}
+									</div>
 								</li>
 							{/each}
+							{#if draft}
+								<!-- Discarded, it closes again; saved, the new row takes its place. -->
+								<li
+									class="draft"
+									in:boxOpen={{ level: level('A7') }}
+									out:boxOpen={{ level: quiet ? 'off' : level('A7') }}
+								>
+									<input
+										class="name"
+										class:invalid={!!draft.refused}
+										type="text"
+										placeholder="Name"
+										aria-label="New cost centre name"
+										aria-invalid={!!draft.refused}
+										bind:this={draftInput}
+										bind:value={draft.name}
+										oninput={() => draft && (draft.refused = null)}
+										onkeydown={draftKey}
+										onblur={() => !draft?.refused && saveDraft()}
+									/>
+									{#if draft.refused}
+										<p class="refused" role="alert">{draft.refused}</p>
+									{/if}
+								</li>
+							{/if}
 						</ul>
-						{#if !closed}
-							<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
+						{#if !closed && !draft}
+							<div><Button size="sm" icon="plus" onclick={startDraft}>Cost centre</Button></div>
 						{/if}
 					</section>
 				</div>
@@ -645,8 +785,8 @@
 			<section class="wide">
 				<h2>Categories</h2>
 				<div class="categories">
-					{@render categoryGroup('Expenses', 'expense', expenses)}
-					{@render categoryGroup('Income', 'income', income)}
+					{@render categoryGroup('Expenses', expenses)}
+					{@render categoryGroup('Income', income)}
 				</div>
 			</section>
 		</fieldset>
@@ -787,9 +927,103 @@
 		white-space: nowrap;
 	}
 
-	.categories li > :global(.field) {
-		width: 150px;
-		flex: none;
+	.about {
+		margin: 0;
+		font-size: 13px;
+		color: var(--color-ink-muted);
+	}
+
+	/* Its name and categories give a cost centre its height, so it can open from nothing (A7). */
+	.accounts.centres li {
+		min-height: 0;
+	}
+
+	/* A new cost centre's name is a field from the start, since there is nothing to show yet. */
+	.draft .name,
+	.draft .name:hover {
+		border-color: var(--color-ink);
+		background: var(--color-field);
+	}
+
+	.draft .name.invalid,
+	.draft .name.invalid:focus {
+		border-color: var(--color-minus);
+	}
+
+	.refused {
+		flex-basis: 100%;
+		margin: 0 0 6px;
+		font-size: var(--type-xs);
+		color: var(--color-minus);
+	}
+
+	/* Under the cost centre's name: the categories that start in it. */
+	.covers {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		flex-basis: 100%;
+		padding-bottom: 6px;
+	}
+
+	.item {
+		display: inline-flex;
+	}
+
+	.tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		height: 26px;
+		padding: 0 4px 0 10px;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-pill);
+		font-size: 13px;
+	}
+
+	.tag button {
+		display: flex;
+		padding: 3px;
+		border: none;
+		border-radius: 50%;
+		background: none;
+		color: var(--color-ink-muted);
+		cursor: pointer;
+	}
+
+	.tag button:hover {
+		background: var(--color-paper-sunk);
+		color: var(--color-ink);
+	}
+
+	.none {
+		font-size: 13px;
+		color: var(--color-ink-muted);
+	}
+
+	/* "+ Category" reads as a quiet button, but it is a list to pick from. */
+	.pick :global(.field) {
+		width: 120px;
+	}
+
+	.pick :global(.box) {
+		height: 26px;
+		padding: 0 8px 0 10px;
+		border-style: dashed;
+		border-radius: var(--radius-pill);
+		background: none;
+		color: var(--color-ink-muted);
+	}
+
+	.pick :global(.box:hover) {
+		color: var(--color-ink);
+	}
+
+	.pick :global(select) {
+		height: 100%;
+		font-size: 13px;
+		color: inherit;
 	}
 
 	/* Like Restore on a backup: there when the row is in use. */

@@ -39,7 +39,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 ## Accounts and categories
 
 - Bank and cash accounts, named when an event is created and added or renamed in Settings. An event always has at least one. An account can count net movement only, for one whose real total doesn't matter (R-ACC-1, R-ISO-3).
-- Income and expense categories, which can name the cost centre their new lines start in (R-ACC-2).
+- Income and expense categories (R-ACC-2). Each cost centre in Settings lists the categories whose new lines start in it; a category starts in one at most.
 - Opening and closing counts per account, with the difference shown (R-ISO-3).
 - Statement checkpoints: enter what a statement showed on a date, and any mismatch becomes an open item (R-ACC-4).
 - Accounts and people that nothing refers to can be deleted.
