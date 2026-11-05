@@ -9,6 +9,7 @@ import type { Budget } from '../api/generated/Budget';
 import type { BudgetLine } from '../api/generated/BudgetLine';
 import type { CostCentre } from '../api/generated/CostCentre';
 import type { CostCentreFigures } from '../api/generated/CostCentreFigures';
+import type { Currency } from '../api/generated/Currency';
 import type { NumberFormat } from '../api/generated/NumberFormat';
 import type { PluginChange } from '../api/generated/PluginChange';
 import type { PluginRecord } from '../api/generated/PluginRecord';
@@ -76,6 +77,8 @@ export interface PluginContext {
 	/** A closed event refuses changes (R-EVT-2). */
 	readonly closed: boolean;
 	readonly format: NumberFormat;
+	/** The event's currency, whose notes and coins a plugin can show. */
+	readonly currency: Currency;
 	/** What the event holds. People are left out, so plugins don't see bank details. */
 	readonly costCentres: CostCentre[];
 	readonly accounts: AccountView[];

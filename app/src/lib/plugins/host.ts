@@ -41,6 +41,9 @@ export function pluginContext(id: string): PluginContext {
 		get format() {
 			return session.format;
 		},
+		get currency() {
+			return snapshot().event.currency;
+		},
 		get costCentres() {
 			return snapshot().costCentres;
 		},

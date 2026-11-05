@@ -18,7 +18,7 @@ An event has one currency, set when it is created (R-COR-7). The core supports E
 
 A currency with none or three decimals, such as the yen or the Kuwaiti dinar, means formatting and the amount parser have to stop assuming two, including how they read an ambiguous `1.234`, so it is the first real test. Converting between currencies stays out. The payment reference on a bank transfer is German whatever the currency, which translating the app would cover.
 
-The Cash box count plugin has a list of denominations in `cash-count/records.ts`, euro only. Another currency needs its own list there.
+The Cash box count plugin lists the notes and coins of every supported currency in `cash-count/records.ts`. A currency added to the core needs its line there.
 
 ## Tax
 
