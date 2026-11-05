@@ -101,6 +101,16 @@ async function addOtherMethod(name, method) {
 	await page.waitForTimeout(250);
 }
 
+/** Opens a plugin's settings in the panel beside Settings. */
+async function configure(plugin) {
+	await page
+		.locator('[data-testid="plugin-card"]')
+		.filter({ hasText: plugin })
+		.getByRole('button', { name: 'Configure' })
+		.click();
+	await page.locator('aside.panel').waitFor();
+}
+
 const walks = {
 	async start() {
 		await reset('start');
@@ -179,11 +189,24 @@ const walks = {
 			.getByRole('button', { name: /^Budget line/ })
 			.first()
 			.click();
-		await page.getByLabel('Description').fill('Security');
+		await pick('Category', 'Tech');
+		await page.getByLabel('Description').fill('Wristbands');
 		await page.getByRole('radio', { name: 'Count × price' }).click();
 		await page.getByRole('textbox', { name: 'Count', exact: true }).fill('4');
 		await page.getByRole('textbox', { name: 'Unit price' }).fill('120');
+		await page.getByRole('radio', { name: 'Per assumption' }).click();
+		await page.getByRole('textbox', { name: 'Price per Guests' }).fill('0,80');
 		await shot('budget-line');
+		await save();
+
+		// What if, opened, with more guests: the wristbands scale with them.
+		await goTo('/event/budget');
+		await button('Adjust').click();
+		await page.getByRole('slider').first().fill('320');
+		await page.getByRole('heading', { name: 'Budget' }).scrollIntoViewIfNeeded();
+		await shot('what-if', { height: 1000 });
+		await page.getByRole('radio', { name: 'Reach' }).click();
+		await shot('what-if-reach', { height: 900 });
 	},
 
 	async overview() {
@@ -197,6 +220,20 @@ const walks = {
 
 		await button('Count').nth(1).click();
 		await shot('count-closing');
+		// The closing count again, by the piece: 410 € in notes and coins.
+		const panel = page.locator('aside.panel');
+		await panel.getByRole('button', { name: 'Count', exact: true }).nth(1).click();
+		for (const [piece, count] of [
+			['50,00 €', '4'],
+			['20,00 €', '7'],
+			['10,00 €', '3'],
+			['2,00 €', '10'],
+			['1,00 €', '20']
+		])
+			await panel.getByLabel(`Pieces of ${piece}`).last().fill(count);
+		await page.getByLabel(`Pieces of 1,00 €`).last().blur();
+		await shot('cash-counter', { height: 1000 });
+		await page.keyboard.press('Escape');
 		await page.keyboard.press('Escape');
 		await button('Statement').first().click();
 		await shot('statement');
@@ -229,6 +266,7 @@ const walks = {
 		await page.getByRole('row', { name: /^Dana/ }).waitFor();
 
 		await goTo('/event/settings');
+		await configure('Stock and sales');
 		await page.getByLabel('New cost centre for goods').fill('Drinks');
 		await button('Add cost centre').click();
 		await page.getByRole('navigation').getByText('Drinks').click();
@@ -293,10 +331,11 @@ const walks = {
 			await page.waitForLoadState('networkidle');
 			await page.waitForTimeout(300);
 		}
+		await configure('Stock and sales');
 		await page.getByRole('checkbox', { name: 'Drinks Hoffmann' }).check();
 		await page.getByRole('checkbox', { name: 'Drinks Krüger' }).check();
 		await page.waitForTimeout(300);
-		await page.getByRole('checkbox', { name: 'Drinks Krüger' }).scrollIntoViewIfNeeded();
+		await page.getByRole('heading', { name: 'Plugins' }).scrollIntoViewIfNeeded();
 		await shot('drinks-suppliers', { height: 900 });
 
 		for (const [centre, supplier] of [
@@ -328,13 +367,19 @@ const walks = {
 		await page.getByRole('heading', { name: 'Plugins' }).scrollIntoViewIfNeeded();
 		await shot('settings-plugins', { height: 900 });
 		// A plugin's settings open in the panel beside the page.
-		await page
-			.locator('[data-testid="plugin-card"]')
-			.filter({ hasText: 'Ticket API' })
-			.getByRole('button', { name: 'Configure' })
-			.click();
+		await configure('Ticket API');
 		await button('Save and test').scrollIntoViewIfNeeded();
 		await shot('data-source', { height: 900 });
+		await page.keyboard.press('Escape');
+
+		// Packed money, counted as its own denomination.
+		await configure('Cash box count');
+		const panel = page.locator('aside.panel');
+		await panel.getByLabel('Name', { exact: true }).fill('Roll of 2 € coins');
+		await panel.getByLabel('Value each').fill('50');
+		await panel.getByRole('button', { name: 'Add' }).click();
+		await panel.getByText('Roll of 2 € coins').waitFor();
+		await shot('cash-denominations', { height: 900 });
 	},
 
 	async drinks() {

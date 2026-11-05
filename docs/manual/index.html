@@ -208,10 +208,10 @@ dialog img { display: block; max-width: 96vw; max-height: 96vh; cursor: zoom-out
   <tr><td><strong>Entries</strong></td><td>Expense, income, transfer and settle forms. Split one receipt over several categories. Add up sums inside an amount field. Every change is kept in a searchable history.</td></tr>
   <tr><td><strong>Receipts</strong></td><td>Any number of files per entry, stored in the event file. Preview them, find expenses with none, and drop a file on the window to start an expense.</td></tr>
   <tr><td><strong>People</strong></td><td>One balance per person, netting what they advanced against what they hold. Reimbursement by bank transfer, with an IBAN check, or any other way. Payout list as PDF or CSV, repayment list, and marking paid who you choose in one go.</td></tr>
-  <tr><td><strong>Budget</strong></td><td>Plan against actual per line, category and cost centre, with a cautious forecast of the result.</td></tr>
+  <tr><td><strong>Budget</strong></td><td>Plan against actual per line, category and cost centre, with a cautious forecast of the result. Assumptions such as the number of guests that lines scale with, and a What if plugin to try other numbers against the forecast without saving them.</td></tr>
   <tr><td><strong>Tickets</strong></td><td>Tiers with price, fee and quota. Import <code>.ods</code>, <code>.xlsx</code> or <code>.csv</code> sheets with a review of what changed. Conflicts when tickets disappear, refunds, manual sales, a sales chart and break-even.</td></tr>
   <tr><td><strong>Stock and sales</strong></td><td>For drinks or other goods, on commission or bought outright: billed units, the gap against what people logged, expected against collected money, and an invoice check.</td></tr>
-  <tr><td><strong>Settling</strong></td><td>Cash counts and bank statement checks, a list of open items, a settlement report with receipts, a CSV of all transactions, and closing the event.</td></tr>
+  <tr><td><strong>Settling</strong></td><td>Cash counts, by the note and coin if you like, and bank statement checks, a list of open items, a settlement report with receipts, a CSV of all transactions, and closing the event.</td></tr>
   <tr><td><strong>Your computer</strong></td><td>Works fully offline. Light and dark appearance, two number formats and keyboard shortcuts for entering a stack of receipts.</td></tr>
 </table></div>
 
@@ -321,7 +321,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <tr><td><strong>Net movement</strong></td><td>On for an account whose real total doesn't matter, such as a shared bank account that holds other money too. Lancelot then only tracks what this event changed. Bank accounts start with it on.</td></tr>
   <tr><td><strong>Cost centres</strong></td><td>Add one for each part of the event that needs its own result. A new event has none.</td></tr>
   <tr><td><strong>Categories</strong></td><td>Set which cost centre a category's new lines start in. New categories are added from the entry and budget forms.</td></tr>
-  <tr><td><strong>Plugins</strong></td><td>Switch off what you don't use. Their data stays in the file.</td></tr>
+  <tr><td><strong>Plugins</strong></td><td>Switch off what you don't use. Their data stays in the file. <strong>Configure</strong> opens a plugin's own settings in a panel beside the page.</td></tr>
   <tr><td><strong>Copy from another event</strong></td><td>Bring people and budget lines into this event. It never overwrites, and the other file is only read. A budget can only come from an event in the same currency.</td></tr>
 </table></div>
 <p>The default categories are Tickets and General for income, and Kitchen, Mobility, Venue, Tech and General for expenses.</p>
@@ -339,14 +339,42 @@ pnpm tauri build --bundles app</code></pre></li>
 <ol class="steps">
   <li>On <strong>Budget</strong>, click <strong>Budget line</strong> or press <kbd>N</kbd>.</li>
   <li>Choose a <strong>Category</strong> and, if you use them, a <strong>Cost centre</strong>.</li>
-  <li>Enter a <strong>Description</strong> and an <strong>Estimate</strong>, either as an amount or as quantity × unit price.</li>
+  <li>Enter a <strong>Description</strong> and an <strong>Estimate</strong>: an <strong>Amount</strong>, a <strong>Count × price</strong>, or a price <strong>Per assumption</strong> (see below). The panel shows the total as you type.</li>
   <li>Click <strong>Save</strong> (<kbd>⌘↵</kbd>).</li>
   <li>Later, tick <strong>Complete</strong> when no more money will come in or go out on that line.</li>
 </ol>
 <figure>
-  <a href="images/budget-line.png"><img src="images/budget-line.png" width="1280" height="800" loading="lazy" alt="The new budget line panel, with a quantity of 4 at a unit price of 120 euros."></a>
-  <figcaption>An estimate as quantity × unit price.</figcaption>
+  <a href="images/budget-line.png"><img src="images/budget-line.png" width="1280" height="800" loading="lazy" alt="The new budget line panel for Wristbands, priced per assumption: Guests 260 × 0,80 euros = 208 euros."></a>
+  <figcaption>An estimate per assumption: 0,80 € for each of the 260 guests.</figcaption>
 </figure>
+<h3>Plan with assumptions</h3>
+<p>Many costs and incomes follow a few numbers you're still guessing at, such as how many guests come or how many days you run. Write those down once as <strong>assumptions</strong>, and let the lines scale with them.</p>
+<ol class="steps">
+  <li>On <strong>Budget</strong>, under <strong>Assumptions</strong>, click <strong>+ Assumption</strong>, enter a name such as <code>Guests</code> and a value such as <code>260</code>, and click <strong>Save</strong>.</li>
+  <li>In a budget line, choose <strong>Per assumption</strong>, pick one or more assumptions, and enter the price for each, such as <code>Guests × 4,00 €</code> or <code>Guests × Days × 4,50 €</code>. Under <strong>Count × price</strong>, the count can be multiplied by assumptions too, such as <code>2 × Guests × 4,50 €</code>.</li>
+  <li>Click an assumption to change its value. Every line that scales with it changes along, and the table shows each such line's formula.</li>
+</ol>
+<p>An assumption can only be deleted while no line uses it.</p>
+
+<h3>Try ideas with What if</h3>
+<p>The <strong>What if</strong> plugin sits above the table. Folded, it shows the result your ideas lead to. Click <strong>Adjust</strong> to open it. A bridge shows how the forecast becomes that result, through assumptions, income and expenses. While nothing is booked or sold yet, it starts from the plan instead, with ticket income as budgeted. <strong>Nothing in it is saved</strong>, and nothing reaches the ledger.</p>
+<figure>
+  <a href="images/what-if.png"><img src="images/what-if.png" width="1280" height="1000" loading="lazy" alt="What if opened on Try: Guests moved from 260 to 320, the bridge showing 48 euros less from the assumptions, the lines that scale with guests, and a bar per category."></a>
+  <figcaption>60 more guests need 48 € more wristbands. Ticket sales are complete, so they don't grow with them.</figcaption>
+</figure>
+<p><strong>Try</strong> changes things directly:</p>
+<ul>
+  <li><strong>Tickets:</strong> each tier is a row of its places. Click a free one to sell up to it, and use the steppers to change the count and the price of the tickets still to sell.</li>
+  <li><strong>Assumptions:</strong> each is a slider, with the lines that scale with it below and steppers for their unit prices.</li>
+  <li><strong>Categories:</strong> each is a bar on one shared scale. Drag it to a new figure. It can't go below what's already booked.</li>
+</ul>
+<p>Each change shows as a chip. Click its × to undo that change alone, or <strong>Reset</strong> to undo them all.</p>
+<p><strong>Reach</strong> works back from a target: the plan by default, <strong>Break-even</strong>, or any result you type. It says how far off you are and suggests ways there, such as another value of an assumption, more tickets of a tier, a higher price for all of them, or a smaller expense. <strong>Apply</strong> adds one to your ideas, so you can keep going in Try.</p>
+<figure>
+  <a href="images/what-if-reach.png"><img src="images/what-if-reach.png" width="1280" height="900" loading="lazy" alt="What if on Reach: a target result of 2.097 euros, 588 euros to go, and suggestions, each with how much it covers and an Apply button."></a>
+  <figcaption>Each suggestion says how much of the gap it covers.</figcaption>
+</figure>
+
 <h3>How the forecast works</h3>
 <p>It's deliberately cautious, so it may look worse than you expect:</p>
 <ul>
@@ -388,6 +416,18 @@ pnpm tauri build --bundles app</code></pre></li>
   <figcaption>An opening count isn't income. It doesn't change the result.</figcaption>
 </figure>
 <p>A bank account with <strong>Net movement</strong> on has no opening count. Lancelot starts it from zero and follows only this event's money.</p>
+<h3>Count notes and coins</h3>
+<p>The <strong>Cash box count</strong> plugin adds up the cash for you. Under either amount in the count panel, click <strong>Count</strong> and type how many of each note and coin you have. The total fills in the amount.</p>
+<figure>
+  <a href="images/cash-counter.png"><img src="images/cash-counter.png" width="1280" height="1000" loading="lazy" alt="The count panel for the cash box with the counter open under the closing count: notes and coins with a number of pieces each, adding up to 410 euros."></a>
+  <figcaption>The pieces add up to the closing count of 410 €.</figcaption>
+</figure>
+<p>The pieces are kept when you save. If you change the amount by hand afterwards, the counter says it no longer matches. The notes and coins follow the event's currency.</p>
+<p>For packed money, such as a roll of coins, add a <strong>custom denomination</strong>: in <strong>Settings → Plugins</strong>, click <strong>Configure</strong> on <strong>Cash box count</strong>, enter a <strong>Name</strong> and what one is worth under <strong>Value each</strong>, and click <strong>Add</strong>. It's counted apart from the notes and coins, and an event made from this one as a template takes it along.</p>
+<figure>
+  <a href="images/cash-denominations.png"><img src="images/cash-denominations.png" width="1280" height="900" loading="lazy" alt="The Cash box count settings beside Settings: the euro notes and coins, and a custom denomination, Roll of 2 euro coins, worth 50 euros."></a>
+  <figcaption>A roll of 2 € coins, counted as one piece worth 50 €.</figcaption>
+</figure>
 
 <h2 class="chapter" id="entries">6. Enter the money</h2>
 <p>Press <kbd>N</kbd> or click <strong>New entry</strong>. There are four forms, and choosing the right one is most of the work:</p>
@@ -524,7 +564,7 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>The <strong>Stock and sales</strong> plugin is for goods you get from a supplier and pass on, such as drinks, food or merch. Either you take them <strong>on commission</strong>, return what's unsold and pay for the rest, or you <strong>buy them outright</strong>. It's only for checking, and <strong>never creates entries</strong>. Real money still goes in through the normal forms, and an event settles the same without it.</p>
 <h3>Set it up</h3>
 <ol class="steps">
-  <li>In <strong>Settings → Plugins → Stock and sales</strong>, enter a name under <strong>New cost centre for goods</strong>, such as <code>Drinks</code>, and click <strong>Add cost centre</strong>. This creates the cost centre with the categories Drinks income, Drinks and Deposit. To use a cost centre you already have, tick it under <strong>Shown on</strong> instead.</li>
+  <li>In <strong>Settings → Plugins</strong>, click <strong>Configure</strong> on <strong>Stock and sales</strong>. In the panel, enter a name under <strong>New cost centre for goods</strong>, such as <code>Drinks</code>, and click <strong>Add cost centre</strong>. This creates the cost centre with the categories Drinks income, Drinks and Deposit. To use a cost centre you already have, tick it under <strong>Shown on</strong> instead.</li>
   <li>Open the cost centre in the sidebar, and click <strong>Supplier</strong> at the top of the section. Enter the <strong>Supplier</strong>, and if you have one, the category that holds a returnable deposit.</li>
   <li>Leave <strong>On commission</strong> ticked if you can return what's unsold. Untick it if you bought the goods outright: then there's no <strong>Returned</strong> count, and everything taken is billed.</li>
   <li>Click <strong>+ Product</strong> and enter its <strong>Cost per unit</strong>, without deposit, and its <strong>Donation per unit</strong>.</li>
@@ -537,12 +577,12 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>A cost centre has one supplier, with its own products and invoice check. If your goods come from two independent suppliers, give each one its own cost centre.</p>
 <ol class="steps">
   <li>In <strong>Settings → Cost centres</strong>, add one per supplier, such as <strong>Drinks Hoffmann</strong> and <strong>Drinks Krüger</strong>.</li>
-  <li>In <strong>Settings → Plugins → Stock and sales</strong>, tick both under <strong>Shown on</strong>. Each gets a tab for its own data source.</li>
+  <li>In <strong>Settings → Plugins</strong>, click <strong>Configure</strong> on <strong>Stock and sales</strong> and tick both under <strong>Shown on</strong>. Each gets a tab for its own data source.</li>
   <li>Open each one in the sidebar, click <strong>Supplier</strong> to enter its supplier, and add the products you get from them.</li>
   <li>Both can share a category such as Drinks. A category starts its lines in one cost centre, so check the <strong>Cost centre</strong> on each expense and income line, because that's how money reaches the right supplier's figures.</li>
 </ol>
 <figure>
-  <a href="images/drinks-suppliers.png"><img src="images/drinks-suppliers.png" width="1280" height="900" loading="lazy" alt="Settings, Stock and sales: the cost centres Drinks Hoffmann and Drinks Krüger are both ticked."></a>
+  <a href="images/drinks-suppliers.png"><img src="images/drinks-suppliers.png" width="1280" height="900" loading="lazy" alt="The Stock and sales panel beside Settings: the cost centres Drinks Hoffmann and Drinks Krüger are both ticked under Shown on, each with a tab for its data source."></a>
   <figcaption>Two cost centres, one per supplier. Each shows its own table and invoice check, and there's no combined drinks total.</figcaption>
 </figure>
 <div class="note"><strong>The invoice check goes by name</strong><p>It looks for expenses on the cost centre whose <strong>Counterparty</strong> matches the supplier, ignoring capitals. Everywhere else the counterparty is only information, but here “Hoffman” won't count as “Hoffmann”. <strong>Book invoice</strong> fills in the name for you, and typing one offers the names already used.</p></div>
@@ -748,6 +788,8 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>Look for a field marked in red. For a split, check that the counter reads <strong>0,00 € left</strong>.</p>
 <h3>I can't delete a person, account or tier</h3>
 <p>Something still refers to it. Only people, accounts and tiers that nothing uses can be deleted.</p>
+<h3>I can't delete an assumption</h3>
+<p>A budget line still scales with it. Change that line to another kind of estimate first.</p>
 <h3>I can't switch off tickets</h3>
 <p>The event still has tiers. Delete them first, which requires that nothing uses them.</p>
 <h3>An entry can't be edited</h3>
@@ -762,6 +804,7 @@ pnpm tauri build --bundles app</code></pre></li>
   <tr><th style="width:28%">Term</th><th>Meaning</th></tr>
   <tr><td><strong>Advance</strong></td><td>A payment from someone's private money on the event's behalf. The event now owes them.</td></tr>
   <tr><td><strong>Alias</strong></td><td>Another name for a tier in the ticket sheet.</td></tr>
+  <tr><td><strong>Assumption</strong></td><td>A number the budget is built on, such as the number of guests. Lines can scale with it.</td></tr>
   <tr><td><strong>Commission goods</strong></td><td>Goods taken with the right to return what's unsold. You pay only for what you keep.</td></tr>
   <tr><td><strong>Conflict</strong></td><td>A ticket that was in the last sheet and is gone from the new one, waiting for your decision.</td></tr>
   <tr><td><strong>Counterparty</strong></td><td>The shop or supplier on an entry. Usually it's only information, but the Stock and sales invoice check finds a supplier's invoices by this name.</td></tr>
