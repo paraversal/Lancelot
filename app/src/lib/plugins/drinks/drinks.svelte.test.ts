@@ -9,6 +9,7 @@ import { session } from '../../state/session.svelte';
 import { takeProposal } from '../host';
 import Centre from '../../../routes/event/centre/Centre.svelte';
 import { pluginContext } from '../host';
+import { dataSources } from '../sources.svelte';
 import { EXPLAINERS } from './figures';
 import Settings from './Settings.svelte';
 
@@ -35,6 +36,7 @@ beforeEach(() => {
 	vi.restoreAllMocks();
 	vi.clearAllMocks();
 	takeProposal();
+	dataSources.set({});
 });
 
 describe('The stock and sales section', () => {
@@ -337,5 +339,52 @@ describe('The plugin’s settings', () => {
 		const changes = apply.mock.calls[0][1];
 		expect(changes).toHaveLength(5);
 		expect(changes.every((c) => (c.value as { centre: number }).centre === 7)).toBe(true);
+	});
+});
+
+describe('A cost centre’s own source', () => {
+	const source = {
+		label: 'Bar app',
+		url: 'https://bar.example',
+		authHeader: 'Authorization',
+		list: 'drinks',
+		fields: { name: 'name', quantity: 'qty' }
+	};
+	const read = {
+		label: 'Bar app',
+		sha256: 'ab',
+		fields: ['name', 'quantity'],
+		rows: [],
+		problems: [],
+		missing: []
+	};
+
+	it('pulls from the source of the cost centre it is on', async () => {
+		open((s) => {
+			s.costCentres.push({ id: 2, name: 'Merch' });
+			s.pluginRecords.push({
+				id: 900,
+				plugin: 'drinks',
+				key: 'centre:2',
+				scope: 'setup',
+				value: { supplier: null, commission: true, deposit: null }
+			});
+		});
+		dataSources.set({
+			'drinks:drinks': { source, hasToken: true },
+			'drinks:merch': { source: { ...source, label: 'Merch app' }, hasToken: true }
+		});
+		const pull = vi.spyOn(api, 'pullDataSource').mockResolvedValue(read);
+		render(Centre, { centre: drinksCentre() });
+		await fireEvent.click(screen.getByText('Pull logged'));
+		await waitFor(() => expect(pull).toHaveBeenCalledOnce());
+		expect(pull.mock.calls[0]![0]).toBe('drinks:drinks');
+	});
+
+	it('offers no pull on a cost centre whose source is not set up', () => {
+		open();
+		dataSources.set({ 'drinks:merch': { source, hasToken: true } });
+		render(Centre, { centre: drinksCentre() });
+		expect(screen.queryByText('Pull logged')).toBeNull();
 	});
 });

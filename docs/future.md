@@ -56,7 +56,7 @@ Plugins are built in today (technical design §10). When another group wants its
 
 ## Data sources as connections
 
-**Today** there is one mechanism, used by Ticket API and Stock and sales alike: a plugin declares the fields it wants as `dataSource`, Settings draws the form, and `lancelot_service::sources` makes the request, so neither plugin has code of its own for the network. But a source belongs to one plugin: it is stored by plugin id, holds the whole setup (URL, token header, list, field names), and reads one list. So one provider that serves both tickets and drink sales is set up twice, with its token twice. (Fields can already be optional, which is how Ticket API reads a provider without order IDs.)
+**Today** there is one mechanism, used by Ticket API and Stock and sales alike: a plugin declares the fields it wants as `dataSource`, Settings draws the form, and `lancelot_service::sources` makes the request, so neither plugin has code of its own for the network. But a source belongs to one plugin, or to one of its tabs: Stock and sales has one per cost centre it is shown on, saved by the cost centre's name, so the drinks and the merch can come from different providers. Each holds the whole setup (URL, token header, list, field names) and reads one list. So one provider that serves both tickets and drink sales is set up twice, with its token twice, and a new cost centre needs its source set up again. (Fields can already be optional, which is how Ticket API reads a provider without order IDs.)
 
 **The idea:** split what a provider is from what a plugin reads of it.
 

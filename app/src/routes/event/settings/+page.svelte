@@ -25,8 +25,8 @@
 	import Lock from '#lib/motion/Lock.svelte';
 	import { level, reduced } from '#lib/motion/mode.svelte.ts';
 	import { pluginContext, pluginEnabled, setPluginEnabled } from '#lib/plugins/host.ts';
-	import DataSourceForm from '#lib/plugins/DataSourceForm.svelte';
-	import PluginFrame from '#lib/plugins/PluginFrame.svelte';
+	import ConfigPanel from '#lib/plugins/ConfigPanel.svelte';
+	import PluginCard from '#lib/plugins/PluginCard.svelte';
 	import { plugins } from '#lib/plugins/registry.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 
@@ -39,6 +39,10 @@
 	let backups = $state<BackupInfo[]>([]);
 	let keepText = $state('');
 	let keepInvalid = $state(false);
+
+	// Which plugin's settings the panel beside the page shows.
+	let configuring = $state<string | null>(null);
+	const configuringPlugin = $derived(plugins.find((p) => p.id === configuring) ?? null);
 
 	$effect(() => {
 		keepText = String(session.settings?.backupCount ?? 20);
@@ -299,394 +303,398 @@
 {/snippet}
 
 <div class="page">
-	<h1>Settings</h1>
+	<div class="scroll">
+		<h1>Settings</h1>
 
-	<div class="columns">
-		<fieldset class="plain" disabled={closed}>
+		<div class="columns">
+			<fieldset class="plain" disabled={closed}>
+				<div class="stack">
+					<section>
+						<h2>Event</h2>
+						<TextField
+							label="Name"
+							value={event.name}
+							required
+							oncommit={(v) => v && update({ name: v })}
+						/>
+						<div class="form-pair">
+							<DateField
+								label="From"
+								value={event.startsOn}
+								{format}
+								oncommit={(v) => update({ startsOn: v })}
+							/>
+							<DateField
+								label="To"
+								value={event.endsOn}
+								{format}
+								oncommit={(v) => update({ endsOn: v })}
+							/>
+						</div>
+						<TextField
+							label="Location"
+							value={event.location}
+							oncommit={(v) => update({ location: v })}
+						/>
+						<div class="labelled">
+							<span class="form-label">Currency</span>
+							<span data-testid="event-currency">{currencyLabel(event.currency)}</span>
+						</div>
+						<TextField
+							label="Notes"
+							value={event.notes}
+							multiline
+							oncommit={(v) => update({ notes: v })}
+						/>
+						<Select
+							label="Reimburse from"
+							value={event.defaultReimbursementAccount}
+							options={assets}
+							onchange={(account) =>
+								run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
+						/>
+						<label class="toggle">
+							<input
+								type="checkbox"
+								checked={open.snapshot.ticketSettings.enabled}
+								onchange={(e) => {
+									const { checked } = e.currentTarget;
+									const box = e.currentTarget;
+									run(async () => {
+										try {
+											await session.change(() => api.setTicketsEnabled(checked));
+										} catch (err) {
+											box.checked = !checked;
+											throw err;
+										}
+									});
+								}}
+							/>
+							Sells tickets
+						</label>
+					</section>
+
+					<section>
+						<h2>Accounts</h2>
+						<ul class="accounts">
+							{#each accounts as a (a.id)}
+								<li>
+									<input
+										id="account-{a.id}"
+										class="name"
+										type="text"
+										aria-label="Account name"
+										value={a.name}
+										onblur={(e) => rename(a.id, e.currentTarget)}
+										onkeydown={(e) => {
+											if (e.key === 'Enter') e.currentTarget.blur();
+											if (e.key === 'Escape') {
+												e.currentTarget.value = a.name;
+												e.currentTarget.blur();
+											}
+										}}
+									/>
+									<Segmented
+										label="{a.name} holds"
+										value={a.assetType ?? 'bank'}
+										options={TYPES}
+										onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
+									/>
+									<label class="toggle" title="Counts and statements leave out opening counts">
+										<input
+											type="checkbox"
+											aria-label="Net movement, {a.name}"
+											checked={a.netMovement}
+											onchange={(e) => {
+												const { checked } = e.currentTarget;
+												run(() => session.change(() => api.setNetMovement(a.id, checked)));
+											}}
+										/>
+										Net movement
+									</label>
+									<span class="balance">{formatAmount(a.balance, format)}</span>
+									{@render deleteAccount(a)}
+								</li>
+							{/each}
+						</ul>
+						{#if !closed}
+							<div><Button size="sm" icon="plus" onclick={addAccount}>Account</Button></div>
+						{/if}
+					</section>
+
+					<section>
+						<h2>Cost centres</h2>
+						<ul class="accounts centres">
+							{#each centres as c (c.id)}
+								<li>
+									<input
+										class="name"
+										type="text"
+										aria-label="Cost centre name"
+										value={c.name}
+										onblur={(e) => renameCentre(c.id, e.currentTarget)}
+										onkeydown={(e) => {
+											if (e.key === 'Enter') e.currentTarget.blur();
+											if (e.key === 'Escape') {
+												e.currentTarget.value = c.name;
+												e.currentTarget.blur();
+											}
+										}}
+									/>
+									{#if !closed}
+										{#if deletingCentre === c.id}
+											<Button
+												size="sm"
+												kind="primary"
+												onclick={() => {
+													deletingCentre = null;
+													return run(() => session.change(() => api.deleteCostCentre(c.id)));
+												}}>Delete</Button
+											>
+											<Button size="sm" onclick={() => (deletingCentre = null)}>Keep</Button>
+										{:else}
+											<Button size="sm" onclick={() => (deletingCentre = c.id)}>Delete</Button>
+										{/if}
+									{/if}
+								</li>
+							{/each}
+						</ul>
+						{#if !closed}
+							<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
+						{/if}
+					</section>
+				</div>
+			</fieldset>
+
 			<div class="stack">
+				{#if closedOn}
+					<section out:lingerOut={{ level: level('E2') }}>
+						<h2>Status</h2>
+						<div class="line">
+							<span class="muted"><Lock closed={!unlocking} level={level('E2')} size={16} /></span>
+							<strong>Closed {closedOn}</strong>
+							<span class="grow"></span>
+							{#if reopening}
+								<span>Reopen for changes?</span>
+								<Button size="sm" kind="primary" onclick={reopen}>Reopen</Button>
+								<Button size="sm" onclick={() => (reopening = false)}>Keep closed</Button>
+							{:else}
+								<Button size="sm" onclick={() => (reopening = true)}>Reopen</Button>
+							{/if}
+						</div>
+					</section>
+				{/if}
 				<section>
-					<h2>Event</h2>
-					<TextField
-						label="Name"
-						value={event.name}
-						required
-						oncommit={(v) => v && update({ name: v })}
-					/>
-					<div class="form-pair">
-						<DateField
-							label="From"
-							value={event.startsOn}
-							{format}
-							oncommit={(v) => update({ startsOn: v })}
-						/>
-						<DateField
-							label="To"
-							value={event.endsOn}
-							{format}
-							oncommit={(v) => update({ endsOn: v })}
-						/>
-					</div>
-					<TextField
-						label="Location"
-						value={event.location}
-						oncommit={(v) => update({ location: v })}
-					/>
+					<h2>Display</h2>
 					<div class="labelled">
-						<span class="form-label">Currency</span>
-						<span data-testid="event-currency">{currencyLabel(event.currency)}</span>
+						<span class="form-label">Appearance</span>
+						<Segmented
+							label="Appearance"
+							value={session.settings?.appearance ?? 'system'}
+							onchange={setAppearance}
+							options={[
+								{ value: 'system', label: 'System' },
+								{ value: 'light', label: 'Light' },
+								{ value: 'dark', label: 'Dark' }
+							]}
+						/>
 					</div>
-					<TextField
-						label="Notes"
-						value={event.notes}
-						multiline
-						oncommit={(v) => update({ notes: v })}
-					/>
-					<Select
-						label="Reimburse from"
-						value={event.defaultReimbursementAccount}
-						options={assets}
-						onchange={(account) =>
-							run(() => session.change(() => api.setDefaultReimbursementAccount(account)))}
-					/>
+					<div class="labelled">
+						<span class="form-label">Numbers and dates</span>
+						<Segmented
+							label="Numbers and dates"
+							value={format}
+							onchange={setFormat}
+							options={[
+								{ value: 'de', label: `${formatAmount(123456, 'de')}  ·  31.12.2026` },
+								{ value: 'en', label: `${formatAmount(123456, 'en')}  ·  2026-12-31` }
+							]}
+						/>
+					</div>
 					<label class="toggle">
 						<input
 							type="checkbox"
-							checked={open.snapshot.ticketSettings.enabled}
-							onchange={(e) => {
-								const { checked } = e.currentTarget;
-								const box = e.currentTarget;
-								run(async () => {
-									try {
-										await session.change(() => api.setTicketsEnabled(checked));
-									} catch (err) {
-										box.checked = !checked;
-										throw err;
-									}
-								});
-							}}
+							checked={reduced()}
+							onchange={(e) => setReducedMotion(e.currentTarget.checked)}
 						/>
-						Sells tickets
+						Reduced motion
 					</label>
 				</section>
 
 				<section>
-					<h2>Accounts</h2>
-					<ul class="accounts">
-						{#each accounts as a (a.id)}
-							<li>
-								<input
-									id="account-{a.id}"
-									class="name"
-									type="text"
-									aria-label="Account name"
-									value={a.name}
-									onblur={(e) => rename(a.id, e.currentTarget)}
-									onkeydown={(e) => {
-										if (e.key === 'Enter') e.currentTarget.blur();
-										if (e.key === 'Escape') {
-											e.currentTarget.value = a.name;
-											e.currentTarget.blur();
-										}
-									}}
-								/>
-								<Segmented
-									label="{a.name} holds"
-									value={a.assetType ?? 'bank'}
-									options={TYPES}
-									onchange={(t) => run(() => session.change(() => api.setAssetType(a.id, t)))}
-								/>
-								<label class="toggle" title="Counts and statements leave out opening counts">
-									<input
-										type="checkbox"
-										aria-label="Net movement, {a.name}"
-										checked={a.netMovement}
-										onchange={(e) => {
-											const { checked } = e.currentTarget;
-											run(() => session.change(() => api.setNetMovement(a.id, checked)));
-										}}
-									/>
-									Net movement
-								</label>
-								<span class="balance">{formatAmount(a.balance, format)}</span>
-								{@render deleteAccount(a)}
-							</li>
-						{/each}
-					</ul>
-					{#if !closed}
-						<div><Button size="sm" icon="plus" onclick={addAccount}>Account</Button></div>
-					{/if}
-				</section>
-
-				<section>
-					<h2>Cost centres</h2>
-					<ul class="accounts centres">
-						{#each centres as c (c.id)}
-							<li>
-								<input
-									class="name"
-									type="text"
-									aria-label="Cost centre name"
-									value={c.name}
-									onblur={(e) => renameCentre(c.id, e.currentTarget)}
-									onkeydown={(e) => {
-										if (e.key === 'Enter') e.currentTarget.blur();
-										if (e.key === 'Escape') {
-											e.currentTarget.value = c.name;
-											e.currentTarget.blur();
-										}
-									}}
-								/>
-								{#if !closed}
-									{#if deletingCentre === c.id}
-										<Button
-											size="sm"
-											kind="primary"
-											onclick={() => {
-												deletingCentre = null;
-												return run(() => session.change(() => api.deleteCostCentre(c.id)));
-											}}>Delete</Button
-										>
-										<Button size="sm" onclick={() => (deletingCentre = null)}>Keep</Button>
-									{:else}
-										<Button size="sm" onclick={() => (deletingCentre = c.id)}>Delete</Button>
-									{/if}
-								{/if}
-							</li>
-						{/each}
-					</ul>
-					{#if !closed}
-						<div><Button size="sm" icon="plus" onclick={addCentre}>Cost centre</Button></div>
-					{/if}
-				</section>
-			</div>
-		</fieldset>
-
-		<div class="stack">
-			{#if closedOn}
-				<section out:lingerOut={{ level: level('E2') }}>
-					<h2>Status</h2>
+					<h2>File</h2>
 					<div class="line">
-						<span class="muted"><Lock closed={!unlocking} level={level('E2')} size={16} /></span>
-						<strong>Closed {closedOn}</strong>
-						<span class="grow"></span>
-						{#if reopening}
-							<span>Reopen for changes?</span>
-							<Button size="sm" kind="primary" onclick={reopen}>Reopen</Button>
-							<Button size="sm" onclick={() => (reopening = false)}>Keep closed</Button>
+						<span class="muted"><Icon name="file" /></span>
+						<span class="path" title={open.path}>{shortPath}</span>
+						<Button size="sm" onclick={() => run(() => revealFile(open.path))}
+							>Show in Finder</Button
+						>
+					</div>
+					<div class="line">
+						{#if issues}
+							<span class="warn"><Icon name="warn" /></span>
+							<strong class="warn">{issues === 1 ? '1 issue' : `${issues} issues`}</strong>
 						{:else}
-							<Button size="sm" onclick={() => (reopening = true)}>Reopen</Button>
+							{#key session.checkedAt}
+								<span class="ok"><Check level={level('F2')} size={16} delay={220} /></span>
+							{/key}
+							<strong>No issues</strong>
 						{/if}
+						{#if checked}<span class="muted">Checked {checked}</span>{/if}
+						<span class="grow"></span>
+						<Button size="sm" icon="refresh" onclick={check}>Check again</Button>
 					</div>
 				</section>
-			{/if}
-			<section>
-				<h2>Display</h2>
-				<div class="labelled">
-					<span class="form-label">Appearance</span>
-					<Segmented
-						label="Appearance"
-						value={session.settings?.appearance ?? 'system'}
-						onchange={setAppearance}
-						options={[
-							{ value: 'system', label: 'System' },
-							{ value: 'light', label: 'Light' },
-							{ value: 'dark', label: 'Dark' }
-						]}
-					/>
-				</div>
-				<div class="labelled">
-					<span class="form-label">Numbers and dates</span>
-					<Segmented
-						label="Numbers and dates"
-						value={format}
-						onchange={setFormat}
-						options={[
-							{ value: 'de', label: `${formatAmount(123456, 'de')}  ·  31.12.2026` },
-							{ value: 'en', label: `${formatAmount(123456, 'en')}  ·  2026-12-31` }
-						]}
-					/>
-				</div>
-				<label class="toggle">
-					<input
-						type="checkbox"
-						checked={reduced()}
-						onchange={(e) => setReducedMotion(e.currentTarget.checked)}
-					/>
-					Reduced motion
-				</label>
-			</section>
 
-			<section>
-				<h2>File</h2>
-				<div class="line">
-					<span class="muted"><Icon name="file" /></span>
-					<span class="path" title={open.path}>{shortPath}</span>
-					<Button size="sm" onclick={() => run(() => revealFile(open.path))}>Show in Finder</Button>
-				</div>
-				<div class="line">
-					{#if issues}
-						<span class="warn"><Icon name="warn" /></span>
-						<strong class="warn">{issues === 1 ? '1 issue' : `${issues} issues`}</strong>
-					{:else}
-						{#key session.checkedAt}
-							<span class="ok"><Check level={level('F2')} size={16} delay={220} /></span>
-						{/key}
-						<strong>No issues</strong>
-					{/if}
-					{#if checked}<span class="muted">Checked {checked}</span>{/if}
-					<span class="grow"></span>
-					<Button size="sm" icon="refresh" onclick={check}>Check again</Button>
-				</div>
-			</section>
-
-			{#if !closed}
-				<section id="copy">
-					<h2>Copy from another event</h2>
-					{#if source}
-						<div class="line">
-							<span class="muted"><Icon name="file" /></span>
-							<span class="path">{fileName(source.path)}</span>
-							<Button size="sm" onclick={() => (source = null)}>Cancel</Button>
-						</div>
-						<label class="toggle">
-							<input type="checkbox" bind:checked={copyPersons} />
-							People
-							<span class="counts"
-								>{source.preview.personsAdded} new · {source.preview.personsSkipped} already here</span
-							>
-						</label>
-						{#if source.preview.sourceCurrency !== event.currency}
-							<p class="counts" data-testid="copy-other-currency">
-								The budget can't be copied: that event is in {source.preview.sourceCurrency}, and
-								this one is in {event.currency}.
-							</p>
-						{:else}
+				{#if !closed}
+					<section id="copy">
+						<h2>Copy from another event</h2>
+						{#if source}
+							<div class="line">
+								<span class="muted"><Icon name="file" /></span>
+								<span class="path">{fileName(source.path)}</span>
+								<Button size="sm" onclick={() => (source = null)}>Cancel</Button>
+							</div>
 							<label class="toggle">
-								<input type="checkbox" bind:checked={copyBudget} />
-								Budget lines
+								<input type="checkbox" bind:checked={copyPersons} />
+								People
 								<span class="counts"
-									>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped} already
-									here{#if source.preview.categoriesAdded}
-										· {counted(
-											source.preview.categoriesAdded,
-											'new category',
-											'new categories'
-										)}{/if}{#if source.preview.costCentresAdded}
-										· {counted(
-											source.preview.costCentresAdded,
-											'new cost centre',
-											'new cost centres'
-										)}{/if}</span
+									>{source.preview.personsAdded} new · {source.preview.personsSkipped} already here</span
 								>
 							</label>
+							{#if source.preview.sourceCurrency !== event.currency}
+								<p class="counts" data-testid="copy-other-currency">
+									The budget can't be copied: that event is in {source.preview.sourceCurrency}, and
+									this one is in {event.currency}.
+								</p>
+							{:else}
+								<label class="toggle">
+									<input type="checkbox" bind:checked={copyBudget} />
+									Budget lines
+									<span class="counts"
+										>{source.preview.budgetLinesAdded} new · {source.preview.budgetLinesSkipped} already
+										here{#if source.preview.categoriesAdded}
+											· {counted(
+												source.preview.categoriesAdded,
+												'new category',
+												'new categories'
+											)}{/if}{#if source.preview.costCentresAdded}
+											· {counted(
+												source.preview.costCentresAdded,
+												'new cost centre',
+												'new cost centres'
+											)}{/if}</span
+									>
+								</label>
+							{/if}
+							<div>
+								<Button
+									size="sm"
+									kind="primary"
+									disabled={!copyPersons && !copyBudget}
+									onclick={copyFrom}>Copy</Button
+								>
+							</div>
+						{:else}
+							<div class="line">
+								<Button size="sm" onclick={chooseSource}>Choose event</Button>
+								{#if copied}<span class="muted">{copied}</span>{/if}
+							</div>
 						{/if}
-						<div>
-							<Button
-								size="sm"
-								kind="primary"
-								disabled={!copyPersons && !copyBudget}
-								onclick={copyFrom}>Copy</Button
-							>
-						</div>
-					{:else}
-						<div class="line">
-							<Button size="sm" onclick={chooseSource}>Choose event</Button>
-							{#if copied}<span class="muted">{copied}</span>{/if}
-						</div>
-					{/if}
-				</section>
-			{/if}
+					</section>
+				{/if}
 
-			<section>
-				<h2>Backups</h2>
-				<div class="keep">
-					<span>Keep</span>
-					<div class="count">
-						<Field invalid={keepInvalid}>
-							<input
-								type="text"
-								inputmode="numeric"
-								aria-label="Backups to keep"
-								bind:value={keepText}
-								onblur={setKeep}
-								onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-							/>
-						</Field>
+				<section>
+					<h2>Backups</h2>
+					<div class="keep">
+						<span>Keep</span>
+						<div class="count">
+							<Field invalid={keepInvalid}>
+								<input
+									type="text"
+									inputmode="numeric"
+									aria-label="Backups to keep"
+									bind:value={keepText}
+									onblur={setKeep}
+									onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+								/>
+							</Field>
+						</div>
 					</div>
-				</div>
-				<ul class="backups">
-					{#each backups as b (b.path)}
-						<li>
-							<span>{b.takenAt ? formatTimestamp(b.takenAt, format) : b.path}</span>
-							<span class="grow"></span>
-							<span class="muted size">{formatSize(b.size, format)}</span>
-							<span class="restore"
-								><Button size="sm" onclick={() => restore(b)}>Restore</Button></span
-							>
-						</li>
-					{/each}
-				</ul>
-			</section>
+					<ul class="backups">
+						{#each backups as b (b.path)}
+							<li>
+								<span>{b.takenAt ? formatTimestamp(b.takenAt, format) : b.path}</span>
+								<span class="grow"></span>
+								<span class="muted size">{formatSize(b.size, format)}</span>
+								<span class="restore"
+									><Button size="sm" onclick={() => restore(b)}>Restore</Button></span
+								>
+							</li>
+						{/each}
+					</ul>
+				</section>
+			</div>
 		</div>
+
+		<fieldset class="plain" disabled={closed}>
+			<section class="wide">
+				<h2>Categories</h2>
+				<div class="categories">
+					{@render categoryGroup('Expenses', 'expense', expenses)}
+					{@render categoryGroup('Income', 'income', income)}
+				</div>
+			</section>
+		</fieldset>
+
+		<fieldset class="plain" disabled={closed}>
+			<section class="wide plugins">
+				<h2>Plugins</h2>
+				<div class="plugin-cards">
+					{#each plugins as plugin (plugin.id)}
+						{@const on = pluginEnabled(plugin.id)}
+						{@const settable = Boolean(plugin.SettingsSection || plugin.dataSource)}
+						<PluginCard
+							name={plugin.name}
+							description={plugin.description}
+							summary={on
+								? (plugin.summary?.(pluginContext(plugin.id)) ??
+									(settable ? 'Not set up yet' : 'Nothing to set up'))
+								: 'Switched off'}
+							{on}
+							open={configuring === plugin.id}
+							onopen={settable ? () => (configuring = plugin.id) : undefined}
+							ontoggle={(next) => {
+								if (!next && configuring === plugin.id) configuring = null;
+								run(() => setPluginEnabled(plugin.id, next));
+							}}
+						/>
+					{/each}
+				</div>
+			</section>
+		</fieldset>
+
+		{#if error}<p class="error" role="alert">{error}</p>{/if}
 	</div>
 
-	<fieldset class="plain" disabled={closed}>
-		<section class="wide">
-			<h2>Categories</h2>
-			{#if centres.length}
-				<p class="note">The cost centre beside a category is where its new lines start.</p>
-			{/if}
-			<div class="categories">
-				{@render categoryGroup('Expenses', 'expense', expenses)}
-				{@render categoryGroup('Income', 'income', income)}
-			</div>
-		</section>
-	</fieldset>
-
-	<fieldset class="plain" disabled={closed}>
-		<section class="wide plugins">
-			<h2>Plugins</h2>
-			<p class="note">
-				Optional additions to the app. Switching one off hides it for this event and keeps its data
-				in the file.
-			</p>
-			<div class="plugin-cards">
-				{#each plugins as plugin (plugin.id)}
-					{@const on = pluginEnabled(plugin.id)}
-					<PluginFrame name={plugin.name} description={plugin.description}>
-						{#snippet actions()}
-							<label class="toggle">
-								<input
-									type="checkbox"
-									aria-label="{plugin.name} on"
-									checked={on}
-									onchange={(e) => {
-										const { checked } = e.currentTarget;
-										run(() => setPluginEnabled(plugin.id, checked));
-									}}
-								/>
-								On
-							</label>
-						{/snippet}
-						{#if on && (plugin.SettingsSection || plugin.dataSource)}
-							{#if plugin.SettingsSection}
-								<plugin.SettingsSection ctx={pluginContext(plugin.id)} />
-							{/if}
-							{#if plugin.dataSource}
-								<DataSourceForm id={plugin.id} spec={plugin.dataSource} />
-							{/if}
-						{/if}
-					</PluginFrame>
-				{/each}
-			</div>
-		</section>
-	</fieldset>
-
-	{#if error}<p class="error" role="alert">{error}</p>{/if}
+	{#if configuringPlugin}
+		{#key configuringPlugin.id}
+			<ConfigPanel plugin={configuringPlugin} onclose={() => (configuring = null)} />
+		{/key}
+	{/if}
 </div>
 
 <style>
+	/* The page scrolls beside the plugin panel, as every page with one does. */
 	.page {
+		display: flex;
+		height: 100%;
+	}
+
+	.scroll {
+		flex: 1;
+		min-width: 0;
+		overflow: auto;
 		padding: var(--spacing-10);
 	}
 
@@ -742,14 +750,7 @@
 	.plugin-cards {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
-		align-items: start;
 		gap: var(--spacing-6) 60px;
-	}
-
-	.note {
-		margin: 0;
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	/* Flows over two columns, so a long list stays short and fills the width. */

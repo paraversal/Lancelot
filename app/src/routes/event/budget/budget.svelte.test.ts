@@ -26,9 +26,10 @@ describe('The budget line panel', () => {
 	it('says whether the chosen category is income or an expense', async () => {
 		render(BudgetLinePanel, { line: null, category: account('income').id, onclose() {} });
 		expect(screen.getByText('Income')).toBeTruthy();
-		await fireEvent.change(screen.getByLabelText('Category'), {
-			target: { value: String(account('expense').id) }
-		});
+		const field = screen.getByLabelText('Category');
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: account('expense').name } });
+		await fireEvent.keyDown(field, { key: 'Enter' });
 		expect(screen.getByText('Expense')).toBeTruthy();
 	});
 });

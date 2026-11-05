@@ -326,7 +326,7 @@ pnpm tauri build --bundles app</code></pre></li>
 </table></div>
 <p>The default categories are Tickets and General for income, and Kitchen, Mobility, Venue, Tech and General for expenses.</p>
 <figure>
-  <a href="images/settings-plugins.png"><img src="images/settings-plugins.png" width="1280" height="900" loading="lazy" alt="The lower part of Settings: a category list with a cost centre beside each, and the plugins with their switches."></a>
+  <a href="images/settings-plugins.png"><img src="images/settings-plugins.png" width="1280" height="900" loading="lazy" alt="The lower part of Settings: a category list with a cost centre beside each, and a card per plugin with its switch and how it is set up."></a>
   <figcaption>Further down Settings: the categories and the plugins. All plugins start switched on.</figcaption>
 </figure>
 
@@ -357,7 +357,7 @@ pnpm tauri build --bundles app</code></pre></li>
 </ul>
 
 <h2 class="chapter" id="people">4. Add people</h2>
-<p>Add anyone who will advance or hold money. You can also add someone on the spot from any entry form, by choosing <strong>New person…</strong>.</p>
+<p>Add anyone who will advance or hold money. You can also add someone on the spot from any entry form: type their name, and the field offers to add it.</p>
 <ol class="steps">
   <li>On <strong>People</strong>, click <strong>+ Person</strong>, enter a name and click <strong>Done</strong> (or press <kbd>Esc</kbd>).</li>
   <li>Open the person and click <strong>Edit</strong>.</li>
@@ -407,10 +407,11 @@ pnpm tauri build --bundles app</code></pre></li>
 <ol class="steps">
   <li>Press <kbd>N</kbd>. <strong>Expense</strong> is already selected.</li>
   <li>Type the <strong>Amount</strong>. Sums such as <code>1,29+1,49</code> work too.</li>
-  <li>Choose <strong>Paid by</strong>. If it's a person, the panel shows their balance.</li>
-  <li>Choose the <strong>Category</strong>, or pick <strong>New category…</strong> at the end of the list.</li>
+  <li>Type a <strong>Description</strong>: it names the entry in the ledger.</li>
+  <li>Choose <strong>Paid by</strong>, typing to narrow the list. If it's a person, the panel shows their balance.</li>
+  <li>Choose the <strong>Category</strong>, or type a new one and pick the offer to add it.</li>
   <li>If it belongs to one, choose the <strong>Budget line</strong>. This also sets the line's category and cost centre.</li>
-  <li>Check the <strong>Date</strong>, and add a <strong>Counterparty</strong> (the shop or supplier) and a <strong>Description</strong>. Names you've used before are suggested as you type.</li>
+  <li>Check the <strong>Date</strong>, and add a <strong>Counterparty</strong> (the shop or supplier). Names you've used before are suggested as you type.</li>
   <li>Add the receipt under <strong>Receipt</strong>: drop the file there, or click to choose one.</li>
   <li>Click <strong>Save</strong> (<kbd>⌘↵</kbd>), or <strong>Save &amp; next</strong> (<kbd>⇧⌘↵</kbd>) to go straight on. The next form keeps the date and payer, which helps with a stack of receipts.</li>
 </ol>
@@ -523,7 +524,7 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>The <strong>Stock and sales</strong> plugin is for goods you get from a supplier and pass on, such as drinks, food or merch. Either you take them <strong>on commission</strong>, return what's unsold and pay for the rest, or you <strong>buy them outright</strong>. It's only for checking, and <strong>never creates entries</strong>. Real money still goes in through the normal forms, and an event settles the same without it.</p>
 <h3>Set it up</h3>
 <ol class="steps">
-  <li>In <strong>Settings → Plugins → Stock and sales</strong>, enter a name under <strong>New cost centre for goods</strong>, such as <code>Drinks</code>, and click <strong>Add cost centre</strong>. This creates the cost centre with the categories Drinks income, Drinks and Deposit. To use a cost centre you already have, tick it under <strong>Show on these cost centres</strong> instead.</li>
+  <li>In <strong>Settings → Plugins → Stock and sales</strong>, enter a name under <strong>New cost centre for goods</strong>, such as <code>Drinks</code>, and click <strong>Add cost centre</strong>. This creates the cost centre with the categories Drinks income, Drinks and Deposit. To use a cost centre you already have, tick it under <strong>Shown on</strong> instead.</li>
   <li>Open the cost centre in the sidebar, and click <strong>Supplier</strong> at the top of the section. Enter the <strong>Supplier</strong>, and if you have one, the category that holds a returnable deposit.</li>
   <li>Leave <strong>On commission</strong> ticked if you can return what's unsold. Untick it if you bought the goods outright: then there's no <strong>Returned</strong> count, and everything taken is billed.</li>
   <li>Click <strong>+ Product</strong> and enter its <strong>Cost per unit</strong>, without deposit, and its <strong>Donation per unit</strong>.</li>
@@ -536,7 +537,7 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>A cost centre has one supplier, with its own products and invoice check. If your goods come from two independent suppliers, give each one its own cost centre.</p>
 <ol class="steps">
   <li>In <strong>Settings → Cost centres</strong>, add one per supplier, such as <strong>Drinks Hoffmann</strong> and <strong>Drinks Krüger</strong>.</li>
-  <li>In <strong>Settings → Plugins → Stock and sales</strong>, tick both under <strong>Show on these cost centres</strong>.</li>
+  <li>In <strong>Settings → Plugins → Stock and sales</strong>, tick both under <strong>Shown on</strong>. Each gets a tab for its own data source.</li>
   <li>Open each one in the sidebar, click <strong>Supplier</strong> to enter its supplier, and add the products you get from them.</li>
   <li>Both can share a category such as Drinks. A category starts its lines in one cost centre, so check the <strong>Cost centre</strong> on each expense and income line, because that's how money reaches the right supplier's figures.</li>
 </ol>
@@ -684,19 +685,19 @@ pnpm tauri build --bundles app</code></pre></li>
   <li><strong>Integrity is checked</strong> on every open and save. <strong>Settings → File → Check again</strong> runs it on demand, and any problem shows in a banner.</li>
   <li><strong>It holds personal data:</strong> IBANs, names and receipts. Treat the file as you would a folder of bank details. Order IDs are the only buyer data it takes from a ticket sheet.</li>
 </ul>
-<p>Close the event (<kbd>⌘W</kbd>) before you copy, move or email its file, so that the copy is complete.</p>
+<p>Close the file (<kbd>⌘W</kbd>, or <strong>Close file</strong> at the foot of the sidebar) before you copy, move or email it, so that the copy is complete. This returns you to the start screen and leaves Lancelot running.</p>
 
 <h2 class="chapter" id="sources">Data sources</h2>
 <div class="note warn"><strong>Not yet tried with a real provider</strong><p>The <strong>Ticket API</strong> and <strong>Stock and sales</strong> plugins can pull from a web service. This has worked in the desktop app against a test service, but not with a real provider. Check the results carefully, and don't depend on this for a real event yet.</p></div>
 <ol class="steps">
-  <li>In <strong>Settings → Plugins</strong>, click <strong>Set up</strong> under the plugin.</li>
+  <li>In <strong>Settings → Plugins</strong>, click <strong>Configure</strong> on the plugin's card. Its settings open in the panel beside the page. For <strong>Stock and sales</strong> there's a tab for each cost centre it's shown on, and each tab holds that cost centre's own source, so the drinks and the merch can come from different providers.</li>
   <li>Enter a <strong>Name</strong>, the <strong>URL</strong>, the <strong>Auth header</strong> and the <strong>Token</strong>, which is the header's whole value, such as <code>Bearer abc123</code>.</li>
   <li>Under <strong>What the provider calls things</strong>, enter the field names your provider uses. A field marked optional can be left empty if the provider doesn't have it: for tickets, leave <strong>Order</strong> empty and they're counted per tier, as for a <a href="#tickets">sheet without order IDs</a>.</li>
   <li>Click <strong>Save and test</strong>, and check the sample rows it shows.</li>
   <li>Use <strong>Pull tickets</strong> on the Tickets page, or <strong>Pull logged</strong> on the cost centre page. You always review the changes first, and a failed pull changes nothing.</li>
 </ol>
 <figure>
-  <a href="images/data-source.png"><img src="images/data-source.png" width="1280" height="900" loading="lazy" alt="The data source form under the Stock and sales plugin, with fields for name, URL, auth header, token and field names."></a>
+  <a href="images/data-source.png"><img src="images/data-source.png" width="1280" height="900" loading="lazy" alt="The data source form in the panel beside Settings: fields for name, URL, auth header, token and the provider's field names."></a>
   <figcaption>Details stay on this computer for all events, and the token goes in the system's keychain. Neither is in the event file, so a source must be set up again on another computer.</figcaption>
 </figure>
 <p>Pulling is the only thing in Lancelot that uses the network.</p>

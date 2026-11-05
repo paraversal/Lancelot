@@ -6,6 +6,10 @@ export const ticketApi: Plugin = {
 	id: 'ticket-api',
 	name: 'Ticket API',
 	description: 'Pulls the tickets sold from a provider, with one item per ticket.',
+	summary: (ctx) => {
+		const source = ctx.dataSource();
+		return source ? `Pulls from ${source}` : 'No data source yet';
+	},
 	TicketSection: Section,
 	dataSource: {
 		list: 'tickets',

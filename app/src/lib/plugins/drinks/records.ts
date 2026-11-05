@@ -100,14 +100,24 @@ export function countsOf(records: PluginRecord[], product: number): Counts {
 	};
 }
 
+/** The cost centres the plugin is shown on. */
+export const attachedCentres = (records: PluginRecord[], centres: CostCentre[]) =>
+	centres.filter((centre) => centreSettings(records, centre.id) !== null);
+
+/**
+ * What a cost centre's data source is saved under: its name, so an event with a cost centre of the
+ * same name pulls from it too. Renaming one leaves its source under the old name.
+ */
+export const sourceKey = (name: string) => name.trim().toLowerCase();
+
 /** The cost centres the plugin is attached to that have products, with what it knows of them. */
 export function stockedCentres(records: PluginRecord[], centres: CostCentre[]) {
-	return centres.flatMap((centre) => {
-		const settings = centreSettings(records, centre.id);
+	return attachedCentres(records, centres).flatMap((centre) => {
+		const settings = centreSettings(records, centre.id)!;
 		const products = allProducts(records)
 			.filter((p) => p.centre === centre.id)
 			.map((product) => ({ product, counts: countsOf(records, product.id) }));
-		return settings && products.length ? [{ centre, settings, products }] : [];
+		return products.length ? [{ centre, settings, products }] : [];
 	});
 }
 

@@ -36,14 +36,14 @@ The app draws the frame around every slot, with the plugin's name and a "Plugin"
 
 A plugin that is switched off for the event shows none of these, and its records stay in the file.
 
-| Slot              | Shows                                  | Shown when                                                     | Props                                                       |
-| ----------------- | -------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
-| `CentreSection`   | On a cost centre's page                | `attachedTo(ctx, centre)` holds                                | `ctx`, `centre`, `setPanel`                                 |
-| `TicketSection`   | On the Tickets page                    | The event is open and its data source is set                   | `ctx`, `proposeImport`, `setPanel`                          |
-| `BudgetSection`   | On the Budget page, under the forecast | The event is open and `onBudget(ctx)` holds                    | `ctx`                                                       |
-| `CountSection`    | Under each amount in the Count panel   | `onCount(ctx, account)` holds                                  | `ctx`, `account`, `which`, `amount`, `setAmount`, `onSaved` |
-| `SettingsSection` | Under its entry in Settings → Plugins  | Always                                                         | `ctx`                                                       |
-| `ReportSection`   | In the settlement report               | `inReport(ctx)` holds, unless left out in the report's toolbar | `ctx`                                                       |
+| Slot              | Shows                                                   | Shown when                                                     | Props                                                       |
+| ----------------- | ------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------- |
+| `CentreSection`   | On a cost centre's page                                 | `attachedTo(ctx, centre)` holds                                | `ctx`, `centre`, `setPanel`                                 |
+| `TicketSection`   | On the Tickets page                                     | The event is open and its data source is set                   | `ctx`, `proposeImport`, `setPanel`                          |
+| `BudgetSection`   | On the Budget page, under the forecast                  | The event is open and `onBudget(ctx)` holds                    | `ctx`                                                       |
+| `CountSection`    | Under each amount in the Count panel                    | `onCount(ctx, account)` holds                                  | `ctx`, `account`, `which`, `amount`, `setAmount`, `onSaved` |
+| `SettingsSection` | In the panel its Configure opens, above the data source | Always                                                         | `ctx`                                                       |
+| `ReportSection`   | In the settlement report                                | `inReport(ctx)` holds, unless left out in the report's toolbar | `ctx`                                                       |
 
 `onBudget`, `onCount` and `inReport` default to yes when left out. A count section fills in the amount with `setAmount` and saves nothing. To keep its own records, it registers a function with `onSaved`, which runs once the panel's Save has saved the count, so Cancel leaves nothing. A report section prints on the report's sheet, so it uses `pt` sizes, avoids breaking inside a row and changes nothing.
 
@@ -109,7 +109,9 @@ for (const { row, cells } of table.rows) {
 
 ### Pulling from a provider
 
-Declare `dataSource` on the plugin. The app draws the form in Settings, keeps the details on this computer and the token in the keychain, and makes the request in Rust. `ctx.pull(fields)` returns only those fields, so a plugin never sees the token. `ctx.dataSource` is the source's name, or `null` until it is set up.
+Declare `dataSource` on the plugin. The app draws the form in Settings, keeps the details on this computer and the token in the keychain, and makes the request in Rust. `ctx.pull(fields)` returns only those fields, so a plugin never sees the token. `ctx.dataSource()` is the source's name, or `null` until it is set up.
+
+A plugin that needs one source per thing it is attached to declares `sourceTabs`, as Stock and sales does with one per cost centre: the Configure panel gets a tab for each, and `ctx.dataSource(key)` and `ctx.pull(fields, key)` ask for the one with that tab's key. Keep the key stable, since it is what the source is saved under on this computer. A cost centre's name is the natural one; renaming the cost centre leaves its source under the old name, to be set up again.
 
 A field marked `optional: true` may be left blank in Settings, when the provider doesn't have it, and missing from an item. An item without a required field is a problem and isn't read. One without an optional field is read without it, and listed in `missing` in case the plugin needs it after all. `pulled.fields` says which fields the source has, so a plugin can tell a provider without the field from items that lack it. Ticket API's Order field works this way. A provider's details never go in the repository or an event file.
 

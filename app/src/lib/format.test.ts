@@ -9,7 +9,8 @@ import {
 	formatPlain,
 	formatSize,
 	formatTimestamp,
-	setEventCurrency
+	setEventCurrency,
+	todayISO
 } from './format';
 import type { Currency } from './api/generated/Currency';
 import type { NumberFormat } from './api/generated/NumberFormat';
@@ -48,6 +49,13 @@ describe('formatDate', () => {
 	it('formats both styles', () => {
 		expect(formatDate('2026-06-03', 'de')).toBe('03.06.2026');
 		expect(formatDate('2026-06-03', 'en')).toBe('2026-06-03');
+	});
+});
+
+describe('todayISO', () => {
+	it('is the local calendar date', () => {
+		expect(todayISO(new Date(2026, 10, 5, 0, 30))).toBe('2026-11-05');
+		expect(todayISO(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31');
 	});
 });
 

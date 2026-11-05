@@ -11,7 +11,19 @@
 	import type { DataSourceSpec } from './api';
 	import { dataSources, optionalFields } from './sources.svelte';
 
-	let { id, spec }: { id: string; spec: DataSourceSpec } = $props();
+	let {
+		id,
+		spec,
+		open = false,
+		ondirty
+	}: {
+		id: string;
+		spec: DataSourceSpec;
+		/** Whether it starts on its fields, when the panel that opens it means to configure it. */
+		open?: boolean;
+		/** Whether closing would lose changes. */
+		ondirty?: (dirty: boolean) => void;
+	} = $props();
 
 	const view = $derived(dataSources.of(id));
 	let editing = $state(false);
@@ -26,6 +38,33 @@
 	let error = $state<{ field: string | null; message: string } | null>(null);
 	let result = $state<Pulled | null>(null);
 	const fieldError = (field: string) => (error?.field === field ? error.message : null);
+
+	// Opened from the panel: ready to fill in, not a second button to press.
+	let opened = false;
+	$effect(() => {
+		if (!open || opened) return;
+		opened = true;
+		edit();
+	});
+
+	// What the fields held when they were opened, so Esc can warn before the panel closes.
+	const saved = $derived(view?.source ?? null);
+	const dirty = $derived(
+		editing &&
+			(token.trim() !== '' ||
+				label !== (saved?.label ?? '') ||
+				url !== (saved?.url ?? '') ||
+				authHeader !== (saved?.authHeader ?? 'Authorization') ||
+				list !== (saved?.list ?? spec.list) ||
+				spec.fields.some((f) => (fields[f.key] ?? '') !== (saved?.fields[f.key] ?? f.usually)))
+	);
+	// The panel only needs to hear about a change, not about every redraw of it.
+	let reported: boolean | null = null;
+	$effect(() => {
+		if (dirty === reported) return;
+		reported = dirty;
+		ondirty?.(dirty);
+	});
 
 	function edit() {
 		untrack(() => {
@@ -198,13 +237,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-3);
-	}
-
-	/* Under the plugin's own settings, when it has any. */
-	:global(.body) > :not(:first-child).source {
-		margin-top: var(--spacing-3);
-		padding-top: var(--spacing-3);
-		border-top: 1px solid var(--color-rule);
 	}
 
 	.summary {

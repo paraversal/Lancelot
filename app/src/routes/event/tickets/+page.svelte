@@ -138,7 +138,7 @@
 
 		{#if !session.closed}
 			{#each sources as { plugin, ctx, Section } (plugin.id)}
-				{#if pluginEnabled(plugin.id) && (!plugin.dataSource || ctx.dataSource)}
+				{#if pluginEnabled(plugin.id) && (!plugin.dataSource || ctx.dataSource())}
 					<PluginFrame name={plugin.name}>
 						<Section
 							{ctx}

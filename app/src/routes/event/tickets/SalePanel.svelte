@@ -16,7 +16,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import Panel from '#lib/components/Panel.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatAmount, formatDate } from '#lib/format.ts';
+	import { formatAmount, formatDate, todayISO } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import { parseCount } from '#lib/tickets.ts';
 
@@ -57,8 +57,7 @@
 		tier = sale?.tier ?? last?.tier ?? tiers.at(-1)?.id ?? null;
 		count = sale ? String(sale.count) : '';
 		destination = sale?.destination ?? last?.destination ?? null;
-		date =
-			sale?.date ?? last?.date ?? snapshot.event.startsOn ?? new Date().toISOString().slice(0, 10);
+		date = sale?.date ?? last?.date ?? todayISO();
 		reference = sale?.reference ?? null;
 	});
 	const values = () => JSON.stringify([tier, count, destination, date, reference]);

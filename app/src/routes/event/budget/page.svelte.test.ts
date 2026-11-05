@@ -78,9 +78,7 @@ describe('The Budget page', () => {
 			screen.getByRole('button', { name: `New budget line in ${category.name}` })
 		);
 		expect(screen.getByText('New budget line')).toBeTruthy();
-		expect((screen.getByLabelText('Category') as HTMLSelectElement).value).toBe(
-			String(category.id)
-		);
+		expect((screen.getByLabelText('Category') as HTMLInputElement).value).toBe(category.name);
 	});
 });
 

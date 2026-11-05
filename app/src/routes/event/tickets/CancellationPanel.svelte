@@ -16,7 +16,7 @@
 	import Segmented from '#lib/components/Segmented.svelte';
 	import Select from '#lib/components/Select.svelte';
 	import TextField from '#lib/components/TextField.svelte';
-	import { formatAmount } from '#lib/format.ts';
+	import { formatAmount, todayISO } from '#lib/format.ts';
 	import { session } from '#lib/state/session.svelte.ts';
 	import { feeInput, orderName, parseCount, parseFee } from '#lib/tickets.ts';
 	import { ticketShare } from '#lib/tickets.svelte.ts';
@@ -71,11 +71,7 @@
 		sale = current?.sale ?? sales[0]?.id ?? 0;
 		count = current ? String(current.count) : '1';
 		percent = feeInput(terms?.refundBp ?? 10_000, format);
-		date =
-			terms?.date ??
-			tickets.imports.at(-1)?.date ??
-			snapshot.event.startsOn ??
-			new Date().toISOString().slice(0, 10);
+		date = terms?.date ?? tickets.imports.at(-1)?.date ?? todayISO();
 		payer = current?.payer ?? ticketAccount;
 		note = current?.note ?? null;
 	});

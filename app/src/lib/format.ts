@@ -66,6 +66,14 @@ export function formatDate(iso: string, format: NumberFormat): string {
 	return format === 'de' ? `${d}.${m}.${y}` : `${y}-${m}-${d}`;
 }
 
+/** Today's date in the user's time zone, as ISO. `toISOString` would use UTC, which is not today
+ * for everyone for part of the day. */
+export function todayISO(now = new Date()): string {
+	const month = String(now.getMonth() + 1).padStart(2, '0');
+	const day = String(now.getDate()).padStart(2, '0');
+	return `${now.getFullYear()}-${month}-${day}`;
+}
+
 /** `12.–14.06.2026` (De) or `2026-06-12 – 2026-06-14` (En); one date when the other is missing. */
 export function formatDateRange(
 	start: string | null,

@@ -8,7 +8,7 @@ No real event has been run in the app yet. That is the next test on the roadmap:
 
 - Create an event with a name, dates, location, notes and its accounts, and edit them later (R-EVT-1).
 - Each event is one `.lancelot` file holding everything, receipts included (R-ISO-1, R-ATT-2, R-NF-4).
-- The start screen lists recent events, with New and Open.
+- The start screen lists recent events, with New and Open. Close file at the foot of the sidebar leaves the event and returns there, without quitting the app.
 - A file that is already open elsewhere or damaged says so, instead of failing silently.
 - Every open and save checks the file's integrity, and Settings can run the check on demand. Problems show in a banner (R-COR-5).
 - Backups are kept automatically, the number kept is a setting, and Settings can restore one (R-NF-5).
@@ -91,14 +91,14 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 **Stock and sales**, for drinks or other goods from a supplier, attached to any cost centre:
 
-- A new cost centre for goods can be added from its settings, with an income and an expense category of its name and a Deposit category.
+- A new cost centre for goods can be added from its settings, with an income and an expense category of its name, a Deposit category, and a tab of its own for its data source.
 - Per cost centre: the supplier, whether the goods are on commission or bought outright, and an optional deposit category (R-DRK-1, R-DRK-2).
 - Per product: cost, donation, and units taken, returned (only on commission), left over and logged (R-DRK-5).
 - Billed units, the gap against what was logged, and the cost per unit gone (R-DRK-5, R-DRK-9).
 - Expected donations against what was collected. A paper tally is one product, `Tally` (R-DRK-7).
 - A table per cost centre in the settlement report, which the report's toolbar can leave out.
 - An invoice check, which leaves out the deposit category, and Book invoice, which opens the normal expense form filled in (R-DRK-2, R-DRK-8).
-- Pull logged counts from a data source, reviewing the changes first. A name that matches no product must be mapped once and is then remembered (R-DRK-6). Not yet tried with a real provider.
+- Pull logged counts from the cost centre's own data source, one per cost centre, reviewing the changes first. A name that matches no product must be mapped once and is then remembered (R-DRK-6). Not yet tried with a real provider.
 
 **Ticket sheet** imports `.ods`, `.xlsx` or `.csv`. It reads only the columns you name, even with other lines above them, and the rest of the file is never stored (R-TKT-3, R-TKT-17).
 
@@ -108,7 +108,7 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 **Cash box count** adds up notes and coins under both amounts when counting a cash account, and fills in the amount. The pieces are kept when the count is saved, and say so if the amount is changed afterwards. The notes and coins follow the event's currency (EUR, USD, GBP or CHF) and are shown apart; a group can also add custom denominations for packed money, such as a roll of coins, which sit apart from them and which a template copies.
 
-**Data sources** are set up with a form under the plugin, with Save and test. The details stay on this computer and the token in the system's keychain, so neither is in the event file. Pulling is the only use of the network (R-NF-3). Saving a token and pulling in the desktop app hasn't been fully tested yet.
+**Data sources** are set up in the panel that a plugin's Configure opens in Settings, with Save and test. The details stay on this computer and the token in the system's keychain, so neither is in the event file. Pulling is the only use of the network (R-NF-3). Saving a token and pulling in the desktop app hasn't been fully tested yet.
 
 ## Settling and closing
 

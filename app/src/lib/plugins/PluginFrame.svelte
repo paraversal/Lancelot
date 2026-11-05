@@ -2,6 +2,7 @@
 	// What marks something as a plugin, wherever one shows. The app draws it around the plugin's
 	// content, so a plugin can't leave it out and every plugin looks the same.
 	import type { Snippet } from 'svelte';
+	import PluginTag from './PluginTag.svelte';
 
 	let {
 		name,
@@ -21,7 +22,7 @@
 	<div class="head">
 		<div class="title">
 			<strong>{name}</strong>
-			<span class="tag">Plugin</span>
+			<PluginTag />
 			<span class="grow"></span>
 			{@render actions?.()}
 		</div>
@@ -50,14 +51,6 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
-	}
-
-	.tag {
-		padding: 1px 8px;
-		border-radius: var(--radius-pill);
-		background: var(--color-paper-sunk);
-		font-size: var(--type-xs);
-		color: var(--color-ink-muted);
 	}
 
 	.grow {

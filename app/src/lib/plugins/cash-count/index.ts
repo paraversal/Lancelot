@@ -8,6 +8,8 @@ export const cashCount: Plugin = {
 	id: 'cash-count',
 	name: 'Cash box count',
 	description: 'Count notes, coins and custom denominations when counting a cash account.',
+	// Which currency's notes and coins the settings list.
+	summary: (ctx) => `Denominations · ${ctx.currency}`,
 	// A net-movement account holds only the event's movement, not what is in the box (R-ISO-2).
 	onCount: (ctx, account) => {
 		const details = ctx.accounts.find((a) => a.id === account);

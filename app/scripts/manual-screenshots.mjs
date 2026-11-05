@@ -57,9 +57,13 @@ async function shot(name, { height = 800 } = {}) {
 	console.log(`  ${name}.png`);
 }
 
-/** Picks an option in a field that offers choices. */
-const choose = (label, option) =>
-	page.getByLabel(label, { exact: true }).first().selectOption({ label: option });
+/** Picks an account or category in a field that searches: what is typed narrows the list. */
+async function pick(label, name) {
+	const field = page.getByLabel(label, { exact: true }).first();
+	await field.click();
+	await field.fill(name);
+	await page.keyboard.press('Enter');
+}
 
 /** Saves the open panel and waits for the write, so the next step can't overtake it. */
 async function save(name = 'Save') {
@@ -131,15 +135,15 @@ const walks = {
 
 		await page.keyboard.press('n');
 		await page.getByLabel('Amount').fill('1,29+1,49+45,20');
-		await choose('Paid by', 'Anna');
-		await page.locator('.category select').first().selectOption({ label: 'Kitchen' });
 		await page.getByLabel('Description').fill('Spices and oil');
+		await pick('Paid by', 'Anna');
+		await pick('Category', 'Kitchen');
 		await page.getByLabel('Counterparty').fill('Wholesale market');
 		await shot('entry-expense', { height: 900 });
 
 		await page.locator('.add-line').click();
 		await page.locator('.line-amount input').first().fill('30');
-		await page.locator('.category select').nth(1).selectOption({ label: 'General' });
+		await pick('Category 2', 'General');
 		await page.locator('.line-amount input').nth(1).fill('17,98');
 		await shot('entry-split', { height: 900 });
 		await save();
@@ -176,9 +180,9 @@ const walks = {
 			.first()
 			.click();
 		await page.getByLabel('Description').fill('Security');
-		await page.getByRole('radiogroup', { name: 'Estimate' }).getByText('Quantity').click();
-		await page.getByLabel('Quantity', { exact: true }).fill('4');
-		await page.getByLabel('Unit price').fill('120');
+		await page.getByRole('radio', { name: 'Count × price' }).click();
+		await page.getByRole('textbox', { name: 'Count', exact: true }).fill('4');
+		await page.getByRole('textbox', { name: 'Unit price' }).fill('120');
 		await shot('budget-line');
 	},
 
@@ -221,9 +225,8 @@ const walks = {
 		await goTo('/event/people');
 		await button('Person').click();
 		await page.getByLabel('Name', { exact: true }).fill('Dana');
-		await page.keyboard.press('Enter');
+		await page.keyboard.press('Escape'); // Esc writes the name
 		await page.getByRole('row', { name: /^Dana/ }).waitFor();
-		await page.keyboard.press('Escape');
 
 		await goTo('/event/settings');
 		await page.getByLabel('New cost centre for goods').fill('Drinks');
@@ -324,7 +327,12 @@ const walks = {
 		await shot('settings', { height: 900 });
 		await page.getByRole('heading', { name: 'Plugins' }).scrollIntoViewIfNeeded();
 		await shot('settings-plugins', { height: 900 });
-		await button('Set up').first().click();
+		// A plugin's settings open in the panel beside the page.
+		await page
+			.locator('[data-testid="plugin-card"]')
+			.filter({ hasText: 'Ticket API' })
+			.getByRole('button', { name: 'Configure' })
+			.click();
 		await button('Save and test').scrollIntoViewIfNeeded();
 		await shot('data-source', { height: 900 });
 	},

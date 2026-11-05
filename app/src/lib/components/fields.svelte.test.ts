@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 
 import AmountField from './AmountField.svelte';
+import ChoiceField from './ChoiceField.svelte';
 import DateField from './DateField.svelte';
 import IbanField from './IbanField.svelte';
 import TextField from './TextField.svelte';
@@ -361,5 +362,114 @@ describe('IbanField', () => {
 		expect(screen.getByRole('tooltip').textContent).toBe(
 			'Checksum does not match; check for a typo'
 		);
+	});
+});
+
+describe('ChoiceField', () => {
+	const accounts = [
+		{ value: 1, label: 'Bank account' },
+		{ value: 2, label: 'Anna', group: 'People' },
+		{ value: 3, label: 'Nils', group: 'People' },
+		{ value: 4, label: 'Nora', group: 'People' }
+	];
+
+	function open(value: number | null = null) {
+		const onchange = vi.fn();
+		const onadd = vi.fn(async () => 9);
+		render(ChoiceField, {
+			label: 'Paid by',
+			value,
+			options: accounts,
+			addLabel: 'New person…',
+			onchange,
+			onadd
+		});
+		const field = screen.getByLabelText<HTMLInputElement>('Paid by');
+		return { field, onchange, onadd };
+	}
+
+	const shown = () =>
+		screen.queryAllByRole('option').map((o) => o.textContent?.replace(/\s+/g, ' ').trim());
+
+	it('opens every account and person when focused', async () => {
+		const { field } = open();
+		await fireEvent.focus(field);
+		expect(shown()).toEqual(['Bank account', 'Anna', 'Nils', 'Nora']);
+	});
+
+	it('narrows to the names a letter matches instead of adding a person', async () => {
+		const { field, onchange, onadd } = open();
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'N' } });
+		// People that start with N before the rest that only contain it; adding is last.
+		expect(shown()).toEqual(['Nils', 'Nora', 'Anna', 'Bank account', 'New person “N”']);
+		await fireEvent.keyDown(field, { key: 'Enter' });
+		expect(onchange).toHaveBeenCalledWith(3);
+		expect(onadd).not.toHaveBeenCalled();
+	});
+
+	it('adds the typed name only when nothing matches it', async () => {
+		const { field, onchange, onadd } = open();
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'Frida' } });
+		expect(shown()).toEqual(['New person “Frida”']);
+		await fireEvent.keyDown(field, { key: 'Enter' });
+		await vi.waitFor(() => expect(onchange).toHaveBeenCalledWith(9));
+		expect(onadd).toHaveBeenCalledWith('Frida');
+	});
+
+	it('offers nothing to add for a name that exists', async () => {
+		const { field } = open();
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'Nora' } });
+		expect(shown()).toEqual(['Nora']);
+	});
+
+	it('picks a match by arrow and Enter', async () => {
+		const { field, onchange } = open();
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'N' } });
+		await fireEvent.keyDown(field, { key: 'ArrowDown' });
+		await fireEvent.keyDown(field, { key: 'Enter' });
+		expect(onchange).toHaveBeenCalledWith(4);
+	});
+
+	it('leaves the save shortcuts to the panel', async () => {
+		const { field, onchange } = open();
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'N' } });
+		await fireEvent.keyDown(field, { key: 'Enter', metaKey: true });
+		await fireEvent.keyDown(field, { key: 'Enter', metaKey: true, shiftKey: true });
+		expect(onchange).not.toHaveBeenCalled();
+		expect(shown().length).toBeGreaterThan(0);
+	});
+
+	it('picks a match by clicking it', async () => {
+		const { field, onchange } = open();
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'ann' } });
+		await fireEvent.mouseDown(screen.getByRole('option', { name: 'Anna' }));
+		expect(onchange).toHaveBeenCalledWith(2);
+		expect(shown()).toEqual([]);
+	});
+
+	it('closes only the list on Esc, and leaves the chosen name alone', async () => {
+		const { field, onchange } = open(2);
+		await fireEvent.focus(field);
+		expect(shown().length).toBeGreaterThan(0);
+		expect(await fireEvent.keyDown(field, { key: 'Escape' })).toBe(false);
+		expect(shown()).toEqual([]);
+		expect(field.value).toBe('Anna');
+		expect(onchange).not.toHaveBeenCalled();
+		// With nothing open, the panel gets the Esc.
+		expect(await fireEvent.keyDown(field, { key: 'Escape' })).toBe(true);
+	});
+
+	it('leaves the field with the name it was showing', async () => {
+		const { field } = open(2);
+		await fireEvent.focus(field);
+		await fireEvent.input(field, { target: { value: 'Nil' } });
+		await fireEvent.blur(field);
+		expect(field.value).toBe('Anna');
 	});
 });

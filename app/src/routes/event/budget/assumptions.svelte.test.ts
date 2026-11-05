@@ -27,8 +27,12 @@ function load(change: (s: EventSnapshot) => void = () => {}) {
 	});
 }
 
-/** Amounts keep the euro sign on their line with a non-breaking space. */
-const plain = (text: string | null | undefined) => text?.replace(/\u00a0/g, ' ');
+/** Amounts keep the euro sign on their line with a non-breaking space; markup whitespace is noise. */
+const plain = (text: string | null | undefined) =>
+	text
+		?.replace(/\u00a0/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
 const strip = () => screen.getByRole('group', { name: 'Assumptions' });
 const ticketSales = () => snapshot.budgetLines.find((l) => l.description === 'Ticket sales')!;
 
@@ -168,5 +172,36 @@ describe('A budget line that scales', () => {
 		expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
 			'2 × 260 × 4,50 € = 2.340,00 €'
 		);
+	});
+
+	it('works out a plain count × price, with no assumption to name', async () => {
+		load();
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 12000, ambiguous: false, terms: 1 });
+		render(BudgetLinePanel, { line: null, category: null, onclose: () => {} });
+		await fireEvent.click(screen.getByRole('radio', { name: 'Count × price' }));
+		await fireEvent.input(screen.getByRole('textbox', { name: 'Count' }), {
+			target: { value: '4' }
+		});
+		await fireEvent.input(screen.getByRole('textbox', { name: 'Unit price' }), {
+			target: { value: '120' }
+		});
+		await vi.waitFor(() =>
+			expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
+				'4 × 120,00 € = 480,00 €'
+			)
+		);
+	});
+
+	it('needs at least one assumption for a price per assumption', async () => {
+		load();
+		const update = vi.spyOn(api, 'updateBudgetLine').mockResolvedValue(session.event!);
+		render(BudgetLinePanel, { line: ticketSales(), category: null, onclose: () => {} });
+		// The one assumption it had is unpicked, so there is no total to show.
+		await fireEvent.click(screen.getByRole('button', { name: /Guests/ }));
+		expect(screen.queryByTestId('budget-line-total')).toBeNull();
+
+		await fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+		expect(update).not.toHaveBeenCalled();
+		expect(screen.getByText('choose an assumption')).toBeTruthy();
 	});
 });

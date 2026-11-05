@@ -7,6 +7,14 @@ import type { DataSourceSpec } from './api';
 export const optionalFields = (spec: DataSourceSpec | undefined) =>
 	spec?.fields.filter((f) => f.optional).map((f) => f.key) ?? [];
 
+/**
+ * The id a source is saved under: the plugin's, and the tab's when the plugin has one source per
+ * tab, like Stock and sales one per cost centre. The details are in the app's data folder and the
+ * token is in the keychain, both by this id.
+ */
+export const sourceId = (plugin: string, tab?: string | null) =>
+	tab ? `${plugin}:${tab}` : plugin;
+
 let current = $state<DataSources>({});
 
 export const dataSources = {

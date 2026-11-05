@@ -59,7 +59,7 @@
 
 <fieldset class="section" disabled={ctx.closed}>
 	{#if ctx.costCentres.length}
-		<span class="note">Show on these cost centres</span>
+		<span class="note">Shown on</span>
 		<ul>
 			{#each ctx.costCentres as c (c.id)}
 				<li>
@@ -84,7 +84,7 @@
 				oncommit={(v) => (name = v)}
 			>
 				{#snippet hint()}Such as Drinks or Merch. It gets an income and an expense category of its
-					name, and Deposit.{/snippet}
+					name, Deposit, and a tab below for its own data source.{/snippet}
 			</TextField>
 			<div><Button size="sm" icon="plus" onclick={add}>Add cost centre</Button></div>
 		</div>

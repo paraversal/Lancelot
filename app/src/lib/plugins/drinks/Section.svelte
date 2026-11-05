@@ -10,7 +10,7 @@
 	import ProductPanel from './ProductPanel.svelte';
 	import { PULL_FIELDS } from './pull';
 	import PullPanel from './PullPanel.svelte';
-	import { allProducts, centreSettings, countsOf, NEW_CENTRE } from './records';
+	import { allProducts, centreSettings, countsOf, NEW_CENTRE, sourceKey } from './records';
 	import SupplierPanel from './SupplierPanel.svelte';
 
 	let { ctx, centre, setPanel }: CentreSectionProps = $props();
@@ -25,6 +25,8 @@
 	const figures = $derived(computeFigures(centre.id, settings, products, ctx.txns));
 	const collected = $derived(ctx.figuresOf(centre.id)?.income.actual ?? 0);
 	const shortfall = $derived(figures.expected === null ? null : figures.expected - collected);
+	/** This cost centre's own source: another one is set up for each other cost centre. */
+	const source = $derived(ctx.dataSource(sourceKey(centre.name)));
 
 	let selected = $state<number | null>(null);
 	let adding = $state(false);
@@ -52,7 +54,7 @@
 		pulling = true;
 		pullError = null;
 		try {
-			show({ pull: await ctx.pull(PULL_FIELDS) });
+			show({ pull: await ctx.pull(PULL_FIELDS, sourceKey(centre.name)) });
 		} catch (e) {
 			if (!(e instanceof Error)) throw e;
 			pullError = e.message;
@@ -148,7 +150,7 @@
 				<span>{formatAmount(figures.costPerUnit, format)} per unit</span>
 			{/if}
 			{#if !ctx.closed}
-				{#if ctx.dataSource}
+				{#if source}
 					<Button size="sm" disabled={pulling} onclick={pull}>Pull logged</Button>
 				{/if}
 				<Button size="sm" onclick={invoice}>Book invoice</Button>

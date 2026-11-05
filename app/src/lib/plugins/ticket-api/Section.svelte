@@ -39,7 +39,7 @@
 
 <div class="section">
 	<div class="row">
-		<span class="note">From {ctx.dataSource}</span>
+		<span class="note">From {ctx.dataSource()}</span>
 		<Button size="sm" disabled={pulling} onclick={pull}>Pull tickets</Button>
 	</div>
 	{#if error}<p class="form-error">{error}</p>{/if}

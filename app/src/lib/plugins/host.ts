@@ -6,7 +6,7 @@ import { onFileDrop } from '../dragdrop';
 import { session } from '../state/session.svelte';
 import type { EntryProposal, PluginContext } from './api';
 import { plugins } from './registry';
-import { dataSources, optionalFields } from './sources.svelte';
+import { dataSources, optionalFields, sourceId } from './sources.svelte';
 
 /** The app's own record in a plugin's namespace: present when the plugin is switched off. */
 const OFF_KEY = 'host:off';
@@ -99,11 +99,16 @@ export function pluginContext(id: string): PluginContext {
 		readTable: (path, columns) => api.readTable(path, columns),
 		parseAmount: async (text) => (await api.parseAmount(text, true)).cents,
 		parseDate: async (text) => (await api.parseDate(text)).date,
-		get dataSource() {
-			return dataSources.of(id)?.source.label ?? null;
+		// The source a plugin reads from, or the one of a tab: a cost centre, for Stock and sales.
+		dataSource(tab) {
+			return dataSources.of(sourceId(id, tab))?.source.label ?? null;
 		},
 		// What may be missing comes from what the plugin declared, not from the call.
-		pull: (fields) =>
-			api.pullDataSource(id, fields, optionalFields(plugins.find((p) => p.id === id)?.dataSource))
+		pull: (fields, tab) =>
+			api.pullDataSource(
+				sourceId(id, tab),
+				fields,
+				optionalFields(plugins.find((p) => p.id === id)?.dataSource)
+			)
 	};
 }

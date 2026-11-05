@@ -16,7 +16,7 @@
 	// result (`= 1.234,50 €`), in attention when the input was ambiguous, and turns minus with a
 	// warning when it cannot be read. Nothing is committed until the input is valid. A sum
 	// (`1,29+1,49`) stays as typed so it can be checked; only its total is ever saved.
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, onMount, untrack } from 'svelte';
 	import { api, errorMessage } from '../api';
 	import type { Cents } from '../api/generated/Cents';
 	import type { NumberFormat } from '../api/generated/NumberFormat';
@@ -26,10 +26,12 @@
 
 	let {
 		label,
+		name,
 		value,
 		format,
 		allowNegative = false,
 		large = false,
+		preview = true,
 		previewBelow = false,
 		text: initial,
 		autofocus = false,
@@ -38,11 +40,15 @@
 		oncommit
 	}: {
 		label?: string;
+		/** The accessible name when the field is named by what sits beside it, not a label. */
+		name?: string;
 		value: Cents | null;
 		format: NumberFormat;
 		allowNegative?: boolean;
 		/** The bigger type of the entry panel's main amount. */
 		large?: boolean;
+		/** The `= …` line of what was read; off where the field is narrow or a total is beside it. */
+		preview?: boolean;
 		/** For narrow fields: the preview goes in the hint line under the field. */
 		previewBelow?: boolean;
 		/** Pre-fills the input, e.g. on the design page. */
@@ -59,10 +65,16 @@
 	let text = $state('');
 	let parsed = $state<ParsedSum | null>(null);
 	let error = $state<string | null>(null);
+	let inputEl = $state<HTMLInputElement | null>(null);
 	let seq = 0;
 	// A read that returns after the field is gone must not touch the form that replaced it.
 	let gone = false;
 	onDestroy(() => (gone = true));
+	// The autofocus attribute is not honoured when the form is remounted in place ("Save & next"),
+	// so focus once here, as TextField does.
+	onMount(() => {
+		if (autofocus) inputEl?.focus();
+	});
 
 	function canonical(c: Cents | null) {
 		return c === null ? '' : formatPlain(c, format);
@@ -119,7 +131,7 @@
 	// The preview confirms what was read while typing, even when the text already looks like
 	// the result (`1.20` in En); outside the field it shows only when the text differs.
 	let focused = $state(false);
-	const preview = $derived(
+	const previewText = $derived(
 		parsed && text.trim() && (focused || text.trim() !== canonical(parsed.cents))
 			? formatAmount(parsed.cents, format)
 			: null
@@ -135,16 +147,18 @@
 </script>
 
 {#snippet below()}
-	{#if !error && preview}<span class:ambiguous={parsed?.ambiguous}>= {preview}</span>{/if}
+	{#if !error && previewText}<span class:ambiguous={parsed?.ambiguous}>= {previewText}</span>{/if}
 {/snippet}
 
-<Field {label} {id} {error} hint={previewBelow ? below : undefined}>
+<Field {label} {id} {error} hint={preview && previewBelow ? below : undefined}>
 	<!-- svelte-ignore a11y_autofocus -->
 	<input
 		{id}
+		bind:this={inputEl}
 		type="text"
 		inputmode="decimal"
 		placeholder={canonical(0)}
+		aria-label={label ? undefined : name}
 		bind:value={text}
 		oninput={parse}
 		onfocus={() => (focused = true)}
@@ -156,8 +170,8 @@
 		aria-invalid={!!error}
 		aria-describedby={error ? `${id}-error` : undefined}
 	/>
-	{#if !error && preview && !previewBelow}
-		<span class="preview" class:ambiguous={parsed?.ambiguous}>= {preview}</span>
+	{#if !error && preview && previewText && !previewBelow}
+		<span class="preview" class:ambiguous={parsed?.ambiguous}>= {previewText}</span>
 	{/if}
 </Field>
 

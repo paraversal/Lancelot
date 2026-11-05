@@ -15,9 +15,18 @@ const props = { txn: null, previewing: null, onpreview() {}, onclose() {}, onsav
 const budgetLine = (description: string) =>
 	snapshot.budgetLines.find((b) => b.description === description)!;
 
-const category = () => screen.getAllByRole<HTMLSelectElement>('combobox')[1];
 const budget = () => screen.getByLabelText<HTMLSelectElement>('Budget line');
 const centre = () => screen.getByLabelText<HTMLSelectElement>('Cost centre');
+const category = () => screen.getByLabelText<HTMLInputElement>('Category');
+const named = (id: number) => snapshot.accounts.find((a) => a.id === id)!.name;
+
+/** Chooses an account or category by typing its name, as a person would. */
+async function pick(label: string, name: string) {
+	const field = screen.getByLabelText(label);
+	await fireEvent.focus(field);
+	await fireEvent.input(field, { target: { value: name } });
+	await fireEvent.keyDown(field, { key: 'Enter' });
+}
 
 const groupsOf = (select: HTMLSelectElement) =>
 	[...select.querySelectorAll('optgroup')].map((g) => g.label);
@@ -31,6 +40,31 @@ beforeEach(() => {
 		snapshot: structuredClone(snapshot),
 		integrity: { issues: [] },
 		backupError: null
+	});
+});
+
+describe('The entry form', () => {
+	it('puts the description under the amount, before the payer', () => {
+		render(EntryPanel, props);
+		const follows = (a: Node, b: Node) =>
+			!!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+		expect(follows(screen.getByLabelText('Amount'), screen.getByLabelText('Description'))).toBe(
+			true
+		);
+		expect(follows(screen.getByLabelText('Description'), screen.getByLabelText('Paid by'))).toBe(
+			true
+		);
+	});
+
+	it('starts a new entry today, not at the event start', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(2026, 10, 5, 9));
+		try {
+			render(EntryPanel, props);
+			expect(screen.getByLabelText<HTMLInputElement>('Date').value).toBe('05.11.2026');
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
 
@@ -123,9 +157,7 @@ describe('A settle', () => {
 
 	it('counts the entry being edited for anyone else', async () => {
 		render(EntryPanel, { ...props, txn: saved('Reimbursement Clara') });
-		await fireEvent.change(screen.getByLabelText('Person'), {
-			target: { value: String(person('Malte')) }
-		});
+		await pick('Person', 'Malte');
 		expect(screen.getByText('Malte is still owed 15,00 €')).toBeTruthy();
 	});
 
@@ -288,7 +320,7 @@ describe('A split line', () => {
 	it('lists the budget lines of its own category first, outside the groups', async () => {
 		render(EntryPanel, props);
 		const van = budgetLine('Van rental');
-		await fireEvent.change(category(), { target: { value: String(van.category) } });
+		await pick('Category', named(van.category));
 		expect(groupsOf(budget())).not.toContain('Mobility');
 		expect(budget().options[1].text).toBe('Van rental');
 	});
@@ -297,7 +329,7 @@ describe('A split line', () => {
 		render(EntryPanel, props);
 		const crates = budgetLine('Drink crates');
 		await fireEvent.change(budget(), { target: { value: String(crates.id) } });
-		expect(category().value).toBe(String(crates.category));
+		expect(category().value).toBe(named(crates.category));
 		expect(centre().value).toBe(String(crates.costCentre));
 		expect(centre().closest('fieldset')?.disabled).toBe(true);
 	});
@@ -308,9 +340,7 @@ describe('A split line', () => {
 		await fireEvent.input(screen.getByLabelText('Amount'), { target: { value: '12' } });
 		await fireEvent.click(screen.getByRole('button', { name: /^Save(?! &)/ }));
 		await screen.findAllByText('Choose who');
-		await fireEvent.change(screen.getByLabelText('Paid by'), {
-			target: { value: String(snapshot.accounts.find((a) => a.kind === 'asset')!.id) }
-		});
+		await pick('Paid by', snapshot.accounts.find((a) => a.kind === 'asset')!.name);
 		expect(screen.queryByText('Choose who')).toBeNull();
 	});
 
@@ -322,9 +352,7 @@ describe('A split line', () => {
 		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 1200, ambiguous: false, terms: 1 });
 		render(EntryPanel, props);
 		const van = budgetLine('Van rental');
-		await fireEvent.change(screen.getByLabelText('Paid by'), {
-			target: { value: String(snapshot.accounts.find((a) => a.kind === 'asset')!.id) }
-		});
+		await pick('Paid by', snapshot.accounts.find((a) => a.kind === 'asset')!.name);
 		await fireEvent.input(screen.getByLabelText('Amount'), { target: { value: '12' } });
 		await fireEvent.change(budget(), { target: { value: String(van.id) } });
 		await fireEvent.click(screen.getByRole('button', { name: /^Save(?! &)/ }));
@@ -333,6 +361,38 @@ describe('A split line', () => {
 		expect(entry).toMatchObject({
 			type: 'expense',
 			lines: [{ account: van.category, budgetLine: van.id }]
+		});
+	});
+});
+
+describe('Choosing an account', () => {
+	it('shows the payer it was given', async () => {
+		render(EntryPanel, props);
+		const asset = snapshot.accounts.find((a) => a.kind === 'asset')!;
+		await pick('Paid by', asset.name);
+		expect((screen.getByLabelText('Paid by') as HTMLInputElement).value).toBe(asset.name);
+	});
+});
+
+describe('Save & next', () => {
+	it('starts the next entry at the amount', async () => {
+		vi.spyOn(api, 'saveTxn').mockResolvedValue({
+			...session.event!,
+			revision: Date.now()
+		} as never);
+		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 1200, ambiguous: false, terms: 1 });
+		render(EntryPanel, props);
+		const before = screen.getByLabelText('Amount');
+		await fireEvent.input(before, { target: { value: '12' } });
+		await pick('Paid by', snapshot.accounts.find((a) => a.kind === 'asset')!.name);
+		await pick('Category', snapshot.accounts.find((a) => a.kind === 'expense')!.name);
+		await fireEvent.click(screen.getByRole('button', { name: /^Save & next/ }));
+		await vi.waitFor(() => expect(api.saveTxn).toHaveBeenCalled());
+		// The new form takes the keys at the amount, even with the old one still on its way out.
+		await vi.waitFor(() => {
+			const fresh = screen.getAllByLabelText('Amount').find((el) => el !== before);
+			expect(fresh).toBeTruthy();
+			expect(document.activeElement).toBe(fresh);
 		});
 	});
 });

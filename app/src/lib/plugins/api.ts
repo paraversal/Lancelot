@@ -120,14 +120,17 @@ export interface PluginContext {
 	parseAmount(text: string): Promise<number>;
 	/** A cell or typed text as an ISO date. Rejects what it can't read. */
 	parseDate(text: string): Promise<string>;
-	/** What this plugin's data source is called; null until it is set up in Settings. */
-	readonly dataSource: string | null;
 	/**
-	 * Asks the data source for these fields. Nothing else in its answer reaches the plugin. A field
-	 * declared optional is left out of a row that lacks it, and out of `fields` when the source has
-	 * no name for it.
+	 * What this plugin's data source is called, or the one of a tab (with the tab's key); null
+	 * until it is set up in Settings. Without `sourceTabs` there is only the one.
 	 */
-	pull(fields: string[]): Promise<Pulled>;
+	dataSource(tab?: string): string | null;
+	/**
+	 * Asks the data source, or the one of a tab, for these fields. Nothing else in its answer
+	 * reaches the plugin. A field declared optional is left out of a row that lacks it, and out of
+	 * `fields` when the source has no name for it.
+	 */
+	pull(fields: string[], tab?: string): Promise<Pulled>;
 }
 
 export type CentreSectionProps = {
@@ -174,12 +177,31 @@ export type DataSourceSpec = {
 	fields: { key: string; label: string; usually: string; optional?: boolean }[];
 };
 
+/**
+ * A tab of the Configure panel with a data source of its own, like a cost centre for Stock and
+ * sales: the drinks and the merch can come from different providers.
+ */
+export type SourceTab = {
+	/**
+	 * What the source is saved under, apart from the plugin's other tabs. A cost centre's name is
+	 * one, so an event with a cost centre of that name pulls from the same source.
+	 */
+	key: string;
+	/** What the panel calls it. */
+	title: string;
+};
+
 export interface Plugin {
 	/** Stored with its records: never changes. Lower-case letters, digits and hyphens. */
 	id: string;
 	name: string;
 	/** One sentence for Settings: what it adds to the app. */
 	description: string;
+	/**
+	 * One line for its card in Settings: how it is set up, such as the source it pulls from. Left
+	 * out, or null, when it has nothing to set up.
+	 */
+	summary?(ctx: PluginContext): string | null;
 	/** Whether `CentreSection` shows on this cost centre's page. */
 	attachedTo?(ctx: PluginContext, centre: number): boolean;
 	CentreSection?: Component<CentreSectionProps>;
@@ -197,4 +219,10 @@ export interface Plugin {
 	ReportSection?: Component<ReportSectionProps>;
 	/** Offers a data source. `TicketSection` then waits until it is set up. */
 	dataSource?: DataSourceSpec;
+	/**
+	 * One data source per entry, such as one per cost centre it is shown on: each is set up in its
+	 * own tab of the Configure panel, and `dataSource(key)` and `pull(fields, key)` ask for one.
+	 * Left out, the plugin has the one source it declared.
+	 */
+	sourceTabs?(ctx: PluginContext): SourceTab[];
 }

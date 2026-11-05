@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The event's sidebar: name and dates, the pages with their counts, the cost centres, the
-	// History link, and the file name, which opens Settings.
+	// History link, and the file name, which opens Settings. Close file leaves the event for the
+	// start screen without quitting the app.
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import { markerTravel } from '../motion/effects';
@@ -12,7 +13,7 @@
 	import { conflictCount } from '../tickets';
 	import Icon from './Icon.svelte';
 
-	let { event }: { event: OpenEvent } = $props();
+	let { event, onclose }: { event: OpenEvent; onclose: () => void } = $props();
 
 	const snapshot = $derived(event.snapshot);
 	// Open ticket conflicts take the place of the count, as a badge (R-TKT-13).
@@ -130,6 +131,15 @@
 			<Icon name="gear" />
 			<span>{event.fileName}</span>
 		</a>
+		<button
+			type="button"
+			class="file close"
+			title="Close the file and return to the start screen (⌘W)"
+			onclick={onclose}
+		>
+			<Icon name="x" />
+			<span>Close file</span>
+		</button>
 	</div>
 </nav>
 
@@ -257,6 +267,23 @@
 		gap: var(--spacing-2);
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	/* A file link is an anchor; closing is an action, so it needs the link's row by hand. */
+	.close {
+		display: flex;
+		align-items: center;
+		width: 100%;
+		height: 32px;
+		padding: 0 10px;
+		border: none;
+		border-radius: var(--radius-field);
+		background: none;
+		cursor: pointer;
+	}
+
+	.close:hover {
+		background: color-mix(in srgb, var(--color-rule) 60%, transparent);
 	}
 
 	.file span {

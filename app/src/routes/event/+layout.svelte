@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { closeFile } from '#lib/actions.ts';
 	import { pageIn } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
 	import { api } from '#lib/api/index.ts';
@@ -29,7 +30,7 @@
 
 {#if session.event}
 	<div class="window">
-		<Sidebar event={session.event} />
+		<Sidebar event={session.event} onclose={() => closeFile()} />
 		<div class="content">
 			<IntegrityBanner report={session.event.integrity} oncheck={check} />
 			<main>

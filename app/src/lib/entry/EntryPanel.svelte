@@ -31,7 +31,7 @@
 	import TextField from '#lib/components/TextField.svelte';
 	import type { Attachment } from '#lib/api/generated/Attachment.ts';
 	import Receipts from './Receipts.svelte';
-	import { formatAmount } from '#lib/format.ts';
+	import { formatAmount, todayISO } from '#lib/format.ts';
 	import { counterparties } from '#lib/ledger.ts';
 	import { formIn, formOut } from '#lib/motion/effects.ts';
 	import { level } from '#lib/motion/mode.svelte.ts';
@@ -134,7 +134,7 @@
 			lines = [{ account: null, amount: null }];
 			party = lastPayer;
 			other = null;
-			date = lastDate ?? snapshot.event.startsOn ?? new Date().toISOString().slice(0, 10);
+			date = lastDate ?? todayISO();
 			counterparty = null;
 			description = null;
 			notes = null;
@@ -531,6 +531,14 @@
 						{#if fieldError('amount')}<span class="form-error">{fieldError('amount')}</span>{/if}
 					</div>
 
+					<!-- The entry's name, right under its figure: it is what the ledger row shows. -->
+					<TextField
+						label="Description"
+						value={description}
+						oninput={(t) => (description = t.trim() || null)}
+						oncommit={(v) => (description = v)}
+					/>
+
 					{#if kind !== 'settle'}
 						<ChoiceField
 							label={partyLabel}
@@ -706,12 +714,6 @@
 							/>
 						{/if}
 					</div>
-					<TextField
-						label="Description"
-						value={description}
-						oninput={(t) => (description = t.trim() || null)}
-						oncommit={(v) => (description = v)}
-					/>
 					<TextField
 						label="Notes"
 						value={notes}

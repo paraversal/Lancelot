@@ -80,6 +80,23 @@ describe('The data source form', () => {
 		expect(screen.getByTestId('data-source-result').textContent).toContain('Regular');
 	});
 
+	it('starts on its fields when the panel that opens it means to configure it', async () => {
+		render(DataSourceForm, { id: 'ticket-api', spec, open: true });
+		await settled();
+		expect(screen.getByLabelText('URL')).toBeTruthy();
+		expect(button(/Save and test/)).toBeTruthy();
+	});
+
+	it('says when there are changes the panel would lose on closing', async () => {
+		const ondirty = vi.fn();
+		render(DataSourceForm, { id: 'ticket-api', spec, open: true, ondirty });
+		await settled();
+		expect(ondirty).toHaveBeenLastCalledWith(false);
+
+		await fireEvent.input(screen.getByLabelText('URL'), { target: { value: 'https://y' } });
+		expect(ondirty).toHaveBeenLastCalledWith(true);
+	});
+
 	it('shows a saved token only as saved', async () => {
 		dataSources.set({ 'ticket-api': { source, hasToken: true } });
 		render(DataSourceForm, { id: 'ticket-api', spec });
@@ -109,7 +126,7 @@ describe('The data source form', () => {
 
 describe('The ticket API plugin', () => {
 	function setup(pull: PluginContext['pull'], ticketOrderIds: boolean | null = null) {
-		const ctx = { dataSource: 'Shop', pull, ticketOrderIds } as unknown as PluginContext;
+		const ctx = { dataSource: () => 'Shop', pull, ticketOrderIds } as unknown as PluginContext;
 		const proposeImport = vi.fn();
 		render(TicketApiSection, { ctx, proposeImport, setPanel: vi.fn() });
 		return proposeImport;

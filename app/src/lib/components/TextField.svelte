@@ -6,6 +6,7 @@
 
 	let {
 		label,
+		name,
 		placeholder,
 		value,
 		multiline = false,
@@ -16,8 +17,10 @@
 		oninput,
 		oncommit
 	}: {
-		label: string;
-		/** Shown in an empty field. Without a label, it also names the field. */
+		label?: string;
+		/** The accessible name when the field is named by what sits beside it, not a label. */
+		name?: string;
+		/** Shown in an empty field; names the field when there is no label or name. */
 		placeholder?: string;
 		value: string | null;
 		multiline?: boolean;
@@ -120,7 +123,7 @@
 			bind:this={inputEl}
 			bind:value={text}
 			{placeholder}
-			aria-label={label ? undefined : placeholder}
+			aria-label={label ? undefined : (name ?? placeholder)}
 			oninput={() => oninput?.(text)}
 			onfocus={() => (escaped = false)}
 			onblur={() => {
@@ -139,7 +142,7 @@
 			bind:this={inputEl}
 			bind:value={text}
 			{placeholder}
-			aria-label={label ? undefined : placeholder}
+			aria-label={label ? undefined : (name ?? placeholder)}
 			role={suggestions.length ? 'combobox' : undefined}
 			aria-expanded={suggestions.length ? showing : undefined}
 			aria-controls={suggestions.length ? `${id}-suggestions` : undefined}

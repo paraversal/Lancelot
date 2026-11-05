@@ -109,21 +109,26 @@
 	const total = $derived(
 		mode === 'amount'
 			? amount
-			: count !== null && unitPrice !== null
+			: count !== null && unitPrice !== null && (mode !== 'per' || picked.length)
 				? picked.reduce((n, a) => n * a.value, count) * unitPrice
 				: null
 	);
-	const breakdown = $derived(
-		picked.length && count !== null && unitPrice !== null
-			? [
-					...(count === 1 ? [] : [String(count)]),
-					...picked.map((a) => String(a.value)),
-					formatAmount(unitPrice, format)
-				].join(' × ') + ' = '
-			: '= '
+	// What is multiplied: the count and the assumptions' values, without the price itself.
+	const factors = $derived([
+		...(count !== null && mode === 'quantity' && (count !== 1 || !picked.length)
+			? [String(count)]
+			: []),
+		...picked.map((a) => String(a.value))
+	]);
+	const formula = $derived(
+		count !== null && unitPrice !== null && factors.length
+			? [...factors, formatAmount(unitPrice, format)].join(' × ')
+			: ''
 	);
 
 	const names = $derived(picked.map((a) => a.name).join(' × '));
+	// The price field beside the assumptions is named by them, as the tab names the count.
+	const priceName = $derived(names ? `Price per ${names}` : 'Price per assumption');
 
 	// The mode before the latest switch: Segmented sets the new one before it calls back.
 	let last = untrack(() => mode);
@@ -274,71 +279,104 @@
 				>{/if}
 		</div>
 
-		<div class="labelled">
+		<div class="estimate">
 			<span class="form-label">Estimate</span>
-			<Segmented
-				label="Estimate"
-				bind:value={mode}
-				options={[
-					{ value: 'amount', label: 'Amount' },
-					{ value: 'quantity', label: 'Count × price' },
-					...(snapshot.assumptions.length || mode === 'per'
-						? [{ value: 'per' as const, label: 'Per assumption' }]
-						: [])
-				]}
-				onchange={changeMode}
-			/>
-			{#if mode === 'amount'}
-				<AmountField
-					value={amount}
-					{format}
-					bind:invalid={amountInvalid}
-					oninput={(v) => (amount = v)}
-				/>
-			{:else}
-				{#if mode === 'per' || per.length}
-					<div class="per" role="group" aria-label="Times">
-						<span class="form-label">{mode === 'per' ? 'Per' : 'Times'}</span>
-						{#each snapshot.assumptions as a (a.id)}
-							<Chip
-								label={a.name}
-								count={a.value}
-								active={per.includes(a.id)}
-								onclick={() => toggle(a.id)}
-							/>
-						{/each}
-					</div>
-				{/if}
-				{#if mode === 'per'}
-					<AmountField
-						label={names ? `Price per ${names}` : 'Price per'}
-						value={unitPrice}
-						{format}
-						bind:invalid={unitPriceInvalid}
-						oninput={(v) => (unitPrice = v)}
+			<div class="method">
+				<div class="method-tabs">
+					<Segmented
+						label="Estimate"
+						variant="tabs"
+						bind:value={mode}
+						options={[
+							{ value: 'amount', label: 'Amount' },
+							{ value: 'quantity', label: 'Count × price' },
+							...(snapshot.assumptions.length || mode === 'per'
+								? [{ value: 'per' as const, label: 'Per assumption' }]
+								: [])
+						]}
+						onchange={changeMode}
 					/>
-				{:else}
-					<div class="times">
-						<TextField
-							label="Count"
-							value={quantity}
-							oninput={(v) => (quantity = v)}
-							oncommit={(v) => (quantity = v ?? '')}
-						/>
-						<span class="x">×</span>
-						<AmountField
-							label="Unit price"
-							value={unitPrice}
-							{format}
-							bind:invalid={unitPriceInvalid}
-							oninput={(v) => (unitPrice = v)}
-						/>
+				</div>
+				<div class="method-body">
+					<div class="controls">
+						{#if mode === 'amount'}
+							<AmountField
+								value={amount}
+								{format}
+								bind:invalid={amountInvalid}
+								oninput={(v) => (amount = v)}
+							/>
+						{:else if mode === 'quantity'}
+							{#if per.length}
+								<div class="scales" role="group" aria-label="Times">
+									<span class="form-label">Times</span>
+									{#each snapshot.assumptions as a (a.id)}
+										<Chip
+											label={a.name}
+											count={a.value}
+											active={per.includes(a.id)}
+											onclick={() => toggle(a.id)}
+										/>
+									{/each}
+								</div>
+							{/if}
+							<div class="terms count-terms">
+								<div class="count">
+									<TextField
+										name="Count"
+										value={quantity}
+										oninput={(v) => (quantity = v)}
+										oncommit={(v) => (quantity = v ?? '')}
+									/>
+								</div>
+								<span class="times">×</span>
+								<div class="price">
+									<AmountField
+										name="Unit price"
+										value={unitPrice}
+										{format}
+										bind:invalid={unitPriceInvalid}
+										oninput={(v) => (unitPrice = v)}
+									/>
+								</div>
+							</div>
+						{:else}
+							<div class="terms per-terms">
+								<div class="scales" role="group" aria-label="Per assumption">
+									{#each snapshot.assumptions as a (a.id)}
+										<Chip
+											label={a.name}
+											count={a.value}
+											active={per.includes(a.id)}
+											onclick={() => toggle(a.id)}
+										/>
+									{/each}
+								</div>
+								<div class="price">
+									<AmountField
+										name={priceName}
+										value={unitPrice}
+										{format}
+										bind:invalid={unitPriceInvalid}
+										oninput={(v) => (unitPrice = v)}
+									/>
+								</div>
+							</div>
+						{/if}
 					</div>
-				{/if}
-				{#if total !== null}<span class="hint" data-testid="budget-line-total"
-						>{breakdown}{formatAmount(total, format)}</span
-					>{/if}
-			{/if}
+					<!-- Only as tall as its line: an empty estimate stays compact and the sum opens
+					     when there is something to add up. -->
+					<div class="sum" class:shown={mode !== 'amount' && total !== null}>
+						{#if mode !== 'amount' && total !== null}
+							<div class="sum-line" class:centred={mode === 'per'} data-testid="budget-line-total">
+								<span class="formula">{formula}</span>
+								<span class="equals">=</span>
+								<strong>{formatAmount(total, format)}</strong>
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
 			{#if fieldError('estimate')}<span class="form-error">{fieldError('estimate')}</span>{/if}
 		</div>
 
@@ -408,32 +446,142 @@
 		gap: 6px;
 	}
 
-	.times {
+	/* The estimate: one box, its tabs along the top, so what they change is visibly inside them.
+	   The body keeps its height between the three ways of making the estimate up, so the fields
+	   below the box stay put while the tabs are tried. */
+	.estimate {
 		display: flex;
-		align-items: flex-end;
-		gap: var(--spacing-2);
-	}
-
-	.times > :global(*:not(.x)) {
-		flex: 1;
+		flex-direction: column;
+		gap: 6px;
 		min-width: 0;
 	}
 
-	.x {
-		padding-bottom: 10px;
-		color: var(--color-ink-muted);
+	.method {
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-md);
+		background: var(--color-paper);
+		overflow: hidden;
 	}
 
-	.per {
+	.method-tabs {
+		border-bottom: 1px solid var(--color-rule);
+	}
+
+	.method-body {
 		display: flex;
-		flex-wrap: wrap;
+		flex-direction: column;
+		padding: 12px;
+	}
+
+	.controls {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.terms {
+		display: flex;
 		align-items: center;
 		gap: var(--spacing-2);
 	}
 
-	.hint {
+	.count-terms .count {
+		flex: 0 0 84px;
+		/* The box's input would otherwise hold the row open to its default width. */
+		min-width: 0;
+	}
+
+	.count-terms .price {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	/* The assumptions centred over their price, the sum under both. */
+	.per-terms {
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.per-terms .scales {
+		flex: 0 1 auto;
+		justify-content: center;
+	}
+
+	.per-terms .price {
+		align-self: stretch;
+		min-width: 0;
+	}
+
+	/* The assumptions wrap among themselves, so the row keeps its shape however many are picked. */
+	.scales {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.scales .form-label {
+		margin-right: 2px;
+	}
+
+	.times {
+		flex: none;
+		color: var(--color-ink-muted);
+	}
+
+	/* A row that is not there yet takes no room: it opens when the estimate has a sum, and closes
+	   again when the fields no longer add up to one. */
+	.sum {
+		height: 0;
+		margin-top: 0;
+		overflow: hidden;
+		opacity: 0;
+		transition:
+			height var(--motion-quick) var(--ease-out),
+			margin-top var(--motion-quick) var(--ease-out),
+			opacity var(--motion-quick) var(--ease-out);
+	}
+
+	.sum.shown {
+		height: 20px;
+		margin-top: 10px;
+		opacity: 1;
+	}
+
+	.sum-line {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		height: 20px;
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	.sum-line.centred {
+		justify-content: center;
+	}
+
+	.formula {
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.equals {
+		flex: none;
+	}
+
+	.sum-line strong {
+		flex: none;
+		font-size: var(--type-sm);
+		font-weight: 600;
+		color: var(--color-ink);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.check {
