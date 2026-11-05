@@ -102,6 +102,12 @@ This is acceptable while reads are local calls that return quickly. Revisit it i
 
 Each form also has to remember the wait and its `invalid` flags. If new forms keep forgetting them, a shared form helper that does both would be worth the larger change.
 
+## Targets in What if
+
+The What if plugin once had a **Reach** mode: it worked back from a target (the plan, break-even, or a result you typed), said how far off the result was, and listed ways there — another value of an assumption, more tickets of a tier, all the tickets left at a higher price, or a smaller expense — each with how much of the gap it covered and an Apply button. It was removed on 2026-11-05, because the suggestions sounded authoritative but weren't. A cut was whatever room a category had, so a kitchen with nothing booked could "save" its whole amount, which reads as the food appearing from nowhere; capping the cut made it more plausible, but still a guess about what a group can give up. On a real event the honest answer is nearly always "sell more tickets or charge more", and the rest of What if already shows that plainly.
+
+**If it comes back**, it needs a reason from real use and a better model of what a category can give up — its lines, what is already booked, and how past events in the same file moved — or it should stay a view of the bridge: the target marked on the bar, with the parts that would have to move, and no claim about which cut is possible.
+
 ## Decided against
 
 These do not fit a tool for one treasurer, and the changes above cover the realistic cases more simply: configurable workflows and event sourcing. Multi-event, multi-user and compliance features stay out of scope (requirements §1).

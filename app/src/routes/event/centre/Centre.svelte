@@ -128,6 +128,7 @@
 		min-width: 0;
 		padding: var(--spacing-10) var(--spacing-8) var(--spacing-10) var(--spacing-10);
 		overflow: auto;
+		container-type: inline-size;
 	}
 
 	header {
@@ -182,6 +183,47 @@
 		font-size: 22px;
 		font-weight: 600;
 		line-height: 1.2;
+	}
+
+	/* A narrow window, or a panel beside it: the figures move closer and get smaller, and at the
+	narrowest the result takes its own line, the others sharing the one below. */
+	@container (max-width: 800px) {
+		.figure {
+			padding: 0 var(--spacing-6);
+		}
+
+		.result {
+			font-size: 34px;
+		}
+
+		.total {
+			font-size: 20px;
+		}
+	}
+
+	@container (max-width: 600px) {
+		.hero {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+			gap: var(--spacing-4) var(--spacing-6);
+		}
+
+		.figure,
+		.figure:first-child {
+			justify-content: flex-start;
+			gap: 4px;
+			min-width: 0;
+			padding: 0;
+			border-left: none;
+		}
+
+		.figure:first-child {
+			grid-column: 1 / -1;
+		}
+
+		.total {
+			font-size: 18px;
+		}
 	}
 
 	.records {

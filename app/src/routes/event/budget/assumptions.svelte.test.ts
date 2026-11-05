@@ -120,16 +120,16 @@ describe('A budget line that scales', () => {
 		const guests = screen.getByRole('button', { name: /Guests/ });
 		expect(guests.getAttribute('aria-pressed')).toBe('true');
 		expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
-			'260 × 25,00 € = 6.500,00 €'
+			'Guests 260 × 25,00 € = 6.500,00 €'
 		);
 
 		await fireEvent.click(screen.getByRole('button', { name: /Days/ }));
 		expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
-			'260 × 3 × 25,00 € = 19.500,00 €'
+			'Guests 260 × Days 3 × 25,00 € = 19.500,00 €'
 		);
 		await fireEvent.click(guests);
 		expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
-			'3 × 25,00 € = 75,00 €'
+			'Days 3 × 25,00 € = 75,00 €'
 		);
 
 		await fireEvent.click(screen.getByRole('button', { name: /Save/ }));
@@ -170,7 +170,7 @@ describe('A budget line that scales', () => {
 			'true'
 		);
 		expect(plain(screen.getByTestId('budget-line-total').textContent)).toBe(
-			'2 × 260 × 4,50 € = 2.340,00 €'
+			'2 × Guests 260 × 4,50 € = 2.340,00 €'
 		);
 	});
 
@@ -179,7 +179,10 @@ describe('A budget line that scales', () => {
 		vi.spyOn(api, 'parseSum').mockResolvedValue({ cents: 12000, ambiguous: false, terms: 1 });
 		render(BudgetLinePanel, { line: null, category: null, onclose: () => {} });
 		await fireEvent.click(screen.getByRole('radio', { name: 'Count × price' }));
-		await fireEvent.input(screen.getByRole('textbox', { name: 'Count' }), {
+		// The count is whole, and the place says so before anything is typed.
+		const count = screen.getByRole('textbox', { name: 'Count' });
+		expect(count.getAttribute('placeholder')).toBe('1');
+		await fireEvent.input(count, {
 			target: { value: '4' }
 		});
 		await fireEvent.input(screen.getByRole('textbox', { name: 'Unit price' }), {

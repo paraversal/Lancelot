@@ -9,6 +9,8 @@
 		kind = 'ghost',
 		size = 'md',
 		icon,
+		label,
+		hint,
 		shortcut,
 		type = 'button',
 		disabled = false,
@@ -19,6 +21,10 @@
 		kind?: 'primary' | 'ghost' | 'marker';
 		size?: 'md' | 'sm';
 		icon?: IconName;
+		/** The name to announce when a narrow header hides the visible label. */
+		label?: string;
+		/** Tooltip for the same case, where the label is not on screen. */
+		hint?: string;
 		/** Shown after the label, e.g. `⌘↵`. */
 		shortcut?: string;
 		type?: 'button' | 'submit';
@@ -34,6 +40,8 @@
 	{type}
 	{disabled}
 	{onclick}
+	aria-label={label}
+	title={hint}
 	class="{kind} {size}"
 	data-press={level('A3', strength)}
 	use:press={() => level('A3', strength)}

@@ -260,7 +260,8 @@ describe('Overview', () => {
 		expect(closeEvent).toHaveBeenCalledWith(
 			snapshot.openItems.map((item) => ({ item, note: 'ok' }))
 		);
-		expect(text(screen.getByText(/^Closed /))).toBe('Closed 21.06.2026');
+		expect(text(screen.getByText(/^Closed/))).toBe('Closed 21.06.2026');
+		expect(screen.getByText('21.06.2026')).toBeTruthy();
 		expect(screen.queryByText('Count')).toBeNull();
 		expect(screen.queryByText('New entry')).toBeNull();
 		expect(screen.getByText('Accepted when closing')).toBeTruthy();

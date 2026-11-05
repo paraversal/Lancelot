@@ -3,7 +3,8 @@
 	// to change and what it comes to. A line that scales with several shows under the first.
 	import { formatAmount } from '../../format';
 	import type { NumberFormat } from '../../api/generated/NumberFormat';
-	import type { AssumptionKnob, LineKnob } from './scenario';
+	import Figure from './Figure.svelte';
+	import { stepOf, type AssumptionKnob, type LineKnob } from './scenario';
 
 	let {
 		knob,
@@ -11,6 +12,7 @@
 		lines,
 		names,
 		format,
+		parse,
 		colorOf,
 		onvalue,
 		onprice
@@ -22,6 +24,8 @@
 		/** The names a line scales with, `Guests × Days`. */
 		names: (line: LineKnob) => string;
 		format: NumberFormat;
+		/** Reads an amount, as the app does. */
+		parse: (text: string) => Promise<number>;
 		colorOf: (category: number) => string;
 		onvalue: (value: number) => void;
 		onprice: (line: number, price: number) => void;
@@ -49,7 +53,15 @@
 				aria-label="One fewer {knob.name}"
 				onclick={() => onvalue(value - 1)}>−</button
 			>
-			<span class="value" class:moved data-testid="plugin-what-if-assumption">{value}</span>
+			<Figure
+				{value}
+				text={String(value)}
+				label="{knob.name} {value}"
+				max={knob.max}
+				{moved}
+				testid="plugin-what-if-assumption"
+				onchange={onvalue}
+			/>
 			<button
 				type="button"
 				disabled={value >= knob.max}
@@ -74,16 +86,26 @@
 					type="button"
 					disabled={line.fixed || price <= 0}
 					aria-label="Lower the unit price of {line.name}"
-					onclick={() => onprice(line.id, Math.max(0, price - line.step))}>−</button
+					onclick={() => onprice(line.id, Math.max(0, price - stepOf(price)))}>−</button
 				>
-				<span class="value price" class:moved={price !== line.unitPrice}
-					>{formatAmount(price, format)}</span
-				>
+				<Figure
+					value={price}
+					text={formatAmount(price, format)}
+					label="{line.name} {formatAmount(price, format)}"
+					{format}
+					{parse}
+					max={line.maxPrice}
+					wide
+					moved={price !== line.unitPrice}
+					disabled={line.fixed}
+					testid="plugin-what-if-price-{line.id}"
+					onchange={(p) => onprice(line.id, p)}
+				/>
 				<button
 					type="button"
 					disabled={line.fixed || price >= line.maxPrice}
 					aria-label="Raise the unit price of {line.name}"
-					onclick={() => onprice(line.id, Math.min(line.maxPrice, price + line.step))}>+</button
+					onclick={() => onprice(line.id, Math.min(line.maxPrice, price + stepOf(price)))}>+</button
 				>
 			</span>
 			<span
@@ -193,20 +215,6 @@
 	.stepper button:disabled {
 		opacity: 0.4;
 		cursor: default;
-	}
-
-	.value {
-		min-width: 44px;
-		text-align: center;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.price {
-		min-width: 72px;
-	}
-
-	.moved {
-		font-weight: 600;
 	}
 
 	@container (width < 560px) {

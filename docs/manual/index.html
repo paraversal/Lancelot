@@ -351,29 +351,23 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>Many costs and incomes follow a few numbers you're still guessing at, such as how many guests come or how many days you run. Write those down once as <strong>assumptions</strong>, and let the lines scale with them.</p>
 <ol class="steps">
   <li>On <strong>Budget</strong>, under <strong>Assumptions</strong>, click <strong>+ Assumption</strong>, enter a name such as <code>Guests</code> and a value such as <code>260</code>, and click <strong>Save</strong>.</li>
-  <li>In a budget line, choose <strong>Per assumption</strong>, pick one or more assumptions, and enter the price for each, such as <code>Guests × 4,00 €</code> or <code>Guests × Days × 4,50 €</code>. Under <strong>Count × price</strong>, the count can be multiplied by assumptions too, such as <code>2 × Guests × 4,50 €</code>.</li>
-  <li>Click an assumption to change its value. Every line that scales with it changes along, and the table shows each such line's formula.</li>
+  <li>In a budget line, choose <strong>Per assumption</strong>, pick one or more assumptions, and enter the price for each, such as <code>Guests × 4,00 €</code> or <code>Guests × Days × 4,50 €</code>. Under <strong>Count × price</strong>, the count can be multiplied by assumptions too, such as <code>2 × Guests × 4,50 €</code>. With several assumptions the panel writes the product out in full — <code>Guests 260 × Days 3 × 4,50 €</code> — so what multiplies what is never in doubt.</li>
+  <li>Drag an assumption's slider, or click its number to type a value. The slider runs from 0 to at least twice the planned value. Every line that scales with it changes along, and the table shows each such line's formula.</li>
 </ol>
 <p>An assumption can only be deleted while no line uses it.</p>
 
 <h3>Try ideas with What if</h3>
 <p>The <strong>What if</strong> plugin sits above the table. Folded, it shows the result your ideas lead to. Click <strong>Adjust</strong> to open it. A bridge shows how the forecast becomes that result, through assumptions, income and expenses. While nothing is booked or sold yet, it starts from the plan instead, with ticket income as budgeted. <strong>Nothing in it is saved</strong>, and nothing reaches the ledger.</p>
 <figure>
-  <a href="images/what-if.png"><img src="images/what-if.png" width="1280" height="1000" loading="lazy" alt="What if opened on Try: Guests moved from 260 to 320, the bridge showing 48 euros less from the assumptions, the lines that scale with guests, and a bar per category."></a>
+  <a href="images/what-if.png"><img src="images/what-if.png" width="1280" height="1000" loading="lazy" alt="What if opened: Guests moved from 260 to 320, the bridge showing 48 euros less from the assumptions, the lines that scale with guests, and a bar per category."></a>
   <figcaption>60 more guests need 48 € more wristbands. Ticket sales are complete, so they don't grow with them.</figcaption>
 </figure>
-<p><strong>Try</strong> changes things directly:</p>
 <ul>
-  <li><strong>Tickets:</strong> each tier is a row of its places. Click a free one to sell up to it, and use the steppers to change the count and the price of the tickets still to sell.</li>
-  <li><strong>Assumptions:</strong> each is a slider, with the lines that scale with it below and steppers for their unit prices.</li>
-  <li><strong>Categories:</strong> each is a bar on one shared scale. Drag it to a new figure. It can't go below what's already booked.</li>
+  <li><strong>Tickets:</strong> each tier is a row of its places. Click a free one to sell up to it, and use the steppers to change the count and the price of the tickets still to sell. A count moves by one; a price moves by a round step that grows with it — a few cents on a cheap ticket, one euro on an expensive one.</li>
+  <li><strong>Assumptions:</strong> each is a slider, with the lines that scale with it below and their unit prices, which you can step or click to type.</li>
+  <li><strong>Categories:</strong> each is a bar on one shared scale. Drag it to a new figure, or click the figure to type one. It can't go below what's already booked.</li>
 </ul>
 <p>Each change shows as a chip. Click its × to undo that change alone, or <strong>Reset</strong> to undo them all.</p>
-<p><strong>Reach</strong> works back from a target: the plan by default, <strong>Break-even</strong>, or any result you type. It says how far off you are and suggests ways there, such as another value of an assumption, more tickets of a tier, a higher price for all of them, or a smaller expense. <strong>Apply</strong> adds one to your ideas, so you can keep going in Try.</p>
-<figure>
-  <a href="images/what-if-reach.png"><img src="images/what-if-reach.png" width="1280" height="900" loading="lazy" alt="What if on Reach: a target result of 2.097 euros, 588 euros to go, and suggestions, each with how much it covers and an Apply button."></a>
-  <figcaption>Each suggestion says how much of the gap it covers.</figcaption>
-</figure>
 
 <h3>How the forecast works</h3>
 <p>It's deliberately cautious, so it may look worse than you expect:</p>
@@ -728,7 +722,6 @@ pnpm tauri build --bundles app</code></pre></li>
 <p>Close the file (<kbd>⌘W</kbd>, or <strong>Close file</strong> at the foot of the sidebar) before you copy, move or email it, so that the copy is complete. This returns you to the start screen and leaves Lancelot running.</p>
 
 <h2 class="chapter" id="sources">Data sources</h2>
-<div class="note warn"><strong>Not yet tried with a real provider</strong><p>The <strong>Ticket API</strong> and <strong>Stock and sales</strong> plugins can pull from a web service. This has worked in the desktop app against a test service, but not with a real provider. Check the results carefully, and don't depend on this for a real event yet.</p></div>
 <ol class="steps">
   <li>In <strong>Settings → Plugins</strong>, click <strong>Configure</strong> on the plugin's card. Its settings open in the panel beside the page. For <strong>Stock and sales</strong> there's a tab for each cost centre it's shown on, and each tab holds that cost centre's own source, so the drinks and the merch can come from different providers.</li>
   <li>Enter a <strong>Name</strong>, the <strong>URL</strong>, the <strong>Auth header</strong> and the <strong>Token</strong>, which is the header's whole value, such as <code>Bearer abc123</code>.</li>

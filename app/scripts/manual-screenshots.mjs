@@ -205,8 +205,6 @@ const walks = {
 		await page.getByRole('slider').first().fill('320');
 		await page.getByRole('heading', { name: 'Budget' }).scrollIntoViewIfNeeded();
 		await shot('what-if', { height: 1000 });
-		await page.getByRole('radio', { name: 'Reach' }).click();
-		await shot('what-if-reach', { height: 900 });
 	},
 
 	async overview() {

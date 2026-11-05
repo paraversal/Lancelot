@@ -115,12 +115,13 @@
 				? picked.reduce((n, a) => n * a.value, count) * unitPrice
 				: null
 	);
-	// What is multiplied: the count and the assumptions' values, without the price itself.
+	// What is multiplied: the count and the assumptions' values, without the price itself. Each
+	// assumption is named, so several of them read as a product rather than a run of numbers.
 	const factors = $derived([
 		...(count !== null && mode === 'quantity' && (count !== 1 || !picked.length)
 			? [String(count)]
 			: []),
-		...picked.map((a) => String(a.value))
+		...picked.map((a) => `${a.name} ${a.value}`)
 	]);
 	const formula = $derived(
 		count !== null && unitPrice !== null && factors.length
@@ -332,6 +333,7 @@
 								<div class="count">
 									<TextField
 										name="Count"
+										placeholder="1"
 										value={quantity}
 										oninput={(v) => (quantity = v)}
 										oncommit={(v) => (quantity = v ?? '')}

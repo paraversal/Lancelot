@@ -3,6 +3,7 @@
 	// come, and a tick at the forecast. The bar's end is a handle; it stops at what is booked.
 	import { formatAmount } from '../../format';
 	import type { NumberFormat } from '../../api/generated/NumberFormat';
+	import Figure from './Figure.svelte';
 	import { snapCategory, type CategoryKnob } from './scenario';
 
 	let {
@@ -11,6 +12,7 @@
 		scale,
 		color,
 		format,
+		parse,
 		onvalue
 	}: {
 		knob: CategoryKnob;
@@ -19,6 +21,8 @@
 		scale: number;
 		color: string;
 		format: NumberFormat;
+		/** Reads an amount, as the app does. */
+		parse: (text: string) => Promise<number>;
 		onvalue: (value: number) => void;
 	} = $props();
 
@@ -51,7 +55,18 @@
 		/>
 	</span>
 	<span class="figure">
-		<span class:moved>{formatAmount(value, format)}</span>
+		<Figure
+			{value}
+			text={formatAmount(value, format)}
+			label="{knob.name} {formatAmount(value, format)}"
+			{format}
+			{parse}
+			min={knob.min}
+			max={knob.max}
+			wide
+			{moved}
+			onchange={(v) => onvalue(snapCategory(knob, v))}
+		/>
 		<span class="label">
 			{#if moved}
 				{formatAmount(value - knob.forecast, format, 'always')}
@@ -167,10 +182,6 @@
 		align-items: flex-end;
 		line-height: 1.3;
 		white-space: nowrap;
-	}
-
-	.moved {
-		font-weight: 600;
 	}
 
 	.label {

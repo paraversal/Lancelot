@@ -1,15 +1,14 @@
 <script lang="ts">
 	// What if: ideas tried against the forecast. Folded, it shows the result they lead to. Open, it
-	// shows how the forecast becomes that result, with the tiers and categories to change (Try), or
-	// works back from a target (Reach). Nothing is saved: the scenario lives here until the page is
-	// left, and nothing it shows reaches the ledger or the event file.
-	import { tick, untrack } from 'svelte';
+	// shows how the forecast becomes that result, with the tiers and categories to change. Nothing
+	// is saved: the scenario lives here until the page is left, and nothing it shows reaches the
+	// ledger or the event file.
+	import { tick } from 'svelte';
 	import { flip } from 'svelte/animate';
 	import { fade, slide } from 'svelte/transition';
 	import { categoryColor, tierColor } from '../../colors';
 	import Button from '../../components/Button.svelte';
 	import Icon from '../../components/Icon.svelte';
-	import Segmented from '../../components/Segmented.svelte';
 	import { formatAmount } from '../../format';
 	import { flipOptions, popIn } from '../../motion/effects';
 	import { level } from '../../motion/mode.svelte';
@@ -18,7 +17,6 @@
 	import Assumption from './Assumption.svelte';
 	import Bridge, { type Part } from './Bridge.svelte';
 	import CategoryBar from './CategoryBar.svelte';
-	import Reach from './Reach.svelte';
 	import {
 		assumptionValue,
 		bridge,
@@ -29,7 +27,6 @@
 		lineChange,
 		moreOf,
 		NOTHING,
-		reach,
 		scaledIn,
 		scaledKnobs,
 		startOf,
@@ -40,8 +37,7 @@
 		type CategoryKnob,
 		type LineKnob,
 		type Change,
-		type Scenario,
-		type Suggestion
+		type Scenario
 	} from './scenario';
 	import Tier from './Tier.svelte';
 
@@ -74,16 +70,11 @@
 
 	let scenario = $state<Scenario>(NOTHING);
 	let open = $state(false);
-	let mode = $state<'try' | 'reach'>('try');
 	let showSmall = $state(false);
-	// Reach starts at the plan: what was meant to be left over.
-	let target = $state<number | null>(untrack(() => ctx.budget.result.estimate));
 
 	const figures = $derived(bridge(forecast, tiers, categories, scenario, scaled));
 	const change = $derived(figures.result - forecast);
 	const list = $derived(changes(tiers, categories, scenario, scaled));
-	const gap = $derived(target === null ? 0 : target - figures.result);
-	const suggestions = $derived(reach(gap, tiers, categories, scenario, scaled));
 	const parts = $derived<Part[]>([
 		...(tiers.length ? (['tickets'] as const) : []),
 		...(scaled.assumptions.length ? (['assumptions'] as const) : []),
@@ -149,7 +140,6 @@
 	// Jumping to a part: it comes into view and its heading lights up for a moment.
 	const headings: Partial<Record<Part, HTMLElement>> = {};
 	async function show(part: Part) {
-		mode = 'try';
 		await tick();
 		const heading = headings[part];
 		if (!heading) return;
@@ -163,18 +153,6 @@
 				}
 			);
 	}
-
-	function apply(s: Suggestion) {
-		scenario = s.scenario;
-		void show(s.kind === 'cut' ? 'expenses' : s.kind === 'assumption' ? 'assumptions' : 'tickets');
-	}
-
-	const suggestionColor = (s: Suggestion) =>
-		s.kind === 'cut'
-			? colorOfCategory(s.category.id)
-			: s.kind === 'assumption'
-				? 'var(--color-ink)'
-				: colorOfTier(s.tier.id);
 </script>
 
 <div class="summary">
@@ -194,18 +172,6 @@
 		{/if}
 	</div>
 	<span class="actions">
-		{#if open}
-			<span transition:fade={{ duration: 120 }}>
-				<Segmented
-					label="What if"
-					options={[
-						{ value: 'try', label: 'Try' },
-						{ value: 'reach', label: 'Reach' }
-					]}
-					bind:value={mode}
-				/>
-			</span>
-		{/if}
 		<button
 			type="button"
 			class="toggle"
@@ -253,96 +219,85 @@
 			<Button size="sm" disabled={!list.length} onclick={() => (scenario = NOTHING)}>Reset</Button>
 		</div>
 
-		{#if mode === 'try'}
-			<div class="try" in:fade={{ duration: fold === 'off' ? 0 : 140 }}>
-				{#if scaled.assumptions.length}
-					<section>
-						<h3 bind:this={headings.assumptions}>Assumptions</h3>
-						<div class="assumptions">
-							{#each scaled.assumptions as a (a.id)}
-								<Assumption
-									knob={a}
-									value={assumptionValue(a, scenario)}
-									lines={under(a.id)}
-									{names}
-									{format}
-									colorOf={colorOfCategory}
-									onvalue={(v) => set('assumption', a.id, v)}
-									onprice={(line, p) => set('unit', line, p)}
-								/>
-							{/each}
-						</div>
-					</section>
-				{/if}
-
-				{#if tiers.length}
-					<section>
-						<h3 bind:this={headings.tickets}>Tickets still to sell</h3>
-						{#each tiers as t (t.id)}
-							<Tier
-								knob={t}
-								color={colorOfTier(t.id)}
-								more={moreOf(t, scenario)}
-								price={tierPrice(t, scenario)}
+		<div class="try" in:fade={{ duration: fold === 'off' ? 0 : 140 }}>
+			{#if scaled.assumptions.length}
+				<section>
+					<h3 bind:this={headings.assumptions}>Assumptions</h3>
+					<div class="assumptions">
+						{#each scaled.assumptions as a (a.id)}
+							<Assumption
+								knob={a}
+								value={assumptionValue(a, scenario)}
+								lines={under(a.id)}
+								{names}
 								{format}
-								level={bars}
-								onmore={(n) => set('more', t.id, n)}
-								onprice={(p) => set('price', t.id, p)}
+								parse={ctx.parseAmount}
+								colorOf={colorOfCategory}
+								onvalue={(v) => set('assumption', a.id, v)}
+								onprice={(line, p) => set('unit', line, p)}
 							/>
 						{/each}
-					</section>
-				{/if}
+					</div>
+				</section>
+			{/if}
 
-				{#if categories.length}
-					<div class="categories">
-						{#each groups as g (g.kind)}
-							{#if g.shown.length}
-								<section>
-									<h3 bind:this={headings[g.part]}>{g.title}</h3>
-									{#each g.shown as c (c.id)}
-										{@const d = scaledIn(c.id, scaled, scenario)}
-										<div transition:slide={{ duration: fold === 'off' ? 0 : 160 }}>
-											<CategoryBar
-												knob={shifted(c)}
-												value={categoryValue(c, scenario) + d}
-												{scale}
-												color={colorOfCategory(c.id)}
-												{format}
-												onvalue={(v) => set('category', c.id, v - d)}
-											/>
-										</div>
-									{/each}
-								</section>
-							{/if}
-						{/each}
-					</div>
-					<div class="foot">
-						{#if hidden}
-							<Button size="sm" onclick={() => (showSmall = !showSmall)}
-								>{showSmall ? 'Fewer categories' : `${hidden} smaller categories`}</Button
-							>
+			{#if tiers.length}
+				<section>
+					<h3 bind:this={headings.tickets}>Tickets still to sell</h3>
+					{#each tiers as t (t.id)}
+						<Tier
+							knob={t}
+							color={colorOfTier(t.id)}
+							more={moreOf(t, scenario)}
+							price={tierPrice(t, scenario)}
+							{format}
+							parse={ctx.parseAmount}
+							level={bars}
+							onmore={(n) => set('more', t.id, n)}
+							onprice={(p) => set('price', t.id, p)}
+						/>
+					{/each}
+				</section>
+			{/if}
+
+			{#if categories.length}
+				<div class="categories">
+					{#each groups as g (g.kind)}
+						{#if g.shown.length}
+							<section>
+								<h3 bind:this={headings[g.part]}>{g.title}</h3>
+								{#each g.shown as c (c.id)}
+									{@const d = scaledIn(c.id, scaled, scenario)}
+									<div transition:slide={{ duration: fold === 'off' ? 0 : 160 }}>
+										<CategoryBar
+											knob={shifted(c)}
+											value={categoryValue(c, scenario) + d}
+											{scale}
+											color={colorOfCategory(c.id)}
+											{format}
+											parse={ctx.parseAmount}
+											onvalue={(v) => set('category', c.id, v - d)}
+										/>
+									</div>
+								{/each}
+							</section>
 						{/if}
-						<span class="legend">
-							<span><i class="booked"></i>booked</span>
-							<span><i class="rest"></i>still to come</span>
-							<span><i class="tick"></i>{planning ? 'plan' : 'forecast'}</span>
-						</span>
-					</div>
-				{/if}
-			</div>
-		{:else}
-			<div in:fade={{ duration: fold === 'off' ? 0 : 140 }}>
-				<Reach
-					bind:target
-					planned={ctx.budget.result.estimate}
-					{gap}
-					{suggestions}
-					{format}
-					colorOf={suggestionColor}
-					onapply={apply}
-				/>
-			</div>
-		{/if}
+					{/each}
+				</div>
+				<div class="foot">
+					{#if hidden}
+						<Button size="sm" onclick={() => (showSmall = !showSmall)}
+							>{showSmall ? 'Fewer categories' : `${hidden} smaller categories`}</Button
+						>
+					{/if}
+					<span class="legend">
+						<span><i class="booked"></i>booked</span>
+						<span><i class="rest"></i>still to come</span>
+						<span><i class="tick"></i>{planning ? 'plan' : 'forecast'}</span>
+					</span>
+				</div>
+			{/if}
+		</div>
 	</div>
 {/if}
 

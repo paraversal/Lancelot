@@ -87,8 +87,10 @@
 				color: categoryColor(a, snapshot.accounts)
 			}));
 	const max = $derived(Math.max(totals.income, totals.expense, 1));
-	// The bars span the row between the "In"/"Out" label and the total, gaps included.
-	const barWidth = $derived(Math.max(120, width - 56 - 140 - 2 * snapshot.accounts.length));
+	// The bars span the row between the "In"/"Out" label and the total, gaps included. A narrow
+	// row leaves the total less room, so the bars keep most of it.
+	const sumWidth = $derived(Math.round(Math.min(140, Math.max(96, width * 0.16))));
+	const barWidth = $derived(Math.max(120, width - 56 - sumWidth - 2 * snapshot.accounts.length));
 
 	const assets = $derived(
 		snapshot.accounts
@@ -167,16 +169,30 @@
 			<div class="title">
 				<h1>Overview</h1>
 				{#if closedOn}<span class="closed" in:stampIn={{ level: level('E1') }}
-						><Lock closed level={level('E1')} size={14} />Closed {closedOn}</span
+						><Lock closed level={level('E1')} size={14} /><span class="closed-text"
+							>Closed <span class="closed-when">{closedOn}</span></span
+						></span
 					>{/if}
 			</div>
 			<div class="actions">
-				<Button icon="file" onclick={() => goto('/event/overview/report')}>Report</Button>
-				<Button onclick={exportCsv}>CSV</Button>
+				<Button
+					icon="file"
+					label="Report"
+					hint="Report"
+					onclick={() => goto('/event/overview/report')}>Report</Button
+				>
+				<Button icon="upload" label="CSV" hint="Export a CSV" onclick={exportCsv}>CSV</Button>
 				{#if !closed}
-					<Button icon="lock" onclick={() => panel('close')}>Close event</Button>
-					<Button kind="primary" icon="plus" shortcut="N" onclick={() => goto('/event/ledger?new')}
-						>New entry</Button
+					<Button icon="lock" label="Close event" hint="Close event" onclick={() => panel('close')}
+						>Close event</Button
+					>
+					<Button
+						kind="primary"
+						icon="plus"
+						shortcut="N"
+						label="New entry"
+						hint="New entry"
+						onclick={() => goto('/event/ledger?new')}>New entry</Button
 					>
 				{/if}
 			</div>
@@ -261,7 +277,9 @@
 					<div class="flow">
 						<strong class="side">{f.label}</strong>
 						<StackedBar segments={flows(f.kind)} {max} {format} width={barWidth} />
-						<strong class="sum"><MovingAmount value={f.total} {format} level={a5} /></strong>
+						<strong class="sum" style:width="{sumWidth}px"
+							><MovingAmount value={f.total} {format} level={a5} /></strong
+						>
 					</div>
 				{/each}
 			</div>
@@ -400,12 +418,15 @@
 		min-width: 0;
 		padding: var(--spacing-10);
 		overflow: auto;
+		container-type: inline-size;
 	}
 
 	header {
 		display: flex;
+		flex: none;
 		align-items: center;
 		justify-content: space-between;
+		gap: var(--spacing-2) var(--spacing-3);
 		min-height: 40px;
 	}
 
@@ -417,7 +438,27 @@
 	}
 
 	.actions {
+		justify-content: flex-end;
 		gap: var(--spacing-2);
+		margin-left: auto;
+	}
+
+	/* A narrow window, or a panel beside it, keeps the actions on one line by showing their icons
+	alone; each keeps its label for screen readers and as a tooltip. */
+	@container (max-width: 560px) {
+		.actions :global(.label),
+		.actions :global(kbd) {
+			display: none;
+		}
+
+		.actions :global(button[data-press]) {
+			padding: 0 10px;
+		}
+
+		/* The date is the first thing to go; the event still reads as closed. */
+		.title :global(.closed-when) {
+			display: none;
+		}
 	}
 
 	.closed {
@@ -546,6 +587,48 @@
 		line-height: 1.6;
 	}
 
+	/* A narrow window, or a panel beside it: the figures move closer and get smaller. */
+	@container (max-width: 800px) {
+		.figure {
+			padding: 0 var(--spacing-6);
+		}
+
+		.result {
+			font-size: 34px;
+		}
+
+		.total {
+			font-size: 20px;
+		}
+	}
+
+	/* Narrower still, the result takes its own line and the others share the one below. */
+	@container (max-width: 600px) {
+		.hero {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+			gap: var(--spacing-4) var(--spacing-6);
+		}
+
+		.figure,
+		.figure:first-child {
+			gap: 4px;
+			min-width: 0;
+			padding: 0;
+			border-left: none;
+		}
+
+		.figure:first-child {
+			grid-column: 1 / -1;
+		}
+
+		.total {
+			font-size: 18px;
+			line-height: 1.4;
+			white-space: nowrap;
+		}
+	}
+
 	.flows {
 		display: flex;
 		flex-direction: column;
@@ -567,7 +650,6 @@
 	}
 
 	.sum {
-		width: 140px;
 		flex: none;
 		margin-left: auto;
 		font-weight: 600;
@@ -577,7 +659,7 @@
 
 	.columns {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr));
 		gap: 28px 48px;
 	}
 
@@ -620,6 +702,24 @@
 	.note {
 		font-size: var(--type-xs);
 		color: var(--color-ink-muted);
+	}
+
+	/* Beside a panel, an account's name and figure keep the first line and its buttons move below,
+	so the note under the name has room. */
+	@container (max-width: 480px) {
+		li:has(> :global(button)) {
+			flex-wrap: wrap;
+			row-gap: 0;
+			padding-bottom: 10px;
+		}
+
+		li:has(> :global(button)) .name {
+			flex-basis: calc(100% - 130px);
+		}
+
+		li > :global(button) {
+			order: 1;
+		}
 	}
 
 	.amount {

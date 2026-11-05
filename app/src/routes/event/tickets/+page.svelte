@@ -129,6 +129,8 @@
 				{#if !session.closed}
 					<Button
 						icon="plus"
+						label="Manual sale"
+						hint="Manual sale"
 						disabled={!tickets.tiers.length}
 						onclick={() => show({ type: 'sale', id: null })}>Manual sale</Button
 					>
@@ -663,5 +665,35 @@
 	.gross {
 		width: 110px;
 		font-weight: 600;
+	}
+
+	/* Beside a panel, or in a narrow window, the tier's name keeps its room: the fee goes first,
+	then the price; the tier's panel shows both. The button shows its icon alone. */
+	@container (max-width: 480px) {
+		.fee {
+			display: none;
+		}
+
+		.sold {
+			width: 96px;
+		}
+
+		.gross {
+			width: 96px;
+		}
+
+		.actions :global(.label) {
+			display: none;
+		}
+
+		.actions :global(button[data-press]) {
+			padding: 0 10px;
+		}
+	}
+
+	@container (max-width: 400px) {
+		.price {
+			display: none;
+		}
 	}
 </style>

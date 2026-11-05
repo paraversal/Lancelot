@@ -167,20 +167,28 @@
 		<section class="table">
 			<header>
 				<h1>Ledger</h1>
-				{#if all.length}
-					<Segmented
-						label="Group by"
-						bind:value={grouping}
-						options={[
-							{ value: 'day', label: 'Day' },
-							{ value: 'category', label: 'Category' }
-						]}
-					/>
-				{:else if editing === undefined && !session.closed}
-					<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}
-						>New entry</Button
-					>
-				{/if}
+				<div class="actions">
+					{#if all.length}
+						<Segmented
+							label="Group by"
+							bind:value={grouping}
+							options={[
+								{ value: 'day', label: 'Day' },
+								{ value: 'category', label: 'Category' }
+							]}
+						/>
+					{/if}
+					{#if editing === undefined && !session.closed}
+						<Button
+							kind="primary"
+							icon="plus"
+							shortcut="N"
+							label="New entry"
+							hint="New entry"
+							onclick={() => open(null)}>New entry</Button
+						>
+					{/if}
+				</div>
 			</header>
 
 			{#if all.length}
@@ -197,12 +205,6 @@
 							onclick={() => (filter = f.value)}
 						/>
 					{/each}
-					<span class="grow"></span>
-					{#if editing === undefined && !session.closed}
-						<Button kind="primary" icon="plus" shortcut="N" onclick={() => open(null)}
-							>New entry</Button
-						>
-					{/if}
 				</div>
 
 				<div class="rows" role="table">
@@ -244,7 +246,7 @@
 								<span class="sweep"></span>
 								<span class="date">{shortDate(txn.date)}</span>
 								<span class="title">
-									{item.row.title}
+									<span class="text">{item.row.title}</span>
 									{#if item.split}<span class="tag">SPLIT</span>{/if}
 									{#if txn.origin.type !== 'manual'}<span class="tag">TICKETS</span>{/if}
 								</span>
@@ -306,13 +308,37 @@
 		min-width: 0;
 		padding: var(--spacing-10) var(--spacing-8) var(--spacing-10) var(--spacing-10);
 		overflow: auto;
+		container-type: inline-size;
 	}
 
 	header {
 		display: flex;
+		flex: none;
 		align-items: center;
 		justify-content: space-between;
+		gap: var(--spacing-2) var(--spacing-3);
 		min-height: 40px;
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--spacing-2);
+		margin-left: auto;
+	}
+
+	/* A narrow window, or the entry panel beside it, keeps the row on one line by showing the
+	button's icon alone; it keeps its label for screen readers and as a tooltip. */
+	@container (max-width: 460px) {
+		.actions :global(.label),
+		.actions :global(kbd) {
+			display: none;
+		}
+
+		.actions :global(button[data-press]) {
+			padding: 0 10px;
+		}
 	}
 
 	h1 {
@@ -326,9 +352,6 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px;
-		/* The button is 34 tall and the chips are 32; without this the list lifts two pixels when
-		the panel takes the button away. */
-		min-height: 34px;
 	}
 
 	.search {
@@ -422,7 +445,14 @@
 		white-space: nowrap;
 	}
 
+	.title .text {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
 	.tag {
+		flex: none;
 		padding: 0 5px;
 		border: 1px solid var(--color-rule);
 		border-radius: var(--radius-sm);
@@ -482,6 +512,24 @@
 
 	.amount.moved {
 		color: var(--color-ink-muted);
+	}
+
+	/* Beside the entry panel, or in a narrow window, the title keeps its room: the account goes
+	first, then the category names, leaving their dots. */
+	@container (max-width: 560px) {
+		.who {
+			display: none;
+		}
+	}
+
+	@container (max-width: 440px) {
+		.categories {
+			width: auto;
+		}
+
+		.categories > span:last-child {
+			display: none;
+		}
 	}
 
 	.drop {

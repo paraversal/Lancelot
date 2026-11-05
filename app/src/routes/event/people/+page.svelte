@@ -79,13 +79,17 @@
 					<Button
 						icon="file"
 						shortcut={formatAmount(snapshot.payouts.payoutTotal, format)}
+						label="Payouts"
+						hint="Payouts {formatAmount(snapshot.payouts.payoutTotal, format)}"
 						onclick={() => goto('/event/people/payouts')}
 					>
 						Payouts
 					</Button>
 				{/if}
 				{#if !session.closed}
-					<Button kind="primary" icon="plus" onclick={add}>Person</Button>
+					<Button kind="primary" icon="plus" label="Person" hint="New person" onclick={add}
+						>Person</Button
+					>
 				{/if}
 			</div>
 		</header>
@@ -95,8 +99,8 @@
 				<div class="row head" role="row">
 					<span class="name"></span>
 					<span class="num">Advanced</span>
-					<span class="num">Holds</span>
-					<span class="num">Settled</span>
+					<span class="num minor">Holds</span>
+					<span class="num minor">Settled</span>
 					<span class="balance">Balance</span>
 				</div>
 				{#each people as p (p.account)}
@@ -114,8 +118,8 @@
 							{/if}
 						</span>
 						<span class="num">{cell(p.summary.advanced)}</span>
-						<span class="num">{cell(p.summary.held)}</span>
-						<span class="num">{cell(p.summary.settled)}</span>
+						<span class="num minor">{cell(p.summary.held)}</span>
+						<span class="num minor">{cell(p.summary.settled)}</span>
 						<span class="balance"><BalanceCell net={p.summary.net} {format} /></span>
 					</button>
 				{/each}
@@ -124,8 +128,8 @@
 						>{people.length === 1 ? '1 person' : `${people.length} people`}</span
 					>
 					<span class="num">{cell(totals.advanced)}</span>
-					<span class="num">{cell(totals.held)}</span>
-					<span class="num">{cell(totals.settled)}</span>
+					<span class="num minor">{cell(totals.held)}</span>
+					<span class="num minor">{cell(totals.settled)}</span>
 					<span class="balance"
 						><span class="muted">net</span> {formatAmount(totals.net, format)}</span
 					>
@@ -173,19 +177,37 @@
 		min-width: 0;
 		padding: var(--spacing-10) var(--spacing-8) var(--spacing-10) var(--spacing-10);
 		overflow: auto;
+		container-type: inline-size;
 	}
 
 	header {
 		display: flex;
+		flex: none;
 		align-items: center;
 		justify-content: space-between;
+		gap: var(--spacing-2) var(--spacing-3);
 		min-height: 40px;
 	}
 
 	.actions {
 		display: flex;
 		align-items: center;
+		justify-content: flex-end;
 		gap: var(--spacing-2);
+		margin-left: auto;
+	}
+
+	/* A narrow window, or a panel beside it, keeps the actions on one line by showing their icons
+	alone; each keeps its label for screen readers and as a tooltip. */
+	@container (max-width: 460px) {
+		.actions :global(.label),
+		.actions :global(kbd) {
+			display: none;
+		}
+
+		.actions :global(button[data-press]) {
+			padding: 0 10px;
+		}
 	}
 
 	h1 {
@@ -280,6 +302,22 @@
 		gap: 6px;
 		width: 140px;
 		flex: none;
+	}
+
+	/* Beside a panel, or in a narrow window: what was advanced and the balance, which the panel
+	breaks down further. */
+	@container (max-width: 560px) {
+		.minor {
+			display: none;
+		}
+
+		.num {
+			width: 88px;
+		}
+
+		.balance {
+			width: 120px;
+		}
 	}
 
 	.muted {

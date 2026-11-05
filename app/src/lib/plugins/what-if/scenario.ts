@@ -47,7 +47,6 @@ export type LineKnob = {
 	fixed: boolean;
 	/** Where it starts, like the categories. */
 	base: number;
-	step: number;
 	maxPrice: number;
 };
 
@@ -82,9 +81,15 @@ export const isPlanning = (budget: Budget, tiers: TierFigures[]) =>
 export const startOf = (budget: Budget, planning: boolean) =>
 	planning ? budget.result.estimate : budget.result.forecast;
 
-export const PRICE_STEP = 100;
-
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+/**
+ * What an amount moves by when it is nudged: a round step that follows the size of the amount,
+ * so a few cents move a small price and a euro moves a large one. Counts move by one.
+ */
+export function stepOf(amount: number) {
+	return amount < 200 ? 10 : amount < 2000 ? 50 : 100;
+}
 
 /** What one more ticket brings in, like the core's break-even: the price minus the platform's fee. */
 export const netPrice = (price: number, feeBp: number) =>
@@ -101,8 +106,6 @@ export const tierKnobs = (tiers: TierFigures[]): TierKnob[] =>
 		maxMore: t.quota === null ? Math.max(50, t.places) : Math.max(0, t.quota - t.places),
 		maxPrice: Math.max(t.price * 2, 2000)
 	}));
-
-const unitStep = (price: number) => (price < 200 ? 10 : price < 2000 ? 50 : 100);
 
 /** The assumptions some line scales with, and those lines. */
 export function scaledKnobs(
@@ -131,7 +134,6 @@ export function scaledKnobs(
 			actual: figures.actual,
 			fixed: l.complete || (account.role !== null && !planning),
 			base: planning ? figures.estimate : figures.forecast,
-			step: unitStep(e.unitPrice),
 			maxPrice: Math.max(e.unitPrice * 2, 500)
 		});
 	}
@@ -139,7 +141,7 @@ export function scaledKnobs(
 	return {
 		assumptions: assumptions
 			.filter((a) => used.has(a.id))
-			.map((a) => ({ ...a, max: Math.max(a.value * 2, a.value + 20) })),
+			.map((a) => ({ ...a, max: Math.max(a.value * 2, a.value + 10) })),
 		lines: out,
 		planning
 	};
@@ -296,131 +298,6 @@ export const outcome = (
 	s: Scenario,
 	scaled: Scaled = UNSCALED
 ) => bridge(forecast, tiers, categories, s, scaled).result;
-
-/** One way towards a target, on top of the scenario. */
-export type Suggestion = {
-	/** Whether it reaches the target alone. */
-	covers: boolean;
-	/** What it adds to the result. */
-	gain: number;
-	/** The scenario with it applied. */
-	scenario: Scenario;
-} & (
-	| { kind: 'tickets'; tier: TierKnob; count: number; net: number; leftAfter: number }
-	| { kind: 'price'; tier: TierKnob; count: number; price: number }
-	| { kind: 'cut'; category: CategoryKnob; by: number; to: number }
-	| { kind: 'assumption'; assumption: AssumptionKnob; to: number }
-);
-
-/**
- * What would close the gap between the scenario's result and a target: more tickets of one
- * tier, all the tickets left at a higher price, or a smaller expense. Those that get there alone
- * come first, the smallest change first; then the ones that get closest.
- */
-export function reach(
-	gap: number,
-	tiers: TierKnob[],
-	categories: CategoryKnob[],
-	s: Scenario,
-	scaled: Scaled = UNSCALED,
-	limit = 6
-): Suggestion[] {
-	if (gap <= 0) return [];
-	const out: Suggestion[] = [];
-	// Another value of an assumption: the nearest that gets there, or the one that gets closest.
-	const now = outcome(0, tiers, categories, s, scaled);
-	for (const a of scaled.assumptions) {
-		const value = assumptionValue(a, s);
-		const at = (v: number) => ({ ...s, assumption: { ...s.assumption, [a.id]: v } });
-		const gainAt = (v: number) => outcome(0, tiers, categories, at(v), scaled) - now;
-		let best: { to: number; gain: number } | null = null;
-		for (let d = 1; d <= a.max; d++) {
-			for (const v of [value + d, value - d]) {
-				if (v < 0 || v > a.max) continue;
-				const gain = gainAt(v);
-				if (gain >= gap) {
-					best = { to: v, gain };
-					break;
-				}
-				if (gain > 0 && (!best || gain > best.gain)) best = { to: v, gain };
-			}
-			if (best && best.gain >= gap) break;
-		}
-		if (best)
-			out.push({
-				kind: 'assumption',
-				assumption: a,
-				to: best.to,
-				covers: best.gain >= gap,
-				gain: best.gain,
-				scenario: at(best.to)
-			});
-	}
-	for (const t of tiers) {
-		const more = moreOf(t, s);
-		const left = t.maxMore - more;
-		const price = tierPrice(t, s);
-		const net = netPrice(price, t.feeBp);
-		if (left <= 0 || net <= 0) continue;
-		const need = Math.ceil(gap / net);
-		const count = Math.min(need, left);
-		const with_ = (n: number, p = price): Scenario => ({
-			...s,
-			more: { ...s.more, [t.id]: more + n },
-			price: p === t.price ? omit(s.price, t.id) : { ...s.price, [t.id]: p }
-		});
-		out.push({
-			kind: 'tickets',
-			tier: t,
-			count,
-			net,
-			leftAfter: left - count,
-			covers: need <= left,
-			gain: count * net,
-			scenario: with_(count)
-		});
-		// Not enough places: what all of them would have to cost. Without a quota, the places
-		// are a guess, so a price on top of a guess is left out.
-		if (need > left && t.quota !== null) {
-			const all = more + left;
-			const gained = more * net;
-			for (let p = price + PRICE_STEP; p <= t.maxPrice; p += PRICE_STEP) {
-				const gain = all * netPrice(p, t.feeBp) - gained;
-				if (gain < gap) continue;
-				out.push({
-					kind: 'price',
-					tier: t,
-					count: all,
-					price: p,
-					covers: true,
-					gain,
-					scenario: with_(left, p)
-				});
-				break;
-			}
-		}
-	}
-	for (const c of categories) {
-		if (c.kind !== 'expense') continue;
-		const value = categoryValue(c, s);
-		const room = value - c.min;
-		if (room <= 0) continue;
-		const by = Math.min(room, Math.ceil(gap / c.step) * c.step);
-		out.push({
-			kind: 'cut',
-			category: c,
-			by,
-			to: value - by,
-			covers: by >= gap,
-			gain: by,
-			scenario: { ...s, category: { ...s.category, [c.id]: value - by } }
-		});
-	}
-	out.sort((a, b) =>
-		a.covers !== b.covers ? (a.covers ? -1 : 1) : a.covers ? a.gain - b.gain : b.gain - a.gain
-	);
-	return out.slice(0, limit);
-}
 
 function omit(record: Record<number, number>, id: number) {
 	const copy = { ...record };

@@ -5,7 +5,8 @@
 	import { formatAmount } from '../../format';
 	import { isPlayful, type Level } from '../../motion/mode.svelte';
 	import type { NumberFormat } from '../../api/generated/NumberFormat';
-	import { netPrice, places, PRICE_STEP, type TierKnob } from './scenario';
+	import Figure from './Figure.svelte';
+	import { netPrice, places, stepOf, type TierKnob } from './scenario';
 
 	let {
 		knob,
@@ -13,6 +14,7 @@
 		more,
 		price,
 		format,
+		parse,
 		level,
 		onmore,
 		onprice
@@ -22,6 +24,8 @@
 		more: number;
 		price: number;
 		format: NumberFormat;
+		/** Reads an amount, as the app does. */
+		parse: (text: string) => Promise<number>;
 		level: Level;
 		onmore: (more: number) => void;
 		onprice: (price: number) => void;
@@ -99,8 +103,15 @@
 						aria-label="One ticket fewer of {knob.name}"
 						onclick={() => onmore(more - 1)}>−</button
 					>
-					<span class="value" class:moved={more > 0} data-testid="plugin-what-if-more">+{more}</span
-					>
+					<Figure
+						value={more}
+						text={'+' + more}
+						label="{knob.name} +{more}"
+						max={knob.maxMore}
+						moved={more > 0}
+						testid="plugin-what-if-more"
+						onchange={onmore}
+					/>
 					<button
 						type="button"
 						disabled={more >= knob.maxMore}
@@ -113,16 +124,24 @@
 						type="button"
 						disabled={price <= 0}
 						aria-label="Lower the price of {knob.name}"
-						onclick={() => onprice(Math.max(0, price - PRICE_STEP))}>−</button
+						onclick={() => onprice(Math.max(0, price - stepOf(price)))}>−</button
 					>
-					<span class="value price" class:moved={price !== knob.price}
-						>{formatAmount(price, format)}</span
-					>
+					<Figure
+						value={price}
+						text={formatAmount(price, format)}
+						label="{knob.name} {formatAmount(price, format)}"
+						{format}
+						{parse}
+						max={knob.maxPrice}
+						wide
+						moved={price !== knob.price}
+						onchange={onprice}
+					/>
 					<button
 						type="button"
 						disabled={price >= knob.maxPrice}
 						aria-label="Raise the price of {knob.name}"
-						onclick={() => onprice(Math.min(knob.maxPrice, price + PRICE_STEP))}>+</button
+						onclick={() => onprice(Math.min(knob.maxPrice, price + stepOf(price)))}>+</button
 					>
 				</span>
 			</div>
@@ -288,19 +307,6 @@
 	.stepper button:disabled {
 		opacity: 0.4;
 		cursor: default;
-	}
-
-	.value {
-		min-width: 36px;
-		text-align: center;
-	}
-
-	.price {
-		min-width: 72px;
-	}
-
-	.moved {
-		font-weight: 600;
 	}
 
 	@container (width < 820px) {

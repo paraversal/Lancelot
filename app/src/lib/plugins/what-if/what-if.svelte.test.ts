@@ -18,7 +18,6 @@ import {
 	outcome,
 	places,
 	isPlanning,
-	reach,
 	scaledKnobs,
 	snapCategory,
 	startOf,
@@ -140,41 +139,6 @@ describe('A scenario', () => {
 	});
 });
 
-describe('Reaching a target', () => {
-	const [regular] = tierKnobs([tier({ feeBp: 0 })]);
-
-	it('suggests nothing once the target is reached', () => {
-		expect(reach(0, [regular], [kitchen()], NOTHING)).toEqual([]);
-	});
-
-	it('puts what gets there alone first, the smallest change first', () => {
-		const out = reach(9000, [regular], [kitchen()], NOTHING);
-		expect(out.map((s) => [s.kind, s.covers, s.gain])).toEqual([
-			['cut', true, 9000],
-			['tickets', true, 9600]
-		]);
-		const tickets = out.find((s) => s.kind === 'tickets')!;
-		expect(tickets.kind === 'tickets' && tickets.count).toBe(3);
-		expect(tickets.scenario.more).toEqual({ 1: 3 });
-	});
-
-	it('asks for a higher price when the places left are too few', () => {
-		const out = reach(140000, [regular], [], NOTHING);
-		const sell = out.find((s) => s.kind === 'tickets')!;
-		expect(sell.covers).toBe(false);
-		expect(sell.gain).toBe(40 * 3200);
-		const price = out.find((s) => s.kind === 'price')!;
-		expect(price.kind === 'price' && price.price).toBe(3500);
-		expect(price.scenario).toMatchObject({ more: { 1: 40 }, price: { 1: 3500 } });
-		expect(out[0]).toBe(price);
-	});
-
-	it('cuts no further than what is booked', () => {
-		const [cut] = reach(50000, [], [kitchen()], NOTHING);
-		expect(cut).toMatchObject({ kind: 'cut', by: 20000, to: 30000, covers: false });
-	});
-});
-
 describe('Assumptions in a scenario', () => {
 	const accounts = [
 		{ id: 4, name: 'Tickets', kind: 'income', role: 'tickets' },
@@ -260,13 +224,6 @@ describe('Assumptions in a scenario', () => {
 		// Kitchen has spent 700 € already: up to 175 guests, the forecast stays there.
 		expect(bridge(0, [], [], { ...NOTHING, assumption: { 1: 170 } }, scaled).result).toBe(0);
 		expect(bridge(0, [], [], { ...NOTHING, assumption: { 1: 200 } }, scaled).result).toBe(-10000);
-	});
-
-	it('suggest the value that reaches a target', () => {
-		const scaled = scaledKnobs(planned, lines, guests, accounts, true);
-		const [s] = reach(32000, [], [], NOTHING, scaled);
-		// Each guest adds 16 €: 20 guests more.
-		expect(s).toMatchObject({ kind: 'assumption', to: 170, covers: true, gain: 32000 });
 	});
 });
 
@@ -355,17 +312,38 @@ describe('The What if section', () => {
 		expect(money('plugin-what-if-result')).toBe('+1.635,00 €');
 	});
 
-	it('works back from a target and applies a way there', async () => {
-		open();
+	it('opens a figure in place to be typed', async () => {
+		open((s) => {
+			s.budgetLines.push({
+				id: 99,
+				category: 6,
+				description: 'Breakfast',
+				estimate: { type: 'quantity', quantity: 1, unitPrice: 400, per: [1] },
+				complete: false,
+				costCentre: null
+			});
+			s.budget.lines.push({ line: 99, estimate: 104000, actual: 0, forecast: 104000, fromPlan: 0 });
+		});
+		vi.spyOn(api, 'parseAmount').mockResolvedValue({ cents: 500, ambiguous: false });
 		render(Budget);
 		await adjust();
-		await fireEvent.click(screen.getByRole('radio', { name: 'Reach' }));
-		// The target starts at the plan, 540 € above the forecast.
-		expect(money('plugin-what-if-gap')).toBe('540,00 € to go');
-		const mobility = screen.getByText('Mobility down by 150,00 €').closest('li')!;
-		await fireEvent.click(mobility.querySelector('button')!);
-		expect(money('plugin-what-if-result')).toBe('+1.915,00 €');
-		expect(screen.getByRole('radio', { name: 'Try' }).getAttribute('aria-checked')).toBe('true');
+
+		// Ten guests fewer is 40 € less breakfast: the result goes up.
+		await fireEvent.click(screen.getByTestId('plugin-what-if-assumption'));
+		const guests = screen.getByRole('textbox', { name: 'Guests 260' });
+		await fireEvent.input(guests, { target: { value: '250' } });
+		await fireEvent.keyDown(guests, { key: 'Enter' });
+		await vi.waitFor(() =>
+			expect(screen.getByTestId('plugin-what-if-assumption').textContent).toBe('250')
+		);
+		expect(money('plugin-what-if-result')).toBe('+1.805,00 €');
+
+		// An amount is typed in the event's format, and read by the app.
+		await fireEvent.click(screen.getByTestId('plugin-what-if-price-99'));
+		const price = screen.getByTestId('plugin-what-if-price-99');
+		await fireEvent.input(price, { target: { value: '5' } });
+		await fireEvent.keyDown(price, { key: 'Enter' });
+		await vi.waitFor(() => expect(money('plugin-what-if-result')).toBe('+1.555,00 €'));
 	});
 
 	it('is gone from a closed event and when switched off', () => {

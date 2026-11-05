@@ -156,9 +156,21 @@
 			{#if !session.closed}
 				<div class="actions">
 					{#if empty}
-						<Button onclick={() => goto('/event/settings#copy')}>Copy from another event</Button>
+						<Button
+							icon="folder"
+							label="Copy from another event"
+							hint="Copy from another event"
+							onclick={() => goto('/event/settings#copy')}>Copy from another event</Button
+						>
 					{/if}
-					<Button kind="primary" icon="plus" shortcut="N" onclick={() => add()}>Budget line</Button>
+					<Button
+						kind="primary"
+						icon="plus"
+						shortcut="N"
+						label="Budget line"
+						hint="Budget line"
+						onclick={() => add()}>Budget line</Button
+					>
 				</div>
 			{/if}
 		</header>
@@ -265,7 +277,7 @@
 				<span class="name"></span>
 				<span class="bar-space"></span>
 				<span class="num">Estimate</span>
-				<span class="num">Actual</span>
+				<span class="num actual">Actual</span>
 				<span class="num">Forecast</span>
 			</div>
 
@@ -277,14 +289,14 @@
 								<span class="name">{section.title}</span>
 								<span class="bar-space"></span>
 								<span class="num">{cell(section.total.estimate)}</span>
-								<span class="num">{cell(section.total.actual)}</span>
+								<span class="num actual">{cell(section.total.actual)}</span>
 								<span class="num">{cell(section.total.forecast)}</span>
 							</div>
 							{#each section.groups as g (g.id)}
 								<div class="row category" role="row">
 									<span class="name">
 										<span class="dot" style:background={g.color}></span>
-										{g.name}
+										<span class="title">{g.name}</span>
 										{#if !session.closed}
 											<button
 												type="button"
@@ -296,7 +308,7 @@
 									</span>
 									<span class="bar-space"></span>
 									<span class="num">{cell(g.figures.estimate)}</span>
-									<span class="num" class:muted={g.figures.actual === 0}
+									<span class="num actual" class:muted={g.figures.actual === 0}
 										>{cell(g.figures.actual)}</span
 									>
 									<span class="num">{cell(g.figures.forecast)}</span>
@@ -327,18 +339,20 @@
 											></span>
 										</span>
 										<span class="num">{cell(r.figures.estimate)}</span>
-										<span class="num" class:over={r.over} class:muted={r.figures.actual === 0}
-											>{cell(r.figures.actual)}</span
+										<span
+											class="num actual"
+											class:over={r.over}
+											class:muted={r.figures.actual === 0}>{cell(r.figures.actual)}</span
 										>
 										<span class="num" class:muted={r.waiting}>{cell(r.figures.forecast)}</span>
 									</button>
 								{/each}
 								{#if g.unbudgeted !== 0}
 									<div class="row line unbudgeted" role="row">
-										<span class="name">Not budgeted</span>
+										<span class="name"><span class="title">Not budgeted</span></span>
 										<span class="bar-space"></span>
 										<span class="num"></span>
-										<span class="num">{cell(g.unbudgeted)}</span>
+										<span class="num actual">{cell(g.unbudgeted)}</span>
 										<span class="num">{cell(g.unbudgeted)}</span>
 									</div>
 								{/if}
@@ -352,7 +366,7 @@
 						<span class="name">Result</span>
 						<span class="bar-space"></span>
 						<span class="num">{signed(budget.result.estimate)}</span>
-						<span class="num">{signed(budget.result.actual)}</span>
+						<span class="num actual">{signed(budget.result.actual)}</span>
 						<span class="num">{signed(budget.result.forecast)}</span>
 					</div>
 				</div>
@@ -369,7 +383,7 @@
 								</span>
 								<span class="bar-space"></span>
 								<span class="num">{signed(c.figures.estimate)}</span>
-								<span class="num">{signed(c.figures.actual)}</span>
+								<span class="num actual">{signed(c.figures.actual)}</span>
 								<span class="num">{signed(c.figures.forecast)}</span>
 							</div>
 						{/each}
@@ -407,15 +421,32 @@
 
 	header {
 		display: flex;
+		flex: none;
 		align-items: center;
 		justify-content: space-between;
+		gap: var(--spacing-2) var(--spacing-3);
 		min-height: 40px;
 	}
 
 	.actions {
 		display: flex;
 		align-items: center;
+		justify-content: flex-end;
 		gap: var(--spacing-2);
+		margin-left: auto;
+	}
+
+	/* A narrow window, or a panel beside it, keeps the actions on one line by showing their icons
+	alone; each keeps its label for screen readers and as a tooltip. */
+	@container (max-width: 560px) {
+		.actions :global(.label),
+		.actions :global(kbd) {
+			display: none;
+		}
+
+		.actions :global(button[data-press]) {
+			padding: 0 10px;
+		}
 	}
 
 	h1 {
@@ -612,8 +643,9 @@
 		opacity: 1;
 	}
 
+	/* Gives way before the line's title does. */
 	.formula {
-		flex: 0 1 auto;
+		flex: 0 10 auto;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -678,6 +710,68 @@
 	@container (max-width: 800px) {
 		.wide,
 		.bar-space {
+			display: none;
+		}
+	}
+
+	/* The hero's figures move closer and get smaller, and at the narrowest the main one takes its
+	own line, so every figure stays on screen. */
+	@container (max-width: 800px) {
+		.figure {
+			padding: 0 var(--spacing-6);
+		}
+
+		.result {
+			font-size: 34px;
+		}
+
+		.total {
+			font-size: 20px;
+		}
+	}
+
+	@container (max-width: 600px) {
+		.hero {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+			gap: var(--spacing-4) var(--spacing-6);
+		}
+
+		.figure,
+		.figure:first-child {
+			gap: 4px;
+			min-width: 0;
+			padding: 0;
+			border-left: none;
+		}
+
+		.figure:first-child {
+			grid-column: 1 / -1;
+		}
+
+		.total {
+			font-size: 18px;
+		}
+	}
+
+	/* Narrower still, the figures move closer together and give the names more room. */
+	@container (max-width: 560px) {
+		.row {
+			gap: var(--spacing-2);
+		}
+
+		.row.line {
+			padding-left: 16px;
+		}
+
+		.num {
+			width: 84px;
+		}
+	}
+
+	/* At the narrowest, the plan and the forecast; the ledger has the actual figures. */
+	@container (max-width: 440px) {
+		.actual {
 			display: none;
 		}
 	}
