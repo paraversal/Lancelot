@@ -58,6 +58,21 @@ describe('The data source form', () => {
 		expect(screen.getByTestId('data-source-result').textContent).toContain('Regular · 1');
 	});
 
+	it('previews the data shape as the list and field names are typed', async () => {
+		render(DataSourceForm, { id: 'ticket-api', spec, open: true });
+		await settled();
+		const shape = () => screen.getByTestId('data-source-shape').textContent;
+		expect(screen.getByText('Data shape')).toBeTruthy();
+		expect(shape()).toBe(
+			'{\n  "tickets": [\n    {\n      "tier": "Regular",\n      "order": "1042"\n    }\n  ]\n}'
+		);
+
+		await fireEvent.input(screen.getByLabelText('List'), { target: { value: 'sales' } });
+		await fireEvent.input(screen.getByLabelText('Tier'), { target: { value: 'kind' } });
+		await fireEvent.input(screen.getByLabelText('Order'), { target: { value: '' } });
+		expect(shape()).toBe('{\n  "sales": [\n    {\n      "kind": "Regular"\n    }\n  ]\n}');
+	});
+
 	it('takes an optional field left blank, but not a required one', async () => {
 		const views = { 'ticket-api': { source, hasToken: true } };
 		const save = vi.spyOn(api, 'setDataSource').mockResolvedValue(views);

@@ -14,9 +14,9 @@ export const ticketApi: Plugin = {
 	dataSource: {
 		list: 'tickets',
 		fields: [
-			{ key: 'tier', label: 'Tier', usually: 'tier' },
+			{ key: 'tier', label: 'Tier', usually: 'tier', example: 'Regular' },
 			// Left blank, the tickets count per tier (R-TKT-12).
-			{ key: 'order', label: 'Order', usually: 'order', optional: true }
+			{ key: 'order', label: 'Order', usually: 'order', optional: true, example: '1042' }
 		]
 	}
 };

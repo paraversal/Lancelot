@@ -9,6 +9,7 @@
 	import Button from '../components/Button.svelte';
 	import TextField from '../components/TextField.svelte';
 	import type { DataSourceSpec } from './api';
+	import { sourceShape } from './shape';
 	import { dataSources, optionalFields } from './sources.svelte';
 
 	let {
@@ -38,6 +39,8 @@
 	let error = $state<{ field: string | null; message: string } | null>(null);
 	let result = $state<Pulled | null>(null);
 	const fieldError = (field: string) => (error?.field === field ? error.message : null);
+	// What the provider has to answer with, drawn from the names as they are typed.
+	const shape = $derived(sourceShape(spec, list, fields));
 
 	// Opened from the panel: ready to fill in, not a second button to press.
 	let opened = false;
@@ -202,6 +205,13 @@
 			{/each}
 		</div>
 
+		<div class="shape-block">
+			<span class="note">Data shape</span>
+			<pre class="shape" data-testid="data-source-shape">{#each shape as token, n (n)}<span
+						class={token.tone}>{token.text}</span
+					>{/each}</pre>
+		</div>
+
 		{#if general}<p class="form-error" role="alert">{error?.message}</p>{/if}
 		{#if result}
 			<div class="result" data-testid="data-source-result">
@@ -258,6 +268,40 @@
 		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 		gap: var(--spacing-3);
 		align-items: start;
+	}
+
+	/* What the provider has to answer with: a sunk block, so it reads as a specimen, not a field. */
+	.shape-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-1);
+	}
+
+	.shape {
+		margin: 0;
+		padding: var(--spacing-3);
+		overflow-x: auto;
+		border: 1px solid var(--color-rule);
+		border-radius: var(--radius-md);
+		background: var(--color-paper-sunk);
+		font-size: var(--type-xs);
+		line-height: 1.6;
+		white-space: pre;
+		user-select: text;
+		-webkit-user-select: text;
+	}
+
+	.shape .plain,
+	.shape .value {
+		color: var(--color-ink-muted);
+	}
+
+	.shape .key {
+		color: var(--color-ink);
+	}
+
+	.shape .missing {
+		color: var(--color-attention);
 	}
 
 	.token {

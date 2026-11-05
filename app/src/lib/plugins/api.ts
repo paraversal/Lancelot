@@ -174,7 +174,14 @@ export type DataSourceSpec = {
 	/** The usual name of the provider's list. */
 	list: string;
 	/** An optional field may be left blank in Settings, and missing from an item. */
-	fields: { key: string; label: string; usually: string; optional?: boolean }[];
+	fields: {
+		key: string;
+		label: string;
+		usually: string;
+		optional?: boolean;
+		/** What one value looks like, for the data shape under the form. */
+		example: string | number;
+	}[];
 };
 
 /**

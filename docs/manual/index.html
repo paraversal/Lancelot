@@ -692,12 +692,12 @@ pnpm tauri build --bundles app</code></pre></li>
 <ol class="steps">
   <li>In <strong>Settings → Plugins</strong>, click <strong>Configure</strong> on the plugin's card. Its settings open in the panel beside the page. For <strong>Stock and sales</strong> there's a tab for each cost centre it's shown on, and each tab holds that cost centre's own source, so the drinks and the merch can come from different providers.</li>
   <li>Enter a <strong>Name</strong>, the <strong>URL</strong>, the <strong>Auth header</strong> and the <strong>Token</strong>, which is the header's whole value, such as <code>Bearer abc123</code>.</li>
-  <li>Under <strong>What the provider calls things</strong>, enter the field names your provider uses. A field marked optional can be left empty if the provider doesn't have it: for tickets, leave <strong>Order</strong> empty and they're counted per tier, as for a <a href="#tickets">sheet without order IDs</a>.</li>
+  <li>Under <strong>What the provider calls things</strong>, enter the field names your provider uses. A field marked optional can be left empty if the provider doesn't have it: for tickets, leave <strong>Order</strong> empty and they're counted per tier, as for a <a href="#tickets">sheet without order IDs</a>. Under <strong>Data shape</strong>, the JSON your provider has to answer with is drawn from those names as you type: one item, with an example for each field, and an optional field you left empty is left out.</li>
   <li>Click <strong>Save and test</strong>, and check the sample rows it shows.</li>
   <li>Use <strong>Pull tickets</strong> on the Tickets page, or <strong>Pull logged</strong> on the cost centre page. You always review the changes first, and a failed pull changes nothing.</li>
 </ol>
 <figure>
-  <a href="images/data-source.png"><img src="images/data-source.png" width="1280" height="900" loading="lazy" alt="The data source form in the panel beside Settings: fields for name, URL, auth header, token and the provider's field names."></a>
+  <a href="images/data-source.png"><img src="images/data-source.png" width="1280" height="900" loading="lazy" alt="The data source form in the panel beside Settings: fields for name, URL, auth header, token and the provider's field names, with the expected data shape drawn below them."></a>
   <figcaption>Details stay on this computer for all events, and the token goes in the system's keychain. Neither is in the event file, so a source must be set up again on another computer.</figcaption>
 </figure>
 <p>Pulling is the only thing in Lancelot that uses the network.</p>

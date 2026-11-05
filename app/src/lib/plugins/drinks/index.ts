@@ -34,8 +34,8 @@ export const drinks: Plugin = {
 	dataSource: {
 		list: 'drinks',
 		fields: [
-			{ key: 'name', label: 'Name', usually: 'name' },
-			{ key: 'quantity', label: 'Quantity', usually: 'qty' }
+			{ key: 'name', label: 'Name', usually: 'name', example: 'Club-Mate 0,5' },
+			{ key: 'quantity', label: 'Quantity', usually: 'qty', example: 12 }
 		]
 	}
 };

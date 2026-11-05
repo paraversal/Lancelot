@@ -115,6 +115,8 @@ A plugin that needs one source per thing it is attached to declares `sourceTabs`
 
 A field marked `optional: true` may be left blank in Settings, when the provider doesn't have it, and missing from an item. An item without a required field is a problem and isn't read. One without an optional field is read without it, and listed in `missing` in case the plugin needs it after all. `pulled.fields` says which fields the source has, so a plugin can tell a provider without the field from items that lack it. Ticket API's Order field works this way. A provider's details never go in the repository or an event file.
 
+Each field also carries an `example`: what one value looks like, such as a product's name or a count. Under the form, the shape preview draws the list with one item, field by field, using the names as they are typed. Give a number for a count and a string for text, so it reads like the provider's JSON; an optional field left blank is left out of the item.
+
 ## Your own figures
 
 Every figure of the core comes from the core, and the UI only formats it. A plugin's own figures are the one exception, allowed because they never affect the ledger. Keep them in integer cents, say so at the top of the file, and test them. `drinks/figures.ts` and `what-if/scenario.ts` are good examples.

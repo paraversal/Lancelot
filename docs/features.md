@@ -108,7 +108,7 @@ Built-in features switched per event in Settings. Each shows in a marked frame, 
 
 **Cash box count** adds up notes and coins under both amounts when counting a cash account, and fills in the amount. The pieces are kept when the count is saved, and say so if the amount is changed afterwards. The notes and coins follow the event's currency (EUR, USD, GBP or CHF) and are shown apart; a group can also add custom denominations for packed money, such as a roll of coins, which sit apart from them and which a template copies.
 
-**Data sources** are set up in the panel that a plugin's Configure opens in Settings, with Save and test. The details stay on this computer and the token in the system's keychain, so neither is in the event file. Pulling is the only use of the network (R-NF-3). Saving a token and pulling in the desktop app hasn't been fully tested yet.
+**Data sources** are set up in the panel that a plugin's Configure opens in Settings, with Save and test. Under the names, the form previews the data shape the provider has to send, and redraws it as the list and field names are typed. The details stay on this computer and the token in the system's keychain, so neither is in the event file. Pulling is the only use of the network (R-NF-3). Saving a token and pulling in the desktop app hasn't been fully tested yet.
 
 ## Settling and closing
 
